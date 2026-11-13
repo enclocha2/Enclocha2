@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ff3d7f" />
+  <title>Granizados · Tomar pedido</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>🍧 Tomar pedido</h1>
+    <a href="/pedidos">Ver pedidos →</a>
+  </header>
+
+  <main class="layout">
+    <section>
+      <div class="card">
+        <h2><span class="n">1</span> Tamaño</h2>
+        <div class="grid g4" id="tamanos"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">2</span> Sabores <span class="hint">(puedes escoger varios)</span></h2>
+        <div class="chips" id="sabores"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">3</span> Toppings incluidos <span class="hint">(4 sin costo)</span></h2>
+        <div id="incluidos"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">4</span> Toppings adicionales <span class="hint">(con cobro)</span></h2>
+        <div id="adicionales"></div>
+      </div>
+
+      <div class="card">
+        <h2><span class="n">5</span> Cantidad y nota</h2>
+        <div class="row" style="justify-content:space-between;margin-bottom:10px">
+          <span>¿Cuántos iguales?</span>
+          <div class="qty" id="cantidad"></div>
+        </div>
+        <input class="field" id="nota" maxlength="200" placeholder="Nota (opcional): poco hielo, sin chile..." />
+      </div>
+
+      <div class="card">
+        <div class="total"><span>Este granizado</span><span id="subtotal">$0</span></div>
+        <button class="btn alt" id="agregar" disabled>+ Agregar al pedido</button>
+      </div>
+    </section>
+
+    <aside class="sticky">
+      <div class="card">
+        <h2>🧾 Pedido actual</h2>
+        <div id="carrito"><div class="empty">Aún no hay granizados</div></div>
+        <input class="field" id="cliente" maxlength="60" placeholder="Nombre del cliente (opcional)" style="margin-top:8px" />
+        <div class="total"><span>Total</span><span id="total">$0</span></div>
+        <button class="btn" id="enviar" disabled>Enviar pedido</button>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { TAMANOS, SABORES, GRUPOS, TOPPINGS, pesos, calcularItem, describirItem } from '/catalog.js';
+
+    const $ = (s) => document.querySelector(s);
+    const nuevo = () => ({
+      tamano: null, sabores: [],
+      incluidos: Object.fromEntries(GRUPOS.map((g) => [g.id, null])),
+      adicionales: {}, cantidad: 1, nota: '',
+    });
+
+    let item = nuevo();
+    let carrito = [];
+
+    function render() {
+      // Tamaños
+      $('#tamanos').innerHTML = TAMANOS.map((t) => `
+        <button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
+          <strong>${t.nombre}</strong><span>${pesos(t.precio)}</span>
+        </button>`).join('');
+
+      // Sabores
+      $('#sabores').innerHTML = SABORES.map((s) => `
+        <button class="chip ${item.sabores.includes(s) ? 'on' : ''}" data-sabor="${s}">${s}</button>`).join('');
+
+      // Incluidos (uno por grupo)
+      $('#incluidos').innerHTML = GRUPOS.map((g) => {
+        const ops = TOPPINGS.filter((t) => t.grupo === g.id);
+        const sel = item.incluidos[g.id];
+        const botones = ops.length === 1
+          ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}">Sí</button>`
+          : ops.map((t) => `<button class="${sel === t.id ? 'on' : ''}" data-inc="${g.id}" data-val="${t.id}">${t.nombre.replace(/^Paleta de /, '')}</button>`).join('');
+        return `<div class="grupo"><span class="lbl">${g.nombre}</span>
+          <div class="seg">${botones}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">Sin</button></div></div>`;
+      }).join('');
+
+      // Adicionales
+      $('#adicionales').innerHTML = TOPPINGS.map((t) => {
+        const n = item.adicionales[t.id] || 0;
+        return `<div class="extra"><div>${t.nombre}<small>+${pesos(t.precio)} c/u</small></div>
+          <div class="qty ${n ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${n}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
+      }).join('');
+
+      // Cantidad
+      $('#cantidad').innerHTML = `<button data-cant="-1">−</button><b>${item.cantidad}</b><button data-cant="1">+</button>`;
+
+      // Subtotal
+      const listo = item.tamano && item.sabores.length;
+      $('#subtotal').textContent = item.tamano ? pesos(calcularItem(item)) : '$0';
+      $('#agregar').disabled = !listo;
+      $('#agregar').textContent = !item.tamano ? 'Escoge un tamaño' : !item.sabores.length ? 'Escoge al menos un sabor' : '+ Agregar al pedido';
+
+      renderCarrito();
+    }
+
+    function renderCarrito() {
+      if (!carrito.length) {
+        $('#carrito').innerHTML = '<div class="empty">Aún no hay granizados</div>';
+      } else {
+        $('#carrito').innerHTML = carrito.map((it, i) => {
+          const d = describirItem(it);
+          return `<div class="cart-item"><div class="det">
+              <b>${it.cantidad}× Granizado ${d.tam}</b> — ${pesos(calcularItem(it))}<br>
+              Sabores: ${d.sabores.join(', ')}<br>
+              ${d.incluidos.length ? 'Incluye: ' + d.incluidos.join(', ') + '<br>' : 'Sin toppings incluidos<br>'}
+              ${d.adicionales.length ? '<b>Adicionales:</b> ' + d.adicionales.join(', ') + '<br>' : ''}
+              ${it.nota ? '📝 ' + esc(it.nota) : ''}
+            </div><button class="x" data-del="${i}" title="Quitar">✕</button></div>`;
+        }).join('');
+      }
+      const total = carrito.reduce((s, it) => s + calcularItem(it), 0);
+      $('#total').textContent = pesos(total);
+      $('#enviar').disabled = !carrito.length;
+    }
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const ds = b.dataset;
+      if (ds.tam) item.tamano = ds.tam;
+      else if (ds.sabor) {
+        item.sabores = item.sabores.includes(ds.sabor)
+          ? item.sabores.filter((s) => s !== ds.sabor)
+          : [...item.sabores, ds.sabor];
+      }
+      else if (ds.inc !== undefined) item.incluidos[ds.inc] = ds.val || null;
+      else if (ds.adi) {
+        const n = Math.max(0, (item.adicionales[ds.adi] || 0) + Number(ds.d));
+        if (n) item.adicionales[ds.adi] = n; else delete item.adicionales[ds.adi];
+      }
+      else if (ds.cant) item.cantidad = Math.max(1, item.cantidad + Number(ds.cant));
+      else if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return renderCarrito(); }
+      else return;
+      render();
+    });
+
+    $('#nota').addEventListener('input', (e) => { item.nota = e.target.value; });
+
+    $('#agregar').addEventListener('click', () => {
+      carrito.push(structuredClone(item));
+      item = nuevo();
+      $('#nota').value = '';
+      render();
+      toast('Granizado agregado ✔');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    $('#enviar').addEventListener('click', async () => {
+      const btn = $('#enviar');
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      try {
+        const r = await fetch('/api/pedidos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cliente: $('#cliente').value, items: carrito }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'No se pudo enviar');
+        toast(`Pedido #${data.pedido.numero} enviado · ${pesos(data.pedido.total)}`);
+        carrito = []; $('#cliente').value = '';
+        renderCarrito();
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+      } finally {
+        btn.textContent = 'Enviar pedido';
+      }
+    });
+
+    let tt;
+    function toast(msg, err = false) {
+      const t = $('#toast');
+      t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+      clearTimeout(tt); tt = setTimeout(() => (t.className = 'toast'), 2800);
+    }
+
+    render();
+  </script>
+</body>
+</html>

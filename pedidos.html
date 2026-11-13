@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ff3d7f" />
+  <title>Granizados · Pedidos</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="top">
+    <h1>📋 Pedidos</h1>
+    <div class="row">
+      <button class="link" id="btnSonido">🔔 Sonido: ON</button>
+      <a href="/">+ Nuevo pedido</a>
+    </div>
+  </header>
+
+  <main>
+    <div id="aviso"></div>
+    <div class="status" id="status"><span class="dot"></span>Conectando...</div>
+    <div class="cols">
+      <div class="col new"><h2>Nuevos <span class="badge" id="cNuevo">0</span></h2><div id="lNuevo"></div></div>
+      <div class="col prep"><h2>En preparación <span class="badge" id="cPrep">0</span></h2><div id="lPrep"></div></div>
+      <div class="col done"><h2>Entregados hoy <span class="badge" id="cDone">0</span></h2><div id="lDone"></div></div>
+    </div>
+  </main>
+
+  <div class="overlay" id="overlay">
+    <div class="box">
+      <div style="font-size:3rem">🔔</div>
+      <h2>Activar sonido</h2>
+      <p>El navegador exige un toque para poder sonar cuando llegue un pedido.</p>
+      <button class="btn" id="activar">Activar y abrir pedidos</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { pesos, describirItem } from '/catalog.js';
+
+    const $ = (s) => document.querySelector(s);
+    const POLL_MS = 3000;
+    let conocidos = null;      // ids ya vistos (null = primera carga, no suena)
+    let pedidos = [];
+    let sonidoOn = localStorage.getItem('sonido') !== 'off';
+    let ctx = null;
+    let pendientes = 0;
+
+    // ---------- Sonido (Web Audio, sin archivos) ----------
+    function tono(freq, inicio, dur, vol = 0.35) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0, ctx.currentTime + inicio);
+      g.gain.linearRampToValueAtTime(vol, ctx.currentTime + inicio + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + inicio + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + inicio); o.stop(ctx.currentTime + inicio + dur + 0.05);
+    }
+    function sonar() {
+      if (!sonidoOn || !ctx) return;
+      if (ctx.state === 'suspended') ctx.resume();
+      // "ding-dong" x2
+      [0, 0.9].forEach((t) => { tono(1046, t, 0.45); tono(784, t + 0.25, 0.6); });
+      navigator.vibrate?.([200, 100, 200]);
+    }
+
+    $('#activar').addEventListener('click', () => {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      tono(880, 0, 0.2, 0.2); // tono de prueba
+      $('#overlay').remove();
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    });
+
+    function pintarBotonSonido() { $('#btnSonido').textContent = sonidoOn ? '🔔 Sonido: ON' : '🔕 Sonido: OFF'; }
+    $('#btnSonido').addEventListener('click', () => {
+      sonidoOn = !sonidoOn;
+      localStorage.setItem('sonido', sonidoOn ? 'on' : 'off');
+      pintarBotonSonido();
+      if (sonidoOn && ctx) tono(880, 0, 0.2, 0.2);
+    });
+    pintarBotonSonido();
+
+    // ---------- Datos ----------
+    async function cargar() {
+      try {
+        const r = await fetch('/api/pedidos', { cache: 'no-store' });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error);
+        pedidos = data.pedidos;
+
+        $('#aviso').innerHTML = data.persistente ? '' :
+          '<div class="warnbar">⚠️ Sin base de datos conectada: los pedidos se pueden perder. Conecta Upstash Redis en Vercel (ver README).</div>';
+
+        const ids = new Set(pedidos.map((p) => p.id));
+        let nuevos = [];
+        if (conocidos) nuevos = pedidos.filter((p) => !conocidos.has(p.id) && p.estado === 'nuevo');
+        conocidos = ids;
+
+        render(new Set(nuevos.map((p) => p.id)));
+        if (nuevos.length) avisar(nuevos);
+
+        $('#status').className = 'status';
+        $('#status').innerHTML = `<span class="dot"></span>En línea · actualizado ${new Date().toLocaleTimeString('es-CO')}`;
+      } catch {
+        $('#status').className = 'status off';
+        $('#status').innerHTML = '<span class="dot"></span>Sin conexión, reintentando...';
+      }
+    }
+
+    function avisar(nuevos) {
+      sonar();
+      if (document.hidden) {
+        pendientes += nuevos.length;
+        document.title = `(${pendientes}) ¡Nuevo pedido! · Granizados`;
+      }
+      if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
+        nuevos.forEach((p) => new Notification(`Pedido #${p.numero}`, { body: `${p.items.length} granizado(s) · ${pesos(p.total)}` }));
+      }
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) { pendientes = 0; document.title = 'Granizados · Pedidos'; }
+    });
+
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+    function tarjeta(p, flash) {
+      const hora = new Date(p.creado).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      const grs = p.items.map((it) => {
+        const d = describirItem(it);
+        return `<div class="gr"><span class="t">${it.cantidad}× ${d.tam}</span> · ${d.sabores.map(esc).join(' + ')}<br>
+          ${d.incluidos.length ? '🍬 ' + d.incluidos.join(', ') : '🍬 Sin toppings'}<br>
+          ${d.adicionales.length ? '➕ <b>' + d.adicionales.join(', ') + '</b><br>' : ''}
+          ${it.nota ? '📝 <i>' + esc(it.nota) + '</i>' : ''}</div>`;
+      }).join('');
+
+      let acts = '';
+      if (p.estado === 'nuevo') acts = `<button data-id="${p.id}" data-e="preparando">Preparar</button><button class="ok" data-id="${p.id}" data-e="entregado">Entregar</button><button class="no" data-id="${p.id}" data-e="cancelado" title="Cancelar">✕</button>`;
+      if (p.estado === 'preparando') acts = `<button class="back" data-id="${p.id}" data-e="nuevo" title="Devolver">↩</button><button class="ok" data-id="${p.id}" data-e="entregado">Entregado ✔</button>`;
+      if (p.estado === 'entregado') acts = `<button class="back" data-id="${p.id}" data-e="preparando">↩ Devolver</button>`;
+
+      return `<div class="ped ${flash ? 'flash' : ''}">
+        <div class="head"><span class="num">#${p.numero}</span><span class="hora">${hora}</span></div>
+        ${p.cliente ? `<div class="cli">👤 ${esc(p.cliente)}</div>` : ''}
+        ${grs}
+        <div class="total" style="font-size:1.1rem;margin:8px 0 0"><span>Total</span><span>${pesos(p.total)}</span></div>
+        <div class="acts">${acts}</div></div>`;
+    }
+
+    function render(flashIds = new Set()) {
+      const asc = (a, b) => a.creado - b.creado;
+      const nuevos = pedidos.filter((p) => p.estado === 'nuevo').sort(asc);
+      const prep = pedidos.filter((p) => p.estado === 'preparando').sort(asc);
+      const done = pedidos.filter((p) => p.estado === 'entregado' && p.creado >= hoy.getTime());
+
+      const vacio = '<div class="empty">—</div>';
+      $('#lNuevo').innerHTML = nuevos.map((p) => tarjeta(p, flashIds.has(p.id))).join('') || vacio;
+      $('#lPrep').innerHTML = prep.map((p) => tarjeta(p)).join('') || vacio;
+      $('#lDone').innerHTML = done.map((p) => tarjeta(p)).join('') || vacio;
+      $('#cNuevo').textContent = nuevos.length;
+      $('#cPrep').textContent = prep.length;
+      $('#cDone').textContent = `${done.length} · ${pesos(done.reduce((s, p) => s + p.total, 0))}`;
+    }
+
+    document.addEventListener('click', async (e) => {
+      const b = e.target.closest('button[data-e]');
+      if (!b) return;
+      if (b.dataset.e === 'cancelado' && !window.confirm('¿Cancelar este pedido?')) return;
+      b.disabled = true;
+      const p = pedidos.find((x) => x.id === b.dataset.id);
+      if (p) { p.estado = b.dataset.e; render(); } // respuesta inmediata
+      await fetch('/api/pedidos', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: b.dataset.id, estado: b.dataset.e }),
+      }).catch(() => {});
+      cargar();
+    });
+
+    cargar();
+    setInterval(cargar, POLL_MS);
+  </script>
+</body>
+</html>
