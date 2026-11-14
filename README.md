@@ -1,4 +1,4 @@
-# 🍧 Granizados – Pedidos (v6)
+# 🍧 Granizados – Pedidos (v7)
 
 | Ruta | Qué es |
 |---|---|
@@ -60,3 +60,15 @@ Aparece al escoger "Transferencia" al tomar el pedido, al cobrar en Cuentas, y c
 ## Consumo de la base de datos (plan gratis Upstash: 500.000 operaciones/mes)
 Las pantallas solo descargan pedidos cuando hay cambios. La hoja de Pedidos revisa cada 4 s
 (≈ 260.000 operaciones/mes si está abierta 12 h diarias). Revisa el consumo en Upstash → Usage.
+
+## Jornadas y horario
+| Día | Horario |
+|---|---|
+| Jueves | 4 p. m. – 11 p. m. |
+| Viernes | 4 p. m. – 12 a. m. |
+| Sábado | 4 p. m. – 1 a. m. |
+| Domingo | 4 p. m. – 11 p. m. (hasta 12 a. m. si el lunes es festivo) |
+| Lunes festivo | 4 p. m. – 11 p. m. |
+
+- Cada venta pertenece a la **jornada** en que se abrió: lo vendido entre 12:00 a. m. y 5:59 a. m. cuenta para el día anterior.
+- Los festivos de Colombia se calculan solos (Ley Emiliani). El horario está en `fechas.js` → `horarioDe()`.

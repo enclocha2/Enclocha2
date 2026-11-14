@@ -51,8 +51,8 @@
   <script type="module">
     import { pesos } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
-    import { hoy, diaDe, horaDe, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, diasEntre,
-      nombreMes, nombreDia, fechaLarga, fechaCorta } from '/fechas.js';
+    import { hoy, jornadaDe, horaJornada, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, diasEntre,
+      nombreMes, nombreDia, fechaLarga, fechaCorta, horarioDe, textoHorario, textoHora, esFestivo } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const { admin } = await requerirSesion();
@@ -71,7 +71,7 @@
     }
     function etiqueta() {
       const [a, b] = rango();
-      if (modo === 'dia') return fechaLarga(a);
+      if (modo === 'dia') return `${fechaLarga(a)}${esFestivo(a) ? ' (festivo)' : ''} · ${textoHorario(a)}`;
       if (modo === 'semana') return `${fechaCorta(a)} – ${fechaCorta(b)} ${b.slice(0, 4)}`;
       if (modo === 'mes') return `${nombreMes(a)} ${a.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
       return a.slice(0, 4);
@@ -103,18 +103,22 @@
         } else {
           ({ ventas } = await api(`/api/ventas?desde=${desde}&hasta=${hasta}`));
           if (modo === 'dia') {
-            const horas = ventas.map((v) => horaDe(v.pa));
-            const h0 = Math.min(10, ...horas), h1 = Math.max(22, ...horas);
+            // Eje de horas de la jornada: desde que abre hasta que cierra (24 = 12 a. m., 25 = 1 a. m.)
+            const hor = horarioDe(desde) || { abre: 16, cierra: 23 };
+            const horas = ventas.map((v) => horaJornada(v.pa));
+            const h0 = Math.min(hor.abre, ...horas), h1 = Math.max(hor.cierra, ...horas);
             buckets = Array.from({ length: h1 - h0 + 1 }, (_, i) => {
-              const h = h0 + i;
-              return { clave: h, lbl: `${h % 12 || 12}${h < 12 ? 'a' : 'p'}`, titulo: `${h % 12 || 12}:00 ${h < 12 ? 'a. m.' : 'p. m.'}`, efectivo: 0, transferencia: 0, n: 0 };
+              const h = h0 + i, x = h % 24;
+              return { clave: h, lbl: `${x % 12 || 12}${x < 12 ? 'a' : 'p'}`, titulo: `${textoHora(h)} – ${textoHora(h + 1)}`, efectivo: 0, transferencia: 0, n: 0 };
             });
-            for (const v of ventas) { const b = buckets.find((x) => x.clave === horaDe(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
+            for (const v of ventas) { const b = buckets.find((x) => x.clave === horaJornada(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
           } else {
             buckets = diasEntre(desde, hasta).map((d) => ({
-              clave: d, lbl: modo === 'semana' ? nombreDia(d) : String(Number(d.slice(8))), titulo: fechaLarga(d), efectivo: 0, transferencia: 0, n: 0,
+              clave: d, lbl: modo === 'semana' ? nombreDia(d) : String(Number(d.slice(8))),
+              titulo: `${fechaLarga(d)}${esFestivo(d) ? ' (festivo)' : ''}${horarioDe(d) ? ' · ' + textoHorario(d) : ' · sin jornada'}`,
+              efectivo: 0, transferencia: 0, n: 0,
             }));
-            for (const v of ventas) { const b = buckets.find((x) => x.clave === diaDe(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
+            for (const v of ventas) { const b = buckets.find((x) => x.clave === jornadaDe(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
           }
         }
         pintar(buckets, ventas);
@@ -134,7 +138,7 @@
         <div class="kpi"><span class="metodo m-transferencia"><i></i>Transferencia</span><b>${pesos(tr)}</b><small>${pct(tr)}</small></div>
         <div class="kpi"><span>Ticket promedio</span><b>${pesos(n ? Math.round(total / n) : 0)}</b></div>`;
 
-      $('#tituloGrafica').textContent = { dia: 'Ventas por hora', semana: 'Ventas por día', mes: 'Ventas por día', anio: 'Ventas por mes' }[modo];
+      $('#tituloGrafica').textContent = { dia: 'Ventas por hora de la jornada', semana: 'Ventas por jornada', mes: 'Ventas por jornada', anio: 'Ventas por mes' }[modo];
       grafica(buckets);
 
       $('#tablaDatos').innerHTML = `<thead><tr><th>${modo === 'dia' ? 'Hora' : modo === 'anio' ? 'Mes' : 'Día'}</th><th class="num">Ventas</th><th class="num">Efectivo</th><th class="num">Transferencia</th><th class="num">Total</th></tr></thead>

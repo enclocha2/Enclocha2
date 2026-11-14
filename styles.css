@@ -359,3 +359,5 @@ table.tabla { width: 100%; border-collapse: collapse; font-size: .9rem; }
 @media (max-width: 800px) { .dos-col { grid-template-columns: 1fr; } }
 .t-ventas .ico, .t-reportes .ico, .t-qr .ico { }
 .modal .box { max-height: 92vh; overflow-y: auto; }
+.jornada { margin: -8px 0 16px; color: var(--muted); }
+.jornada b { color: var(--ink); }

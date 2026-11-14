@@ -3,6 +3,7 @@
 // entorno cae a memoria (solo sirve para pruebas locales).
 import { Redis } from '@upstash/redis';
 import { CONFIG_INICIAL, migrar } from '../../catalog.js';
+import { jornadaDe } from '../../fechas.js';
 
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -94,7 +95,8 @@ export async function configActual() {
 // ---------- Ventas (todo pedido cobrado) ----------
 // Cada venta se guarda resumida y para siempre en el índice "ventas" (por fecha de pago),
 // y además se suma a un resumen por día ("ventas:resumen") para los reportes anuales.
-export const diaBogota = (t) => new Date(t).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+// El día de una venta es su JORNADA (ver fechas.js): lo vendido de 12 a 6 a. m. cuenta para el día anterior.
+export const diaBogota = jornadaDe;
 
 function nombreItem(i) {
   if (i.tipo === 'producto') return [i.nombre, i.categoria || 'Otros'];
@@ -182,6 +184,26 @@ export async function migrarVentas() {
     }
   }
   if (redis) await redis.set('ventas:migrado', 1); else mem.ventasMigrado = true;
+}
+
+// Una sola vez: recalcula el resumen por día usando jornadas (antes se usaba el día calendario)
+export async function recalcularResumenJornadas() {
+  const hecho = redis ? await redis.get('ventas:jornadas') : mem.ventasJornadas;
+  if (hecho) return;
+  const todas = await ventasEntre(0, Date.now() + 86400000);
+  const nuevo = {};
+  for (const v of todas) {
+    const dia = jornadaDe(v.pa);
+    for (const [campo, val] of [['total', v.t], [v.m, v.t], ['n', 1]]) nuevo[`${dia}|${campo}`] = (nuevo[`${dia}|${campo}`] || 0) + val;
+  }
+  if (redis) {
+    await redis.del('ventas:resumen');
+    if (Object.keys(nuevo).length) await redis.hset('ventas:resumen', nuevo);
+    await redis.set('ventas:jornadas', 1);
+  } else {
+    mem.resumen = nuevo;
+    mem.ventasJornadas = true;
+  }
 }
 
 // ---------- Ajustes (QR de transferencia) ----------

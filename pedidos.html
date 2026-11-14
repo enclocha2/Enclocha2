@@ -52,6 +52,7 @@
   <script type="module">
     import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe } from '/catalog.js';
     import { requerirSesion, api, traerPedidos } from '/sesion.js';
+    import { hoy, inicioJornada } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const POLL_MS = 4000;
@@ -137,7 +138,8 @@
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const hora = (t) => new Date(t).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
     const metodo = (id) => METODOS_PAGO.find((m) => m.id === id);
-    const inicioHoy = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+    // "Hoy" = la jornada en curso (de 6 a. m. a 6 a. m.): a la 1 a. m. sigue contando la jornada anterior
+    const inicioHoy = () => inicioJornada(hoy());
 
     const ACCIONES = {
       preparando: 'Preparó', entregado: 'Entregó', cancelado: 'Canceló', nuevo: 'Devolvió',

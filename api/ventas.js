@@ -1,10 +1,11 @@
 import { usuarioDe, esAdmin } from './_lib/auth.js';
-import { ventasEntre, leerResumen, migrarVentas } from './_lib/store.js';
+import { ventasEntre, leerResumen, migrarVentas, recalcularResumenJornadas } from './_lib/store.js';
+import { inicioJornada, finJornada } from '../fechas.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const DIA_MS = 86400000;
 
-// GET /api/ventas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD  → ventas detalladas (hora Colombia)
+// GET /api/ventas?desde=YYYY-MM-DD&hasta=YYYY-MM-DD  → ventas de esas JORNADAS (cada una va de 6 a. m. a 5:59 a. m.)
 // GET /api/ventas?resumen=1                          → totales por día (todo el historial)
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -15,13 +16,14 @@ export default async function handler(req, res) {
 
   try {
     await migrarVentas();
+    await recalcularResumenJornadas();
     const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
 
     if (q.resumen) return res.status(200).json({ dias: await leerResumen() });
 
     if (!FECHA.test(q.desde || '') || !FECHA.test(q.hasta || '')) return res.status(400).json({ error: 'Fechas inválidas' });
-    const ini = Date.parse(`${q.desde}T00:00:00-05:00`);
-    const fin = Date.parse(`${q.hasta}T23:59:59.999-05:00`);
+    const ini = inicioJornada(q.desde);
+    const fin = finJornada(q.hasta);
     if (!(fin >= ini)) return res.status(400).json({ error: 'La fecha final es anterior a la inicial' });
     if (fin - ini > 190 * DIA_MS) return res.status(400).json({ error: 'Escoge un rango de máximo 6 meses' });
 

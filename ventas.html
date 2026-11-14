@@ -17,10 +17,11 @@
     <div class="card">
       <div class="chips" id="periodos" style="margin-bottom:10px"></div>
       <div class="filtro-fechas">
-        <span class="hint">Desde</span><input class="field" type="date" id="desde">
+        <span class="hint">Jornadas desde</span><input class="field" type="date" id="desde">
         <span class="hint">hasta</span><input class="field" type="date" id="hasta">
         <button class="mini" id="aplicar">Ver</button>
       </div>
+      <p class="hint" style="margin:0 0 10px">Lo vendido después de las 12 a. m. cuenta para la jornada del día en que se abrió.</p>
       <div class="row">
         <div class="chips" id="metodos"></div>
         <input class="field" id="buscar" placeholder="🔍 Cliente, producto, # pedido..." style="flex:1;min-width:200px">
@@ -43,7 +44,7 @@
   <script type="module">
     import { pesos } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
-    import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaHora, fechaLarga } from '/fechas.js';
+    import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaHora, fechaLarga, jornadaDe, diaDe, nombreDia, textoHorario } from '/fechas.js';
     import { normalizar } from '/catalog.js';
 
     const $ = (s) => document.querySelector(s);
@@ -72,7 +73,7 @@
       try {
         ({ ventas } = await api(`/api/ventas?desde=${desde}&hasta=${hasta}`));
         ventas.sort((a, b) => b.pa - a.pa);
-        $('#titulo').textContent = desde === hasta ? fechaLarga(desde) : `${fechaLarga(desde)} → ${fechaLarga(hasta)}`;
+        $('#titulo').textContent = desde === hasta ? `Jornada ${fechaLarga(desde)} · ${textoHorario(desde)}` : `Jornadas ${fechaLarga(desde)} → ${fechaLarga(hasta)}`;
         render();
       } catch (e) { toast(e.message, true); $('#tabla').innerHTML = ''; }
     }
@@ -97,7 +98,7 @@
       $('#tabla').innerHTML = lista.length ? `
         <thead><tr><th>Pagado</th><th>#</th><th>Cliente</th><th>Productos</th><th>Método</th><th>Tomó / Cobró</th><th class="num">Total</th></tr></thead>
         <tbody>${lista.map((v) => `<tr>
-          <td style="white-space:nowrap">${fechaHora(v.pa)}</td>
+          <td style="white-space:nowrap">${fechaHora(v.pa)}${jornadaDe(v.pa) !== diaDe(v.pa) ? `<br><span class="hint">↩ jornada del ${nombreDia(jornadaDe(v.pa))}</span>` : ''}</td>
           <td>#${v.n}</td>
           <td><b>${esc(v.c)}</b></td>
           <td>${v.it.map((i) => `${i[1]}× ${esc(i[0])}`).join('<br>')}</td>
@@ -113,8 +114,8 @@
       const lista = filtradas();
       if (!lista.length) return toast('No hay ventas para descargar', true);
       const c = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
-      const filas = [['Fecha pago', 'Pedido', 'Cliente', 'Productos', 'Método', 'Tomó', 'Cobró', 'Total']]
-        .concat(lista.map((v) => [fechaHora(v.pa), v.n, v.c, v.it.map((i) => `${i[1]}x ${i[0]}`).join(' | '), v.m, v.u, v.cb, v.t]));
+      const filas = [['Jornada', 'Fecha pago', 'Pedido', 'Cliente', 'Productos', 'Método', 'Tomó', 'Cobró', 'Total']]
+        .concat(lista.map((v) => [jornadaDe(v.pa), fechaHora(v.pa), v.n, v.c, v.it.map((i) => `${i[1]}x ${i[0]}`).join(' | '), v.m, v.u, v.cb, v.t]));
       const csv = '﻿' + filas.map((f) => f.map(c).join(';')).join('\r\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

@@ -18,6 +18,7 @@
 
   <main class="menu">
     <p class="saludo" id="saludo"></p>
+    <p class="jornada" id="jornada"></p>
 
     <div class="tiles">
       <a class="tile t-tomar" href="/tomar">
@@ -64,13 +65,14 @@
       </a>
     </div>
 
-    <h3 class="sub">Hoy</h3>
+    <h3 class="sub">Jornada de hoy</h3>
     <div class="resumen" id="resumen"><div>Cargando...</div></div>
   </main>
 
   <script type="module">
     import { pesos, agruparCuentas } from '/catalog.js';
     import { requerirSesion, api, traerPedidos, cadaTanto } from '/sesion.js';
+    import { hoy, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const { usuario, admin } = await requerirSesion();
@@ -78,6 +80,13 @@
     const h = new Date().getHours();
     $('#saludo').textContent = `${h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'}, ${usuario} 👋`;
     if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
+    const pintarJornada = () => {
+      const j = hoy();
+      $('#jornada').innerHTML = horarioDe(j)
+        ? `🕓 Jornada del <b>${fechaLarga(j)}</b>${esFestivo(j) ? ' (festivo)' : ''} · ${textoHorario(j)}`
+        : `🕓 ${fechaLarga(j)} · hoy no hay jornada programada`;
+    };
+    pintarJornada();
 
     const estado = { rev: null, pedidos: [] };
     let config = null;
@@ -86,8 +95,9 @@
         if (!config) ({ config } = await api('/api/catalogo'));
         if (!(await traerPedidos(estado))) return;
         const pedidos = estado.pedidos;
-        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-        const delDia = pedidos.filter((p) => p.creado >= hoy.getTime() && p.estado !== 'cancelado');
+        pintarJornada();
+        const desde = inicioJornada(hoy());
+        const delDia = pedidos.filter((p) => p.creado >= desde && p.estado !== 'cancelado');
         const nuevos = pedidos.filter((p) => p.estado === 'nuevo').length;
         const prep = pedidos.filter((p) => p.estado === 'preparando').length;
         const suma = (f) => delDia.filter(f).reduce((s, p) => s + p.total, 0);
