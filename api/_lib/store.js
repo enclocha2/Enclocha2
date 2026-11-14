@@ -356,3 +356,21 @@ export async function marcaUnaVez(clave) {
   if (mem.hecho[clave]) return false;
   return (mem.hecho[clave] = true);
 }
+
+// ---------- Presupuesto mensual ----------
+export async function leerPresupuesto(mes) {
+  if (redis) return (await redis.get(`presupuesto:${mes}`)) || null;
+  return (mem.presupuestos ||= {})[mes] || null;
+}
+export async function guardarPresupuesto(mes, p) {
+  if (redis) await redis.set(`presupuesto:${mes}`, p); else (mem.presupuestos ||= {})[mes] = p;
+  return p;
+}
+export async function leerPresupuestoBase() {
+  if (redis) return (await redis.get('presupuesto:base')) || null;
+  return mem.presupuestoBase || null;
+}
+export async function guardarPresupuestoBase(p) {
+  if (redis) await redis.set('presupuesto:base', p); else mem.presupuestoBase = p;
+  return p;
+}

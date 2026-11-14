@@ -145,6 +145,7 @@ export const SECCIONES_NAV = [
     { href: '/cierre', ico: '🔒', txt: 'Cierre de caja', admin: true },
     { href: '/ventas', ico: '💰', txt: 'Ventas', admin: true },
     { href: '/reportes', ico: '📊', txt: 'Reportes', admin: true },
+    { href: '/presupuesto', ico: '💼', txt: 'Presupuesto del mes', admin: true },
     { href: '/compras', ico: '🛒', txt: 'Compras' },
     { href: '/gastos', ico: '🏦', txt: 'Gastos fijos', admin: true },
   ] },
@@ -200,4 +201,20 @@ function montarNav({ usuario, admin }) {
     document.querySelectorAll('.nav-lateral a, .nh-item').forEach((a) => a.classList.toggle('activo', activo(a.getAttribute('href'))));
     hoja.classList.remove('show');
   });
+}
+
+// ---------- Aviso compacto del presupuesto del mes (Compras, Gastos fijos) ----------
+export async function bannerPresupuesto(el, mes) {
+  try {
+    const r = await api(`/api/presupuesto?mes=${mes}`);
+    const p = r.presupuesto.monto, s = r.resumen;
+    const pesos = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
+    if (!p) { el.innerHTML = `<a href="/presupuesto" class="pres-mini sin">💼 Aún no definiste el presupuesto de este mes · <b>Definir →</b></a>`; return r; }
+    const pct = Math.min(100, Math.round((s.delPresupuesto / p) * 100));
+    const estado = s.deVentas > 0 ? 'agotado' : pct >= 80 ? 'alerta' : 'ok';
+    el.innerHTML = `<a href="/presupuesto" class="pres-mini ${estado}">
+      <span>💼 ${s.deVentas > 0 ? `<b>Presupuesto agotado</b> · ya van <b>${pesos(s.deVentas)}</b> con plata de las ventas` : `Presupuesto del mes: quedan <b>${pesos(s.queda)}</b> de ${pesos(p)}`}</span>
+      <span class="pres-barra"><i style="width:${pct}%"></i></span></a>`;
+    return r;
+  } catch { el.innerHTML = ''; return null; }
 }

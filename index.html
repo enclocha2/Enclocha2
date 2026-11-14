@@ -71,7 +71,7 @@
     // ---------- Accesos agrupados ----------
     const DESC = {
       '/tomar': 'Nuevo pedido', '/pedidos': 'Despachar', '/cuentas': 'Sin pagar', '/cierre': 'Cuadrar caja', '/ventas': 'Historial',
-      '/reportes': 'Día, semana, mes', '/compras': 'Insumos', '/gastos': 'Arriendo, servicios', '/inventario': 'Stock',
+      '/reportes': 'Día, semana, mes', '/compras': 'Insumos', '/presupuesto': 'Compras y gastos', '/gastos': 'Arriendo, servicios', '/inventario': 'Stock',
       '/productos#productos': 'Precios', '/productos#sabores': 'Disponibles', '/productos#domicilios': 'Link y ajustes', '/productos#qr': 'Transferencias',
     };
     $('#accesos').innerHTML = SECCIONES_NAV.map((g) => {
@@ -144,6 +144,15 @@
           const venc = p.filter((g) => g.periodo === 'mensual' && `${hoy().slice(0, 7)}-${String(g.dia).padStart(2, '0')}` < hoy());
           badge('/gastos', p.length, venc.length ? 'var(--danger)' : 'var(--warn)');
           alerta('gastos', venc.length ? item('/gastos', '🏦', `<b>${venc.length} gasto${venc.length === 1 ? '' : 's'} fijo${venc.length === 1 ? '' : 's'} vencido${venc.length === 1 ? '' : 's'}</b>: ${venc.map((g) => esc(g.nombre)).join(', ')}`, 'mal') : '');
+        }),
+        api(`/api/presupuesto?mes=${hoy().slice(0, 7)}`).then(({ presupuesto: p, resumen: s }) => {
+          const e = document.querySelector('.acceso[data-href="/presupuesto"] small');
+          if (!p.monto) { if (e) e.textContent = 'Sin definir'; alerta('pres', item('/presupuesto', '💼', '<b>Define el presupuesto del mes</b> para compras y gastos', 'info')); return; }
+          const pct = Math.round((s.delPresupuesto / p.monto) * 100);
+          if (e) e.textContent = s.deVentas > 0 ? '🔴 Agotado' : `Quedan ${pesos(s.queda)}`;
+          badge('/presupuesto', s.deVentas > 0 ? '!' : pct >= 80 ? pct + '%' : 0, s.deVentas > 0 ? 'var(--danger)' : 'var(--warn)');
+          alerta('pres', s.deVentas > 0 ? item('/presupuesto', '💼', `<b>Presupuesto del mes agotado</b> · ya van ${pesos(s.deVentas)} pagados con las ventas`, 'mal')
+            : pct >= 80 ? item('/presupuesto', '💼', `<b>Queda poco presupuesto</b>: ${pesos(s.queda)} (${100 - pct}%)`) : '');
         }),
         api('/api/ajustes').then(({ domicilio }) => {
           const e = document.querySelector('.acceso[data-href="/productos#domicilios"] small');

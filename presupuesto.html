@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <title>Enclocha 2 · Presupuesto del mes</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>💼 Presupuesto del mes</h1></div>
+    <div class="row"><a href="/compras">🛒 Compras</a><a href="/gastos">🏦 Gastos</a></div>
+  </header>
+
+  <main class="admin">
+    <div class="periodo">
+      <button id="ant" title="Mes anterior">‹</button>
+      <span class="lbl" id="lblMes"></span>
+      <button id="sig" title="Mes siguiente">›</button>
+      <button class="mini" id="irHoy">Este mes</button>
+    </div>
+
+    <!-- Presupuesto -->
+    <section class="card pres-card">
+      <div class="pres-top">
+        <div>
+          <span class="hint">Presupuesto para compras y gastos</span>
+          <b class="pres-monto" id="monto">$0</b>
+          <span class="hint" id="origen"></span>
+        </div>
+        <button class="btn alt" id="editar" style="width:auto">✏️ Definir presupuesto</button>
+      </div>
+      <div class="pres-barra grande"><i id="barra"></i><em id="barraTxt"></em></div>
+      <div class="pres-estado" id="estado"></div>
+    </section>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="dos-col">
+      <section class="card"><h2>📊 ¿En qué se gastó?</h2><div id="porTipo"></div></section>
+      <section class="card"><h2>💰 Ventas del mes</h2><div id="ventas"></div></section>
+    </div>
+
+    <section class="card">
+      <h2>🧾 Movimientos del mes <span class="hint">(en orden: primero gastan el presupuesto, luego las ventas)</span></h2>
+      <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
+    </section>
+  </main>
+
+  <!-- Definir presupuesto -->
+  <div class="modal" id="modal">
+    <div class="box">
+      <h3>💼 Presupuesto de <span id="mMes"></span></h3>
+      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras y gastos (insumos, arriendo, servicios, sueldos...).</p>
+      <label class="campo"><span>Valor</span><div class="precio"><span>$</span><input class="field" id="mMonto" type="number" min="0" step="10000" inputmode="numeric"></div></label>
+      <label class="campo"><span>Nota (opcional)</span><input class="field" id="mNota" maxlength="160" placeholder="Ej: lo que sobró de octubre"></label>
+      <label class="campo row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="mRepetir"><span></span></span>Usar este mismo presupuesto todos los meses</label>
+      <div class="error" id="mError"></div>
+      <button class="btn" id="mGuardar">💾 Guardar</button>
+      <button class="btn ghost" id="mCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos, CATEGORIAS_COMPRA } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { hoy, sumarMeses, nombreMes, fechaCorta } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver el presupuesto.</div>'; throw 0; }
+
+    const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
+    const TIPO = { compra: ['🛒', 'Compras de insumos'], fijo: ['🏦', 'Gastos fijos'], caja: ['🔒', 'Gastos de caja (cierres)'] };
+    const nombreDelMes = (m) => `${nombreMes(m + '-01')} ${m.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
+    let mes = hoy().slice(0, 7), datos = null;
+
+    async function cargar() {
+      $('#lblMes').textContent = nombreDelMes(mes);
+      $('#sig').disabled = mes >= hoy().slice(0, 7);
+      try { datos = await api(`/api/presupuesto?mes=${mes}`); pintar(); }
+      catch (e) { toast(e.message, true); }
+    }
+
+    function pintar() {
+      const p = datos.presupuesto, s = datos.resumen;
+      $('#monto').textContent = pesos(p.monto);
+      $('#origen').textContent = p.origen === 'automatico' ? '🔁 Automático (el mismo todos los meses)' : p.origen === 'sin-definir' ? '⚠️ Sin definir' : p.nota ? `📝 ${p.nota}` : `Definido por ${p.por || ''}`;
+      $('#editar').textContent = p.origen === 'sin-definir' ? '✏️ Definir presupuesto' : '✏️ Cambiar';
+
+      const pct = p.monto ? Math.min(100, Math.round((s.delPresupuesto / p.monto) * 100)) : (s.gastado ? 100 : 0);
+      const est = s.deVentas > 0 ? 'agotado' : pct >= 80 ? 'alerta' : 'ok';
+      $('#barra').style.width = pct + '%';
+      $('#barra').className = est;
+      $('#barraTxt').textContent = p.monto ? `${pct}% usado` : '';
+      $('#estado').className = 'pres-estado ' + est;
+      $('#estado').innerHTML = !p.monto
+        ? `Define el presupuesto del mes para saber cuándo empiezas a gastar plata de las ventas.${s.gastado ? ` Por ahora van <b>${pesos(s.gastado)}</b> gastados.` : ''}`
+        : s.deVentas > 0
+        ? `🔴 <b>El presupuesto se agotó el ${fechaCorta(s.agotadoEl)}.</b> Desde ahí se han pagado <b>${pesos(s.deVentas)}</b> con plata de las ventas del mes.`
+        : pct >= 80 ? `🟠 Ojo: quedan solo <b>${pesos(s.queda)}</b> del presupuesto.`
+        : `🟢 Quedan <b>${pesos(s.queda)}</b> del presupuesto.`;
+
+      $('#kpis').innerHTML = `
+        <div class="kpi"><span>Gastado en el mes</span><b>${pesos(s.gastado)}</b><small>${datos.movimientos.length} movimientos</small></div>
+        <div class="kpi"><span>💼 Del presupuesto</span><b>${pesos(s.delPresupuesto)}</b><small>quedan ${pesos(s.queda)}</small></div>
+        <div class="kpi"><span>💰 De las ventas</span><b>${pesos(s.deVentas)}</b></div>`;
+
+      const porTipo = Object.keys(TIPO).map((t) => [t, datos.movimientos.filter((m) => m.tipo === t).reduce((x, m) => x + m.valor, 0)]).filter(([, v]) => v);
+      const max = Math.max(1, ...porTipo.map(([, v]) => v));
+      $('#porTipo').innerHTML = porTipo.length ? porTipo.map(([t, v]) => `<div class="barra-h"><span>${TIPO[t][0]} ${TIPO[t][1]}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('')
+        : '<p class="hint">Aún no hay gastos este mes.</p>';
+
+      $('#ventas').innerHTML = `
+        <div class="fila"><span>Vendido en el mes</span><b>${pesos(s.ventasMes)}</b></div>
+        <div class="fila"><span>− Usado para pagar gastos</span><b>${pesos(s.deVentas)}</b></div>
+        <div class="fila total"><span>Te quedan de las ventas</span><b class="${s.quedanVentas < 0 ? 'neg-txt' : 'pos-txt'}">${pesos(s.quedanVentas)}</b></div>
+        ${s.quedanVentas < 0 ? '<p class="hint">⚠️ Los gastos que superaron el presupuesto son más que lo vendido.</p>' : ''}`;
+
+      $('#tabla').innerHTML = datos.movimientos.length ? `
+        <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Valor</th><th>Sale de</th><th class="num">Queda del presupuesto</th></tr></thead>
+        <tbody>${datos.movimientos.map((m, i) => {
+          const primero = m.deVentas > 0 && (i === 0 || datos.movimientos[i - 1].deVentas === 0);
+          const sale = m.deVentas === 0 ? '<span class="tag-pres">💼 Presupuesto</span>'
+            : m.delPresupuesto === 0 ? '<span class="tag-ventas">💰 Ventas</span>'
+            : `<span class="tag-pres">💼 ${pesos(m.delPresupuesto)}</span> + <span class="tag-ventas">💰 ${pesos(m.deVentas)}</span>`;
+          return `${primero ? `<tr class="corte"><td colspan="5">🔴 Aquí se agotó el presupuesto · desde aquí se paga con las ventas del mes</td></tr>` : ''}
+          <tr class="${m.deVentas > 0 ? 'de-ventas' : ''}">
+            <td style="white-space:nowrap">${fechaCorta(m.fecha)}</td>
+            <td>${TIPO[m.tipo][0]} <b>${esc(m.concepto)}</b><br><span class="hint">${TIPO[m.tipo][1]}${m.categoria ? ' · ' + esc(CAT[m.categoria]?.nombre || '') : ''} · ${esc(m.por || '')}</span></td>
+            <td class="num"><b>${pesos(m.valor)}</b></td>
+            <td>${sale}</td>
+            <td class="num">${datos.presupuesto.monto ? pesos(m.saldo) : '—'}</td></tr>`;
+        }).join('')}</tbody>`
+        : '<tr><td class="empty">No hay compras ni gastos registrados este mes.</td></tr>';
+    }
+
+    // ---------- Definir presupuesto ----------
+    $('#editar').addEventListener('click', () => {
+      $('#mMes').textContent = nombreDelMes(mes);
+      $('#mMonto').value = datos.presupuesto.monto || datos.base?.monto || '';
+      $('#mNota').value = datos.presupuesto.origen === 'mes' ? datos.presupuesto.nota || '' : '';
+      $('#mRepetir').checked = !!datos.base?.repetir;
+      $('#mError').textContent = '';
+      $('#modal').classList.add('show'); setTimeout(() => $('#mMonto').focus(), 50);
+    });
+    $('#mCancelar').addEventListener('click', () => $('#modal').classList.remove('show'));
+    $('#mGuardar').addEventListener('click', async () => {
+      try {
+        await api('/api/presupuesto', { method: 'PUT', body: JSON.stringify({ mes, monto: $('#mMonto').value, nota: $('#mNota').value, repetir: $('#mRepetir').checked }) });
+        $('#modal').classList.remove('show'); toast('✅ Presupuesto guardado'); cargar();
+      } catch (e) { $('#mError').textContent = e.message; }
+    });
+
+    $('#ant').addEventListener('click', () => { mes = sumarMeses(mes + '-01', -1).slice(0, 7); cargar(); });
+    $('#sig').addEventListener('click', () => { mes = sumarMeses(mes + '-01', 1).slice(0, 7); cargar(); });
+    $('#irHoy').addEventListener('click', () => { mes = hoy().slice(0, 7); cargar(); });
+    cargar();
+  </script>
+</body>
+</html>

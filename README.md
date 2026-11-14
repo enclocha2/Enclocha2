@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v14.1)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v15)
 
 | Ruta | Qué es |
 |---|---|
@@ -6,6 +6,7 @@
 | `/tomar` | Tomar pedido: granizados (varios diferentes), cervezas, licor y demás categorías |
 | `/cuentas` | Cuentas abiertas: pedidos sin pagar por persona, agregar algo más y cobrar todo junto |
 | `/cierre` | Cierre de caja por jornada: conteo de billetes, gastos, transferencias, cuadre e historial |
+| `/presupuesto` | Presupuesto del mes para compras y gastos: cuánto queda y desde cuándo se paga con las ventas |
 | `/compras` | Compras de insumos (las pagadas con plata de la caja se descuentan solas en el cierre) |
 | `/gastos` | Gastos fijos: arriendo, servicios, sueldos… y control de pagos por mes |
 | `/inventario` | Inventario: stock, descuentos automáticos al vender, entradas por compras, conteo físico, mermas |
@@ -116,3 +117,9 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 - Los clientes solo ven `/domicilio`: arman sus granizados, ponen dirección y pagan en efectivo (con cuánto pagan) o transferencia (ven el QR).
 - El pedido llega a Pedidos con sonido y la etiqueta 🛵 DOMICILIO. Flujo: Preparar → 🛵 Salió → Entregado. El cliente ve el estado en su página.
 - Límite de 5 pedidos cada 30 min por conexión para evitar abusos.
+
+## Presupuesto del mes
+- Cada mes arranca con un presupuesto (se puede dejar el mismo para todos los meses).
+- Lo gastan, en orden de fecha: compras, pagos de gastos fijos y gastos de caja anotados en el cierre.
+- Cuando se agota, lo demás se marca como "pagado con las ventas del mes" y se muestra desde qué gasto/fecha pasó.
+- Compras, Gastos fijos e Inicio muestran cuánto queda; al registrar una compra que no alcanza, avisa cuánto sale de las ventas.

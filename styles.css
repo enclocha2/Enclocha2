@@ -827,3 +827,36 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
 .pausa { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 14px; border-radius: 14px;
   background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.45); color: #d9ccff; font-size: .9rem; }
 .pausa[hidden] { display: none; }
+
+/* ---------- Presupuesto ---------- */
+.pres-card { border-color: rgba(255,63,209,.45); }
+.pres-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.pres-top > div { display: grid; gap: 2px; }
+.pres-monto { font-family: var(--font-title); font-size: 2.2rem; line-height: 1.1; }
+.pres-barra { display: block; position: relative; height: 10px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.pres-barra i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #22d38a, #33e1ff); transition: width .4s; }
+.pres-barra i.alerta { background: linear-gradient(90deg, #ffb020, #ff8a3d); }
+.pres-barra i.agotado { background: linear-gradient(90deg, #ff4d6d, #ff3fd1); }
+.pres-barra.grande { height: 26px; margin: 14px 0 10px; }
+.pres-barra em { position: absolute; inset: 0; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: .82rem; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.pres-estado { padding: 10px 12px; border-radius: 12px; }
+.pres-estado.ok { background: rgba(34,211,138,.1); }
+.pres-estado.alerta { background: rgba(255,176,32,.12); }
+.pres-estado.agotado { background: rgba(255,77,109,.12); }
+.tabla tr.corte td { background: rgba(255,77,109,.14); color: #ff8fa3; font-weight: 800; text-align: center; }
+.tabla tr.de-ventas td { background: rgba(255,77,109,.04); }
+.tag-pres, .tag-ventas { display: inline-block; border-radius: 8px; padding: 2px 8px; font-size: .8rem; font-weight: 800; white-space: nowrap; }
+.tag-pres { background: rgba(139,92,246,.2); color: #d9ccff; }
+.tag-ventas { background: rgba(255,176,32,.16); color: #ffcf70; }
+#ventas .fila { display: flex; justify-content: space-between; }
+#ventas .fila.total { font-family: var(--font-title); font-size: 1.15rem; border-top: 1px solid var(--line); border-bottom: 0; margin-top: 4px; }
+
+.pres-mini { display: grid; gap: 8px; text-decoration: none; color: var(--ink); padding: 12px 14px; border-radius: 14px; margin-bottom: 14px; border: 1px solid; }
+.pres-mini.ok { background: rgba(34,211,138,.08); border-color: rgba(34,211,138,.35); }
+.pres-mini.alerta { background: rgba(255,176,32,.1); border-color: rgba(255,176,32,.45); }
+.pres-mini.agotado { background: rgba(255,77,109,.1); border-color: rgba(255,77,109,.45); }
+.pres-mini.sin { background: rgba(139,92,246,.1); border-color: rgba(139,92,246,.4); }
+.pres-mini .pres-barra { height: 8px; }
+.pres-mini.alerta .pres-barra i { background: linear-gradient(90deg, #ffb020, #ff8a3d); }
+.pres-mini.agotado .pres-barra i { background: linear-gradient(90deg, #ff4d6d, #ff3fd1); }
+.periodo button.mini { width: auto; padding: 0 12px; }
