@@ -975,3 +975,13 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
   table.tabla.apilar td > .v { min-width: 0; text-align: right; }
   table.tabla.apilar td:empty, table.tabla.apilar td[data-label]:not(:has(*)):not(:has(> .v)):empty { display: none; }
 }
+
+/* Modo de domicilios (Productos → Domicilios) */
+.modo-dom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.modo-dom button { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px; border-radius: 14px; border: 1.5px solid var(--line); background: rgba(255,255,255,.03); color: inherit; cursor: pointer; font: inherit; }
+.modo-dom button small { color: var(--muted); font-size: .8rem; line-height: 1.25; }
+.modo-dom button.on { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 3px rgba(255, 63, 209, .15); }
+.estado-dom { margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-size: .92rem; }
+.estado-dom.si { background: rgba(25, 158, 112, .15); border: 1px solid rgba(25, 158, 112, .5); }
+.estado-dom.no { background: rgba(255, 90, 120, .1); border: 1px solid rgba(255, 90, 120, .4); }
+@media (max-width: 600px) { .modo-dom { grid-template-columns: 1fr; } }

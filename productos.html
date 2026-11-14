@@ -106,8 +106,16 @@
         <a class="mini" id="abrirLink" target="_blank" rel="noopener">Abrir ↗</a>
       </div>
       <div class="form-compra" style="margin-top:14px">
-        <label class="campo ancho row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="domActivo"><span></span></span><b>Recibir pedidos a domicilio</b></label>
-        <label class="campo ancho row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="domHorario"><span></span></span>Solo en horario de atención (fuera de horario la página dice "cerrado")</label>
+        <div class="campo ancho">
+          <span><b>¿Cuándo recibir domicilios?</b> <span class="hint">(se guarda solo al tocar)</span></span>
+          <div class="modo-dom" id="domModo">
+            <button type="button" data-modo="auto"><b>🕓 Automático</b><small>Abre y cierra solo con el horario del negocio</small></button>
+            <button type="button" data-modo="siempre"><b>🟢 Siempre abierto</b><small>Recibe a cualquier hora</small></button>
+            <button type="button" data-modo="cerrado"><b>⏸️ Pausado</b><small>No recibe, aunque sea horario</small></button>
+          </div>
+          <div class="estado-dom" id="domEstado"></div>
+          <input type="checkbox" id="domActivo" hidden><input type="checkbox" id="domHorario" hidden>
+        </div>
         <label class="campo"><span>Pedido mínimo (granizados)</span><div class="precio"><span>$</span><input class="field" id="domMinimo" type="number" min="0" step="1000" inputmode="numeric"></div></label>
         <label class="campo"><span>WhatsApp del negocio (para comprobantes)</span><input class="field" id="domWhatsapp" inputmode="tel" placeholder="3001234567"></label>
         <label class="campo ancho"><span>Mensaje para los clientes (opcional)</span><input class="field" id="domMensaje" maxlength="200" placeholder="Ej: Domicilios solo en el barrio X y alrededores · tiempo aprox. 30 min"></label>
@@ -168,6 +176,7 @@
   <script type="module">
     import { GRUPOS, SECCIONES, pesos, slug } from '/catalog.js';
     import { requerirSesion, api, esc, toast, htmlQR, puede } from '/sesion.js';
+    import { jornadaActual, horarioDe, horaJornada, textoHora } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     await requerirSesion('productos', 'configuracion');
@@ -387,7 +396,7 @@
       dom.local = d.local || null;
       dom.tarifas = d.tarifas?.length ? d.tarifas.map((t) => ({ ...t })) : [{ hastaKm: 1, valor: 2000 }, { hastaKm: 2, valor: 3000 }, { hastaKm: 3, valor: 4000 }, { hastaKm: 5, valor: 6000 }];
       dom.zonas = (d.zonas || []).map((z) => ({ ...z }));
-      pintarDom();
+      pintarDom(); pintarModoDom();
       $('#domWhatsapp').value = d.whatsapp || ''; $('#domMensaje').value = d.mensaje || '';
       $('#qrTexto').value = qr.qrTexto || '';
       qrNuevo = undefined; pintarQR();
@@ -487,17 +496,45 @@
       try { await navigator.clipboard.writeText(link); toast('✅ Link copiado. Compártelo por WhatsApp o Instagram'); }
       catch { toast('Copia el link: ' + link); }
     });
-    $('#domGuardar').addEventListener('click', async () => {
+    // Modo de domicilios: Automático (con el horario) · Siempre abierto · Pausado. Se guarda solo.
+    const modoDom = () => (!$('#domActivo').checked ? 'cerrado' : $('#domHorario').checked ? 'auto' : 'siempre');
+    function pintarModoDom() {
+      const m = modoDom();
+      document.querySelectorAll('#domModo button').forEach((b) => b.classList.toggle('on', b.dataset.modo === m));
+      const j = jornadaActual(), h = horarioDe(j), ahora = horaJornada(Date.now()) + new Date().getMinutes() / 60;
+      const enHorario = !!h && ahora >= h.abre && ahora < h.cierra;
+      const abierta = m === 'siempre' || (m === 'auto' && enHorario);
+      const listo = (dom.local && dom.tarifas?.length) || dom.zonas?.some((z) => z.nombre.trim());
+      if (m !== 'cerrado' && !listo) {
+        $('#domEstado').className = 'estado-dom no';
+        $('#domEstado').innerHTML = '🟠 <b>Falta la ubicación del negocio (o los barrios)</b>: mientras tanto la página dice "Estamos configurando". Ponla abajo y toca Guardar.';
+        return;
+      }
+      $('#domEstado').className = 'estado-dom ' + (abierta ? 'si' : 'no');
+      $('#domEstado').innerHTML = abierta
+        ? `🟢 <b>Ahora mismo la página está ABIERTA</b>${m === 'auto' ? ` · cierra sola a las ${textoHora(h.cierra)}` : ''}`
+        : m === 'cerrado' ? '🔴 <b>Ahora mismo la página está CERRADA</b> (pausado)'
+        : `🔴 <b>Ahora mismo está CERRADA</b> (fuera de horario) · abre sola ${h ? `hoy a las ${textoHora(h.abre)}` : 'el próximo día de atención a las 4:00 p. m.'}`;
+    }
+    $('#domModo').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-modo]'); if (!b) return;
+      $('#domActivo').checked = b.dataset.modo !== 'cerrado';
+      $('#domHorario').checked = b.dataset.modo !== 'siempre';
+      pintarModoDom(); guardarDomicilio(true);
+    });
+    setInterval(pintarModoDom, 60000);
+    $('#domGuardar').addEventListener('click', () => guardarDomicilio(false));
+    async function guardarDomicilio(rapido) {
       try {
         await api('/api/ajustes', { method: 'PUT', body: JSON.stringify({ domicilio: {
           activo: $('#domActivo').checked, soloEnHorario: $('#domHorario').checked,
           minimo: $('#domMinimo').value, whatsapp: $('#domWhatsapp').value, mensaje: $('#domMensaje').value,
           local: dom.local, tarifas: dom.tarifas, zonas: dom.zonas.filter((z) => z.nombre.trim()) } }) });
         if ($('#domActivo').checked && !dom.local && !dom.zonas.some((z) => z.nombre.trim())) toast('⚠️ Guardado, pero falta la ubicación del negocio (o barrios): los clientes no podrán pedir', true);
-        else toast('✅ Ajustes de domicilio guardados');
-        cargarQR();
+        else toast(rapido ? { auto: '✅ Guardado: los domicilios abren y cierran solos con el horario', siempre: '✅ Guardado: domicilios abiertos a cualquier hora', cerrado: '⏸️ Guardado: domicilios pausados' }[modoDom()] : '✅ Ajustes de domicilio guardados');
+        if (!rapido) cargarQR(); else pintarModoDom();
       } catch (err) { toast(err.message, true); }
-    });
+    }
 
     if (puede('productos')) await cargar(); else mostrarTab();
     if (puede('configuracion')) cargarQR();
