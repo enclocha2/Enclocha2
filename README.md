@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v21)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v22)
 
 | Ruta | Qué es |
 |---|---|
@@ -133,7 +133,7 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 - Cuando se agota, lo demás se marca como "pagado con las ventas del mes" y se muestra desde qué gasto/fecha pasó.
 - Compras e Inicio muestran cuánto queda; al registrar una compra que no alcanza, avisa cuánto sale de las ventas.
 
-## Sedes (v21)
+## Sedes (v22)
 - La sede principal es **Enclocha 2 San Pío** y conserva todo lo que ya existía (usa las mismas llaves de la base de datos).
 - Se crean en **Usuarios → 🏢 Sedes** (permiso "Crear y editar sedes"). Una sede nueva arranca vacía.
 - **Compartido** entre sedes: menú, precios, sabores, usuarios y roles.
