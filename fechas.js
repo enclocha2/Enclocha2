@@ -28,7 +28,7 @@ export const fechaHora = (t) => new Date(t).toLocaleString('es-CO', { timeZone: 
 // JORNADAS DE TRABAJO
 // Una venta pertenece al día en que COMENZÓ la jornada: todo lo que pase
 // entre las 12:00 a. m. y las 5:59 a. m. cuenta para el día anterior.
-// (La jornada más larga cierra a la 1:00 a. m. del sábado; el corte a las
+// (La jornada más larga cierra a las 2:00 a. m. del domingo; el corte a las
 // 6:00 a. m. deja margen para registrar cobros tarde.)
 // =====================================================================
 export const CORTE = 6; // hora (a. m.) en que termina una jornada y empieza la siguiente
@@ -65,14 +65,14 @@ export function festivos(anio) {
 export const esFestivo = (s) => festivos(Number(s.slice(0, 4))).has(s);
 
 // ---------- Horario del negocio ----------
-// Devuelve { abre, cierra } en horas de jornada (24 = 12 a. m., 25 = 1 a. m.) o null si ese día no se trabaja.
+// Devuelve { abre, cierra } en horas de jornada (24 = 12 a. m., 25 = 1 a. m., 26 = 2 a. m.) o null si ese día no se trabaja.
 export function horarioDe(s) {
   const d = diaSemana(s); // 0 = lunes ... 6 = domingo
-  if (d === 3) return { abre: 16, cierra: 23 };                                  // jueves 4 pm - 11 pm
-  if (d === 4) return { abre: 16, cierra: 24 };                                  // viernes 4 pm - 12 am
-  if (d === 5) return { abre: 16, cierra: 25 };                                  // sábado 4 pm - 1 am
-  if (d === 6) return { abre: 16, cierra: esFestivo(sumarDias(s, 1)) ? 24 : 23 }; // domingo (hasta 12 am si el lunes es festivo)
-  if (d === 0 && esFestivo(s)) return { abre: 16, cierra: 23 };                  // lunes festivo 4 pm - 11 pm
+  if (d === 3) return { abre: 16, cierra: 24 };                                  // jueves 4 pm - 12 am
+  if (d === 4) return { abre: 16, cierra: 25 };                                  // viernes 4 pm - 1 am
+  if (d === 5) return { abre: 16, cierra: 26 };                                  // sábado 4 pm - 2 am
+  if (d === 6) return { abre: 16, cierra: esFestivo(sumarDias(s, 1)) ? 25 : 24 }; // domingo 4 pm - 12 am (hasta 1 am si el lunes es festivo)
+  if (d === 0 && esFestivo(s)) return { abre: 16, cierra: 24 };                  // lunes festivo 4 pm - 12 am
   return null;
 }
 export const textoHora = (h) => { const x = h % 24; return `${x % 12 || 12}:00 ${x < 12 ? 'a. m.' : 'p. m.'}`; };
