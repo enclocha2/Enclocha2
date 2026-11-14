@@ -82,9 +82,9 @@ export const textoHorario = (s) => {
 };
 
 // ---------- ¿Estamos en horario de operación? ----------
-// La app solo consulta sola desde 1 h antes de abrir hasta 2 h después de cerrar
-// (para preparar, cobros tarde y el cierre de caja). Fuera de eso no gasta nada.
-export const MARGEN_ANTES = 1, MARGEN_DESPUES = 2;
+// La app solo consulta sola desde la hora de abrir hasta 2 h después de cerrar
+// (para cobros tarde y el cierre de caja). Fuera de eso no gasta nada.
+export const MARGEN_ANTES = 0, MARGEN_DESPUES = 2;
 export function enHorarioOperacion(t = Date.now()) {
   const j = jornadaDe(t), h = horarioDe(j);
   if (!h) return false;

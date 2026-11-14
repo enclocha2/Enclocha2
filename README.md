@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v14)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v14.1)
 
 | Ruta | Qué es |
 |---|---|
@@ -63,8 +63,8 @@ Menú → **QR de pago**: sube la imagen del QR y un texto opcional (ej. número
 Aparece al escoger "Transferencia" al tomar el pedido, al cobrar en Cuentas, y con el botón **📲 QR**.
 
 ## Consumo de la base de datos (plan gratis Upstash: 500.000 operaciones/mes)
-**Fuera de horario la app no consulta sola**: solo desde 1 h antes de abrir hasta 2 h después de cerrar
-(ej. sábado 3:00 p. m. – 4:00 a. m.; lunes a miércoles sin festivo, nada). Fuera de eso cada pantalla carga una vez
+**Fuera de horario la app no consulta sola**: solo desde la hora de abrir (4:00 p. m.) hasta 2 h después de cerrar
+(ej. sábado 4:00 p. m. – 4:00 a. m.; lunes a miércoles sin festivo, nada). Fuera de eso cada pantalla carga una vez
 al abrirla y muestra "🌙 Fuera de horario · 🔄 Revisar ahora". Se reactiva sola a la hora (márgenes en `fechas.js`).
 
 Las pantallas solo descargan pedidos cuando hay cambios. La hoja de Pedidos revisa cada 4 s
