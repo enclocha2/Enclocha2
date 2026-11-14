@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v19)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v20)
 
 | Ruta | Qué es |
 |---|---|
@@ -18,7 +18,7 @@
 | `/login` | Ingreso |
 
 ## Usuarios, roles y permisos
-**Roles editables (v19):** en Inicio → Roles puedes crear roles nuevos (nombre, ícono y permisos), cambiar los permisos de cualquier rol o borrarlo si nadie lo tiene. En la tabla "¿Qué puede hacer cada rol?" tocas una celda para dar o quitar un permiso al instante. Los cambios aplican de una a todos los usuarios de ese rol (menos a quien tenga permisos personalizados). El Administrador es fijo: siempre tiene todo y no se borra (solo se le cambia nombre o ícono). Los roles se guardan en la base de datos (clave `roles`) y se leen junto con los usuarios en una sola operación.
+**Roles editables (v20):** en Inicio → Roles puedes crear roles nuevos (nombre, ícono y permisos), cambiar los permisos de cualquier rol o borrarlo si nadie lo tiene. En la tabla "¿Qué puede hacer cada rol?" tocas una celda para dar o quitar un permiso al instante. Los cambios aplican de una a todos los usuarios de ese rol (menos a quien tenga permisos personalizados). El Administrador es fijo: siempre tiene todo y no se borra (solo se le cambia nombre o ícono). Los roles se guardan en la base de datos (clave `roles`) y se leen junto con los usuarios en una sola operación.
 - Los usuarios están en la base de datos (contraseñas cifradas). La primera vez se crean solos con Stiv, Angel, John y Fofi
   (o lo que diga la variable `USUARIOS`); después **se administran en Inicio → 👥 Usuarios** y esa variable ya no se usa.
 - Roles: 👑 Administrador (todo) · 💵 Cajero · 🧾 Vendedor · 🍧 Preparación. A cada persona se le pueden personalizar los permisos.
@@ -59,7 +59,7 @@ api/_lib/store.js   ← Upstash Redis
 - Las ventas se guardan para siempre; los pedidos completos, 120 días.
 - Ventas y Reportes solo los ven los administradores (variable `ADMINS`; si no existe, todos).
 
-### Reporte mensual: ventas vs gastos (v19)
+### Reporte mensual: ventas vs gastos (v20)
 En **Reportes → 📈 Mensual** (requiere permiso de reportes; datos de `/api/ventas?r=estadisticas&mes=AAAA-MM`):
 - Ventas, gastos (compras + gastos fijos pagados + gastos del cierre), utilidad, margen, cantidad, ticket promedio, promedio por jornada y jornadas trabajadas.
 - Cada número se compara con el mes anterior. Si es el mes en curso, se compara **hasta el mismo día** del mes anterior.

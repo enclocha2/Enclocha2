@@ -235,3 +235,45 @@ export async function bannerPresupuesto(el, mes) {
     return r;
   } catch { el.innerHTML = ''; return null; }
 }
+
+// ---------- Ajustes para celular ----------
+// 1) Tablas: cada celda recibe el nombre de su columna (data-label) para que en celular
+//    cada fila se vea como una tarjetica (ver .tabla.apilar en styles.css).
+function etiquetarTabla(t) {
+  if (t.classList.contains('roles-tabla')) return;
+  const ths = [...t.querySelectorAll('thead th')];
+  if (ths.length < 3) { t.classList.remove('apilar'); return; }
+  const nombres = []; ths.forEach((th) => { for (let k = 0; k < (th.colSpan || 1); k++) nombres.push(th.textContent.trim()); });
+  t.classList.add('apilar');
+  t.querySelectorAll('tbody tr, tfoot tr').forEach((tr) => {
+    let i = 0;
+    [...tr.children].forEach((td) => {
+      if (td.colSpan > 1) td.classList.add('ancha');
+      else if (nombres[i] && !td.hasAttribute('data-label')) {
+        td.setAttribute('data-label', nombres[i]);
+        // todo el contenido en un solo bloque, para que quede alineado a la derecha del nombre
+        if (td.childNodes.length > 1 && !td.querySelector(':scope > .v')) { const v = document.createElement('div'); v.className = 'v'; v.append(...td.childNodes); td.append(v); }
+      }
+      i += td.colSpan || 1;
+    });
+  });
+}
+// 2) Botones del encabezado: en celular solo se ve el ícono (el texto queda como ayuda)
+function compactarEncabezado() {
+  document.querySelectorAll('header.top > .row:last-child > a, header.top > .row:last-child > button').forEach((b) => {
+    if (b.children.length) return;
+    const m = b.textContent.trim().match(/^(\S+)\s+(.+)$/);
+    if (!m || /[\p{L}\p{N}+]/u.test(m[1])) return; // solo si empieza con un emoji
+    b.title = b.title || m[2];
+    b.innerHTML = `${m[1]}<span class="txt"> ${m[2]}</span>`;
+  });
+}
+if (typeof document !== 'undefined') {
+  let pendiente = false;
+  const revisar = () => {
+    if (pendiente) return; pendiente = true;
+    requestAnimationFrame(() => { pendiente = false; document.querySelectorAll('table.tabla').forEach(etiquetarTabla); compactarEncabezado(); });
+  };
+  const iniciar = () => { revisar(); new MutationObserver(revisar).observe(document.body, { childList: true, subtree: true }); };
+  if (document.body) iniciar(); else document.addEventListener('DOMContentLoaded', iniciar);
+}
