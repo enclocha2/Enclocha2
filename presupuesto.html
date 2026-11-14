@@ -35,7 +35,7 @@
     <section class="card pres-card">
       <div class="pres-top">
         <div>
-          <span class="hint">Presupuesto para compras y gastos</span>
+          <span class="hint">Presupuesto para compras <span title="Los gastos fijos no usan el presupuesto">(sin gastos fijos)</span></span>
           <b class="pres-monto" id="monto">$0</b>
           <span class="hint" id="origen"></span>
         </div>
@@ -53,7 +53,7 @@
     </div>
 
     <section class="card">
-      <h2>🧾 Movimientos del mes <span class="hint">(en orden: primero gastan el presupuesto, luego las ventas)</span></h2>
+      <h2>🧾 Movimientos del mes <span class="hint">(las compras gastan primero el presupuesto y luego las ventas; los gastos fijos salen siempre de las ventas)</span></h2>
       <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
     </section>
   </main>
@@ -62,7 +62,7 @@
   <div class="modal" id="modal">
     <div class="box">
       <h3>💼 Presupuesto de <span id="mMes"></span></h3>
-      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras y gastos (insumos, arriendo, servicios, sueldos...).</p>
+      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras (insumos, hielo, vasos, licor...) y gastos de caja. Los gastos fijos (arriendo, servicios, sueldos) no usan el presupuesto: se pagan con las ventas.</p>
       <label class="campo"><span>Valor</span><div class="precio"><span>$</span><input class="field" id="mMonto" type="number" min="0" step="10000" inputmode="numeric"></div></label>
       <label class="campo"><span>Nota (opcional)</span><input class="field" id="mNota" maxlength="160" placeholder="Ej: lo que sobró de octubre"></label>
       <label class="campo row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="mRepetir"><span></span></span>Usar este mismo presupuesto todos los meses</label>
@@ -107,16 +107,17 @@
       $('#barraTxt').textContent = p.monto ? `${pct}% usado` : '';
       $('#estado').className = 'pres-estado ' + est;
       $('#estado').innerHTML = !p.monto
-        ? `Define el presupuesto del mes para saber cuándo empiezas a gastar plata de las ventas.${s.gastado ? ` Por ahora van <b>${pesos(s.gastado)}</b> gastados.` : ''}`
+        ? `Define el presupuesto del mes para saber cuándo empiezas a gastar plata de las ventas.${s.gastado ? ` Por ahora van <b>${pesos(s.gastado)}</b> en compras.` : ''}`
         : s.deVentas > 0
         ? `🔴 <b>El presupuesto se agotó el ${fechaCorta(s.agotadoEl)}.</b> Desde ahí se han pagado <b>${pesos(s.deVentas)}</b> con plata de las ventas del mes.`
         : pct >= 80 ? `🟠 Ojo: quedan solo <b>${pesos(s.queda)}</b> del presupuesto.`
         : `🟢 Quedan <b>${pesos(s.queda)}</b> del presupuesto.`;
 
       $('#kpis').innerHTML = `
-        <div class="kpi"><span>Gastado en el mes</span><b>${pesos(s.gastado)}</b><small>${datos.movimientos.length} movimientos</small></div>
+        <div class="kpi"><span>🛒 Compras del mes</span><b>${pesos(s.gastado)}</b><small>${datos.movimientos.filter((m) => !m.fueraPresupuesto).length} movimientos</small></div>
         <div class="kpi"><span>💼 Del presupuesto</span><b>${pesos(s.delPresupuesto)}</b><small>quedan ${pesos(s.queda)}</small></div>
-        <div class="kpi"><span>💰 De las ventas</span><b>${pesos(s.deVentas)}</b></div>`;
+        <div class="kpi"><span>💰 Compras pagadas con ventas</span><b>${pesos(s.deVentas)}</b><small>lo que se pasó del presupuesto</small></div>
+        <div class="kpi"><span>🏦 Gastos fijos</span><b>${pesos(s.fijos || 0)}</b><small>no usan el presupuesto</small></div>`;
 
       const porTipo = Object.keys(TIPO).map((t) => [t, datos.movimientos.filter((m) => m.tipo === t).reduce((x, m) => x + m.valor, 0)]).filter(([, v]) => v);
       const max = Math.max(1, ...porTipo.map(([, v]) => v));
@@ -125,24 +126,27 @@
 
       $('#ventas').innerHTML = `
         <div class="fila"><span>Vendido en el mes</span><b>${pesos(s.ventasMes)}</b></div>
-        <div class="fila"><span>− Usado para pagar gastos</span><b>${pesos(s.deVentas)}</b></div>
+        <div class="fila"><span>− Compras que se pasaron del presupuesto</span><b>${pesos(s.deVentas)}</b></div>
+        <div class="fila"><span>− Gastos fijos pagados</span><b>${pesos(s.fijos || 0)}</b></div>
         <div class="fila total"><span>Te quedan de las ventas</span><b class="${s.quedanVentas < 0 ? 'neg-txt' : 'pos-txt'}">${pesos(s.quedanVentas)}</b></div>
-        ${s.quedanVentas < 0 ? '<p class="hint">⚠️ Los gastos que superaron el presupuesto son más que lo vendido.</p>' : ''}`;
+        ${s.quedanVentas < 0 ? '<p class="hint">⚠️ Los gastos fijos y las compras por encima del presupuesto son más que lo vendido.</p>' : ''}`;
 
       $('#tabla').innerHTML = datos.movimientos.length ? `
         <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Valor</th><th>Sale de</th><th class="num">Queda del presupuesto</th></tr></thead>
         <tbody>${datos.movimientos.map((m, i) => {
-          const primero = m.deVentas > 0 && (i === 0 || datos.movimientos[i - 1].deVentas === 0);
-          const sale = m.deVentas === 0 ? '<span class="tag-pres">💼 Presupuesto</span>'
+          const prev = datos.movimientos.slice(0, i).filter((x) => !x.fueraPresupuesto).pop();
+          const primero = !m.fueraPresupuesto && m.deVentas > 0 && (!prev || prev.deVentas === 0);
+          const sale = m.fueraPresupuesto ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(fijo, no usa presupuesto)</span>'
+            : m.deVentas === 0 ? '<span class="tag-pres">💼 Presupuesto</span>'
             : m.delPresupuesto === 0 ? '<span class="tag-ventas">💰 Ventas</span>'
             : `<span class="tag-pres">💼 ${pesos(m.delPresupuesto)}</span> + <span class="tag-ventas">💰 ${pesos(m.deVentas)}</span>`;
           return `${primero ? `<tr class="corte"><td colspan="5">🔴 Aquí se agotó el presupuesto · desde aquí se paga con las ventas del mes</td></tr>` : ''}
-          <tr class="${m.deVentas > 0 ? 'de-ventas' : ''}">
+          <tr class="${m.deVentas > 0 && !m.fueraPresupuesto ? 'de-ventas' : ''}">
             <td style="white-space:nowrap">${fechaCorta(m.fecha)}</td>
             <td>${TIPO[m.tipo][0]} <b>${esc(m.concepto)}</b><br><span class="hint">${TIPO[m.tipo][1]}${m.categoria ? ' · ' + esc(CAT[m.categoria]?.nombre || '') : ''} · ${esc(m.por || '')}</span></td>
             <td class="num"><b>${pesos(m.valor)}</b></td>
             <td>${sale}</td>
-            <td class="num">${datos.presupuesto.monto ? pesos(m.saldo) : '—'}</td></tr>`;
+            <td class="num">${datos.presupuesto.monto && !m.fueraPresupuesto ? pesos(m.saldo) : '—'}</td></tr>`;
         }).join('')}</tbody>`
         : '<tr><td class="empty">No hay compras ni gastos registrados este mes.</td></tr>';
     }

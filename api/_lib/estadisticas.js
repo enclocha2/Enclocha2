@@ -48,6 +48,7 @@ export default async function handler(req, res) {
         + cierres.filter((x) => x.jornada.startsWith(mes) && hastaDia(x.jornada)).reduce((s, x) => s + (x.totalGastos || 0), 0);
       const alDia = corte ? {
         ventas: diasC.reduce((s, [, v]) => s + (v.total || 0), 0), gastos: gastosC,
+        compras: c.filter((x) => hastaDia(x.fecha)).reduce((s, x) => s + x.valor, 0),
         n: diasC.reduce((s, [, v]) => s + (v.n || 0), 0), jornadas: diasC.filter(([, v]) => (v.total || 0) > 0).length,
       } : null;
       return {

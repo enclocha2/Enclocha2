@@ -1,7 +1,7 @@
-// Presupuesto mensual para compras y gastos.
-// Cada mes arranca con un presupuesto; las compras, los pagos de gastos fijos y los
-// gastos de caja (anotados en el cierre) lo van gastando en orden de fecha. Cuando se
-// agota, lo demás sale de las ventas del mismo mes.
+// Presupuesto mensual para compras.
+// Cada mes arranca con un presupuesto; las compras y los gastos de caja (anotados en el
+// cierre) lo van gastando en orden de fecha. Cuando se agota, lo demás sale de las ventas
+// del mismo mes. Los gastos fijos NO usan el presupuesto: siempre se pagan con las ventas.
 import { sesion } from './auth.js';
 import { leerPresupuesto, guardarPresupuesto, leerPresupuestoBase, guardarPresupuestoBase,
   comprasEntre, leerPagosFijos, listarCierres, leerResumen } from './store.js';
@@ -46,6 +46,7 @@ export default async function handler(req, res) {
       // Repartir: primero sale del presupuesto, después de las ventas
       let queda = presupuesto.monto, agotadoEl = null;
       for (const m of movimientos) {
+        if (m.tipo === 'fijo') { m.fueraPresupuesto = true; m.delPresupuesto = 0; m.deVentas = m.valor; m.saldo = queda; continue; }
         m.delPresupuesto = Math.min(queda, m.valor);
         m.deVentas = m.valor - m.delPresupuesto;
         queda -= m.delPresupuesto;
@@ -53,11 +54,13 @@ export default async function handler(req, res) {
         if (!agotadoEl && m.deVentas > 0) agotadoEl = m.fecha;
       }
       const ventasMes = Object.entries(resumen).filter(([d]) => d.startsWith(q.mes)).reduce((s, [, v]) => s + (v.total || 0), 0);
-      const gastado = movimientos.reduce((s, m) => s + m.valor, 0);
-      const deVentas = movimientos.reduce((s, m) => s + m.deVentas, 0);
+      const conPres = movimientos.filter((m) => !m.fueraPresupuesto);
+      const gastado = conPres.reduce((s, m) => s + m.valor, 0);          // lo que cuenta contra el presupuesto
+      const deVentas = conPres.reduce((s, m) => s + m.deVentas, 0);      // lo que se pasó del presupuesto
+      const fijos = movimientos.filter((m) => m.fueraPresupuesto).reduce((s, m) => s + m.valor, 0);
       return res.status(200).json({
         mes: q.mes, presupuesto, base: base || { monto: 0, repetir: false },
-        resumen: { gastado, delPresupuesto: gastado - deVentas, deVentas, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas },
+        resumen: { gastado, delPresupuesto: gastado - deVentas, deVentas, fijos, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - fijos },
         movimientos,
       });
     }

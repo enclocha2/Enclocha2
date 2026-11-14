@@ -169,7 +169,7 @@ export const SECCIONES_NAV = [
     { href: '/productos#sabores', ico: '🍧', txt: 'Sabores', perm: ['productos'] },
     { href: '/productos#domicilios', ico: '🛵', txt: 'Domicilios', perm: ['configuracion'] },
     { href: '/productos#qr', ico: '📲', txt: 'QR de pago', perm: ['configuracion'] },
-    { href: '/#usuarios', ico: '👥', txt: 'Usuarios y permisos', perm: ['usuarios'] },
+    { href: '/usuarios', ico: '👥', txt: 'Usuarios y roles', perm: ['usuarios'] },
   ] },
 ];
 

@@ -103,7 +103,7 @@
       try {
         const r = await api(`/api/compras?r=gastosfijos&mes=${mes}`);
         pagos = r.pagos;
-        bannerPresupuesto($('#presBanner'), mes);
+        $('#presBanner').innerHTML = '<p class="hint" style="margin:0">🏦 Los gastos fijos no usan el presupuesto del mes: se pagan con las ventas.</p>';
         if (!sucio) { original = r.gastos; gastos = structuredClone(r.gastos); }
         pintar();
       } catch (e) { toast(e.message, true); }

@@ -59,11 +59,12 @@ api/_lib/store.js   ← Upstash Redis
 - Las ventas se guardan para siempre; los pedidos completos, 120 días.
 - Ventas y Reportes solo los ven los administradores (variable `ADMINS`; si no existe, todos).
 
-### Reporte mensual: ventas vs gastos (v17)
+### Reporte mensual: ventas vs gastos (v18)
 En **Reportes → 📈 Mensual** (requiere permiso de reportes; datos de `/api/ventas?r=estadisticas&mes=AAAA-MM`):
 - Ventas, gastos (compras + gastos fijos pagados + gastos del cierre), utilidad, margen, cantidad, ticket promedio, promedio por jornada y jornadas trabajadas.
 - Cada número se compara con el mes anterior. Si es el mes en curso, se compara **hasta el mismo día** del mes anterior.
 - Frases automáticas: comparación con el mes anterior y con el mismo mes del año pasado, proyección de cierre de mes, cuánto se llevan los gastos, mejor día de la semana, hora pico, producto estrella, mejor jornada, efectivo vs transferencia y domicilios.
+- Tarjeta **🛒 Compras vs ventas**: % de las ventas que se va en compras, ventas − compras, promedio de 12 meses y tabla por mes con lo que más se compró.
 - Gráfica de 12 meses de ventas vs gastos (toca un mes para verlo), tabla, promedio por día de la semana, en qué se fue la plata, lo más vendido y horas con más ventas.
 
 ## QR de transferencia
@@ -127,9 +128,10 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 
 ## Presupuesto del mes
 - Cada mes arranca con un presupuesto (se puede dejar el mismo para todos los meses).
-- Lo gastan, en orden de fecha: compras, pagos de gastos fijos y gastos de caja anotados en el cierre.
+- Lo gastan, en orden de fecha: compras y gastos de caja anotados en el cierre.
+- **Los gastos fijos NO usan el presupuesto**: siempre se pagan con las ventas del mes (aparecen en la lista, pero no descuentan el presupuesto).
 - Cuando se agota, lo demás se marca como "pagado con las ventas del mes" y se muestra desde qué gasto/fecha pasó.
-- Compras, Gastos fijos e Inicio muestran cuánto queda; al registrar una compra que no alcanza, avisa cuánto sale de las ventas.
+- Compras e Inicio muestran cuánto queda; al registrar una compra que no alcanza, avisa cuánto sale de las ventas.
 
 ## Límite de funciones de Vercel (plan Hobby: máximo 12)
 Cada archivo dentro de `api/` (menos `api/_lib/`) cuenta como una función. La app usa **10**:

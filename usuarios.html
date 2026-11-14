@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <title>Enclocha 2 · Usuarios y roles</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>👥 Usuarios y roles</h1></div>
+  </header>
+
+  <main class="admin" style="max-width:1100px">
+    <nav class="tabs" id="tabs">
+      <button data-tab="usuarios" class="on">👥 Usuarios</button>
+      <button data-tab="roles">🎭 Roles y permisos</button>
+    </nav>
+
+    <section id="tabUsuarios">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <p class="hint" style="margin:0">Toca ✏️ para cambiar el rol, la contraseña o darle permisos especiales a una persona.</p>
+        <button class="btn alt" id="uNuevo" style="width:auto;padding:10px 16px">+ Nuevo usuario</button>
+      </div>
+      <div class="card" style="margin-top:10px"><div class="tabla-wrap"><table class="tabla" id="uTabla"></table></div></div>
+    </section>
+
+    <section id="tabRoles" hidden>
+      <div class="card ayuda-roles">
+        <b>¿Cómo funciona?</b>
+        <p class="hint" style="margin:6px 0 0">Un <b>rol</b> es un grupo de permisos (ej: Cajero, Mesero, Domiciliario). A cada usuario le asignas un rol y hereda sus permisos.
+        Si cambias los permisos de un rol, cambian de una vez para todos los que lo tienen. El 👑 Administrador siempre lo puede todo.</p>
+      </div>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:14px">
+        <h3 class="sub" style="margin:0">🎭 Roles</h3>
+        <button class="btn" id="rNuevo" style="width:auto;padding:10px 18px">+ Crear rol</button>
+      </div>
+      <div class="roles-lista" id="rLista"></div>
+      <h3 class="sub" style="margin-top:20px">📋 Permisos de cada rol</h3>
+      <p class="hint" style="margin-top:-4px">Toca un ✅ para quitar el permiso o un · para darlo. Se guarda al instante.</p>
+      <div class="card"><div class="tabla-wrap"><table class="tabla roles-tabla" id="uRoles"></table></div></div>
+    </section>
+  </main>
+
+  <!-- Crear / editar usuario -->
+  <div class="modal" id="uModal">
+    <div class="box" style="max-width:620px">
+      <h3 id="uTitulo">Nuevo usuario</h3>
+      <div class="form-compra" style="grid-template-columns:1fr 1fr">
+        <label class="campo"><span>Usuario (para entrar)</span><input class="field" id="uUsuario" maxlength="30" autocomplete="off" placeholder="ej: Laura"></label>
+        <label class="campo"><span>Nombre</span><input class="field" id="uNombre" maxlength="50" placeholder="Nombre para mostrar"></label>
+        <label class="campo ancho"><span id="uClaveLbl">Contraseña</span><input class="field" id="uClave" type="text" autocomplete="new-password" maxlength="60" placeholder="Mínimo 4 caracteres"></label>
+      </div>
+      <div class="campo"><span>Rol</span><div class="roles-grid" id="uRolesSel"></div></div>
+      <label class="campo row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="uPersonal"><span></span></span>Personalizar permisos de esta persona</label>
+      <div id="uPermisos" class="permisos-grid"></div>
+      <label class="campo row" id="uActivoBox" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="uActivo"><span></span></span>Usuario activo (puede entrar)</label>
+      <div class="error" id="uError"></div>
+      <button class="btn" id="uGuardar">💾 Guardar</button>
+      <div class="row" style="gap:8px">
+        <button class="btn ghost" id="uCancelar" style="flex:1">Cancelar</button>
+        <button class="btn ghost peligro" id="uBorrar" style="flex:1">🗑 Borrar usuario</button>
+      </div>
+    </div>
+  </div>
+  <!-- Crear / editar rol -->
+  <div class="modal" id="rModal">
+    <div class="box" style="max-width:620px">
+      <h3 id="rTitulo">Nuevo rol</h3>
+      <div class="form-compra" style="grid-template-columns:96px 1fr">
+        <label class="campo"><span>Ícono</span><input class="field" id="rIcono" maxlength="8" style="text-align:center;font-size:1.4rem"></label>
+        <label class="campo"><span>Nombre del rol</span><input class="field" id="rNombre" maxlength="30" autocomplete="off" placeholder="ej: Mesero, Domiciliario, Supervisor"></label>
+      </div>
+      <div class="iconos-sug" id="rIconos"></div>
+      <label class="campo" id="rCopiarBox"><span>Empezar con los permisos de…</span><select class="field" id="rCopiar"></select></label>
+      <div class="row" style="justify-content:space-between;align-items:center;margin:6px 0">
+        <b id="rCuenta"></b>
+        <span class="row" style="gap:6px" id="rAtajos"><button type="button" class="mini" id="rTodos">✅ Todos</button><button type="button" class="mini" id="rNinguno">✖ Ninguno</button></span>
+      </div>
+      <div id="rPermisos" class="permisos-grid"></div>
+      <p class="hint" id="rNota" style="margin-top:8px"></p>
+      <div class="error" id="rError"></div>
+      <button class="btn" id="rGuardar">💾 Guardar rol</button>
+      <div class="row" style="gap:8px">
+        <button class="btn ghost" id="rCancelar" style="flex:1">Cancelar</button>
+        <button class="btn ghost peligro" id="rBorrar" style="flex:1">🗑 Borrar rol</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { PERMISOS, ROLES, TODOS_PERMISOS } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { fechaHora } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    await requerirSesion('usuarios');
+
+    // ---------- Pestañas ----------
+    function verTab(t) {
+      if (!['usuarios', 'roles'].includes(t)) t = 'usuarios';
+      document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+      $('#tabUsuarios').hidden = t !== 'usuarios'; $('#tabRoles').hidden = t !== 'roles';
+      history.replaceState(null, '', '#' + t);
+    }
+    $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) verTab(b.dataset.tab); });
+    verTab(location.hash.slice(1));
+
+    // USUARIOS, ROLES Y PERMISOS
+    // =====================================================================
+    let usuarios = [], yoId = null, editando = null, form = null;
+    let roles = ROLES, ROL = {};
+    const fijarRoles = (lista) => { roles = lista; ROL = Object.fromEntries(roles.map((r) => [r.id, r])); };
+    fijarRoles(ROLES);
+    const rolDeU = (id) => ROL[id] || ROL.vendedor || { id: 'sin-rol', nombre: 'Sin rol', icono: '❔', permisos: [] };
+    const NOMBRE_PERM = Object.fromEntries(PERMISOS.flatMap((g) => g.items));
+
+    async function cargarUsuarios() {
+      try {
+        const r = await api('/api/usuarios');
+        usuarios = r.usuarios; yoId = r.yo; fijarRoles(r.roles);
+        pintarUsuarios();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    function pintarUsuarios() {
+      $('#uTabla').innerHTML = `<thead><tr><th>Usuario</th><th>Rol</th><th>Permisos</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody>` +
+        usuarios.map((u) => {
+          const r = rolDeU(u.rol);
+          const personal = Array.isArray(u.permisos);
+          return `<tr class="${u.activo ? '' : 'inactivo'}">
+            <td><div class="u-cel"><span class="avatar">${esc(u.nombre.slice(0, 1).toUpperCase())}</span>
+              <span><b>${esc(u.nombre)}</b>${u.id === yoId ? ' <span class="tag-yo">tú</span>' : ''}<br><span class="hint">@${esc(u.usuario)}</span></span></div></td>
+            <td><span class="rol-tag rol-${r.id}">${r.icono} ${r.nombre}</span></td>
+            <td><span title="${esc(u.efectivos.map((p) => NOMBRE_PERM[p]).join('\n'))}">${u.efectivos.length} de ${TODOS_PERMISOS.length}</span>${personal ? ' <span class="tag-personal">personalizados</span>' : ''}</td>
+            <td>${u.activo ? '<span class="estado-pago ok">🟢 Activo</span>' : '<span class="estado-pago pend">⚪ Inactivo</span>'}</td>
+            <td class="hint">${u.ultimoIngreso ? fechaHora(u.ultimoIngreso) : 'Nunca'}</td>
+            <td><button class="mini" data-uedit="${u.id}">✏️ Editar</button></td></tr>`;
+        }).join('') + '</tbody>';
+
+      // Tarjetas de roles
+      $('#rLista').innerHTML = roles.map((r) => {
+        const n = usuarios.filter((u) => u.rol === r.id).length;
+        return `<button type="button" class="rol-card" data-redit="${r.id}">
+          <span class="rol-ico">${esc(r.icono)}</span>
+          <span><b>${esc(r.nombre)}</b>${r.fijo ? ' <span class="tag-yo">fijo</span>' : ''}<br>
+          <span class="hint">${r.permisos.length} de ${TODOS_PERMISOS.length} permisos · ${n} ${n === 1 ? 'usuario' : 'usuarios'}</span></span>
+          <span class="rol-edit">✏️</span></button>`;
+      }).join('');
+
+      // Tabla de roles: qué puede cada uno (se puede cambiar tocando la celda)
+      $('#uRoles').innerHTML = `<thead><tr><th>Permiso</th>${roles.map((r) => `<th class="num">${esc(r.icono)} ${esc(r.nombre)}</th>`).join('')}</tr></thead><tbody>` +
+        PERMISOS.map((g) => `<tr class="grupo-fila"><td colspan="${roles.length + 1}">${g.grupo}</td></tr>` +
+          g.items.map(([id, n]) => `<tr><td>${n}</td>${roles.map((r) => `<td class="num"><button type="button" class="celda-perm ${r.permisos.includes(id) ? 'si' : ''}" ${r.fijo ? 'disabled title="El Administrador siempre tiene todo"' : `data-rcel="${r.id}|${id}" title="${r.permisos.includes(id) ? 'Quitar' : 'Dar'} a ${esc(r.nombre)}"`}>${r.permisos.includes(id) ? '✅' : '·'}</button></td>`).join('')}</tr>`).join('')).join('') + '</tbody>';
+    }
+
+    // ---------- Roles ----------
+    let rolEdit = null, rolForm = null;
+    const ICONOS = ['🎭', '🧾', '💵', '🍧', '🛵', '🍺', '🧹', '🧑‍🍳', '🕵️', '⭐', '🛡️', '📦', '🎧', '🙋'];
+    function abrirRol(r) {
+      rolEdit = r || null;
+      rolForm = { icono: r?.icono || '🎭', nombre: r?.nombre || '', permisos: [...(r?.permisos || ROL.vendedor?.permisos || [])] };
+      $('#rTitulo').textContent = r ? `${r.icono} Editar rol: ${r.nombre}` : '🎭 Nuevo rol';
+      $('#rIcono').value = rolForm.icono; $('#rNombre').value = rolForm.nombre;
+      $('#rIconos').innerHTML = ICONOS.map((i) => `<button type="button" class="chip" data-rico="${i}">${i}</button>`).join('');
+      $('#rCopiarBox').hidden = !!r;
+      $('#rCopiar').innerHTML = '<option value="">— Ninguno (empezar vacío) —</option>' + roles.map((x) => `<option value="${x.id}" ${x.id === 'vendedor' ? 'selected' : ''}>${esc(x.icono)} ${esc(x.nombre)}</option>`).join('');
+      const n = r ? usuarios.filter((u) => u.rol === r.id) : [];
+      $('#rNota').innerHTML = r?.fijo ? '👑 El Administrador siempre tiene todos los permisos. Solo puedes cambiarle el nombre o el ícono.'
+        : n.length ? `Los cambios aplican de una vez a: <b>${n.map((u) => esc(u.nombre)).join(', ')}</b> (menos a quien tenga permisos personalizados).` : '';
+      $('#rBorrar').hidden = !r || r.fijo;
+      $('#rAtajos').hidden = !!r?.fijo;
+      $('#rError').textContent = '';
+      pintarRolForm();
+      $('#rModal').classList.add('show');
+      if (!r) setTimeout(() => $('#rNombre').focus(), 50);
+    }
+    function pintarRolForm() {
+      const fijo = !!rolEdit?.fijo, act = fijo ? TODOS_PERMISOS : rolForm.permisos;
+      $('#rCuenta').textContent = `${act.length} de ${TODOS_PERMISOS.length} permisos`;
+      $('#rPermisos').innerHTML = PERMISOS.map((g) => `<div class="perm-grupo"><span>${g.grupo}</span>${g.items.map(([id, n]) => `
+        <label class="perm ${act.includes(id) ? 'on' : ''} ${fijo ? 'bloq' : ''}"><input type="checkbox" data-rperm="${id}" ${act.includes(id) ? 'checked' : ''} ${fijo ? 'disabled' : ''}> ${n}</label>`).join('')}</div>`).join('');
+    }
+    $('#rNuevo').addEventListener('click', () => abrirRol(null));
+    $('#rLista').addEventListener('click', (e) => { const b = e.target.closest('[data-redit]'); if (b) abrirRol(ROL[b.dataset.redit]); });
+    $('#rIconos').addEventListener('click', (e) => { const b = e.target.closest('[data-rico]'); if (b) $('#rIcono').value = b.dataset.rico; });
+    $('#rCopiar').addEventListener('change', (e) => { rolForm.permisos = [...(ROL[e.target.value]?.permisos || [])]; pintarRolForm(); });
+    $('#rTodos').addEventListener('click', () => { rolForm.permisos = [...TODOS_PERMISOS]; pintarRolForm(); });
+    $('#rNinguno').addEventListener('click', () => { rolForm.permisos = []; pintarRolForm(); });
+    $('#rPermisos').addEventListener('change', (e) => {
+      const id = e.target.dataset.rperm; if (!id) return;
+      rolForm.permisos = e.target.checked ? [...new Set([...rolForm.permisos, id])] : rolForm.permisos.filter((p) => p !== id);
+      e.target.closest('.perm').classList.toggle('on', e.target.checked);
+      $('#rCuenta').textContent = `${rolForm.permisos.length} de ${TODOS_PERMISOS.length} permisos`;
+    });
+    $('#rCancelar').addEventListener('click', () => $('#rModal').classList.remove('show'));
+    $('#rGuardar').addEventListener('click', async () => {
+      const datos = { nombre: $('#rNombre').value, icono: $('#rIcono').value };
+      if (!rolEdit?.fijo) datos.permisos = rolForm.permisos;
+      try {
+        const r = rolEdit
+          ? await api('/api/usuarios?r=roles', { method: 'PUT', body: JSON.stringify({ id: rolEdit.id, ...datos }) })
+          : await api('/api/usuarios?r=roles', { method: 'POST', body: JSON.stringify(datos) });
+        $('#rModal').classList.remove('show');
+        toast(rolEdit ? `✅ Rol ${r.rol.nombre} actualizado` : `✅ Rol ${r.rol.nombre} creado`);
+        cargarUsuarios();
+      } catch (err) { $('#rError').textContent = err.message; }
+    });
+    $('#rBorrar').addEventListener('click', async () => {
+      const b = $('#rBorrar');
+      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Seguro? Toca otra vez'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑 Borrar rol'; }, 3000); return; }
+      try {
+        await api(`/api/usuarios?r=roles&id=${encodeURIComponent(rolEdit.id)}`, { method: 'DELETE' });
+        $('#rModal').classList.remove('show'); toast('Rol borrado'); cargarUsuarios();
+      } catch (err) { $('#rError').textContent = err.message; }
+    });
+    // Cambio rápido desde la tabla
+    $('#uRoles').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-rcel]'); if (!b || b.disabled) return;
+      const [rid, perm] = b.dataset.rcel.split('|'), rol = ROL[rid];
+      const permisos = rol.permisos.includes(perm) ? rol.permisos.filter((p) => p !== perm) : [...rol.permisos, perm];
+      b.disabled = true;
+      try {
+        await api('/api/usuarios?r=roles', { method: 'PUT', body: JSON.stringify({ id: rid, permisos }) });
+        toast(`${rol.icono} ${rol.nombre}: ${permisos.includes(perm) ? 'ahora puede' : 'ya no puede'} ${NOMBRE_PERM[perm].replace(/^\S+\s/, '').toLowerCase()}`);
+        await cargarUsuarios();
+      } catch (err) { toast(err.message, true); b.disabled = false; }
+    });
+
+    // ---------- Modal ----------
+    function abrirUsuario(u) {
+      editando = u || null;
+      form = u ? { rol: u.rol, personal: Array.isArray(u.permisos), permisos: [...(u.permisos || u.efectivos)], activo: u.activo }
+               : { rol: ROL.vendedor ? 'vendedor' : roles[roles.length - 1].id, personal: false, permisos: [], activo: true };
+      if (!u) form.permisos = [...rolDeU(form.rol).permisos];
+      $('#uTitulo').textContent = u ? `✏️ ${u.nombre}` : '👤 Nuevo usuario';
+      $('#uUsuario').value = u?.usuario || ''; $('#uUsuario').disabled = !!u;
+      $('#uNombre').value = u?.nombre || '';
+      $('#uClave').value = '';
+      $('#uClaveLbl').textContent = u ? 'Nueva contraseña (déjala vacía para no cambiarla)' : 'Contraseña';
+      $('#uActivoBox').hidden = !u; $('#uBorrar').hidden = !u || u.id === yoId;
+      $('#uActivo').checked = form.activo;
+      $('#uError').textContent = '';
+      pintarForm();
+      $('#uModal').classList.add('show');
+    }
+    function pintarForm() {
+      $('#uRolesSel').innerHTML = roles.map((r) => `<button type="button" class="opt ${form.rol === r.id ? 'on' : ''}" data-urol="${r.id}"><strong>${esc(r.icono)} ${esc(r.nombre)}</strong><span>${r.permisos.length} permisos</span></button>`).join('');
+      $('#uPersonal').checked = form.personal;
+      const activos = form.personal ? form.permisos : rolDeU(form.rol).permisos;
+      $('#uPermisos').innerHTML = PERMISOS.map((g) => `<div class="perm-grupo"><span>${g.grupo}</span>${g.items.map(([id, n]) => `
+        <label class="perm ${activos.includes(id) ? 'on' : ''} ${form.personal ? '' : 'bloq'}"><input type="checkbox" data-uperm="${id}" ${activos.includes(id) ? 'checked' : ''} ${form.personal ? '' : 'disabled'}> ${n}</label>`).join('')}</div>`).join('');
+    }
+    $('#uRolesSel').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-urol]'); if (!b) return;
+      form.rol = b.dataset.urol;
+      if (!form.personal) form.permisos = [...rolDeU(form.rol).permisos];
+      pintarForm();
+    });
+    $('#uPersonal').addEventListener('change', (e) => { form.personal = e.target.checked; if (form.personal && !form.permisos.length) form.permisos = [...rolDeU(form.rol).permisos]; if (!form.personal) form.permisos = [...rolDeU(form.rol).permisos]; pintarForm(); });
+    $('#uPermisos').addEventListener('change', (e) => {
+      const id = e.target.dataset.uperm; if (!id) return;
+      form.permisos = e.target.checked ? [...new Set([...form.permisos, id])] : form.permisos.filter((p) => p !== id);
+      e.target.closest('.perm').classList.toggle('on', e.target.checked);
+    });
+    $('#uNuevo').addEventListener('click', () => abrirUsuario(null));
+    $('#uTabla').addEventListener('click', (e) => { const b = e.target.closest('[data-uedit]'); if (b) abrirUsuario(usuarios.find((u) => u.id === b.dataset.uedit)); });
+    $('#uCancelar').addEventListener('click', () => $('#uModal').classList.remove('show'));
+    $('#uGuardar').addEventListener('click', async () => {
+      const datos = { nombre: $('#uNombre').value, rol: form.rol, permisos: form.personal ? form.permisos : null };
+      if ($('#uClave').value) datos.clave = $('#uClave').value;
+      try {
+        if (editando) await api('/api/usuarios', { method: 'PUT', body: JSON.stringify({ id: editando.id, ...datos, activo: $('#uActivo').checked }) });
+        else await api('/api/usuarios', { method: 'POST', body: JSON.stringify({ ...datos, usuario: $('#uUsuario').value }) });
+        $('#uModal').classList.remove('show');
+        toast(editando ? '✅ Usuario actualizado' : `✅ Usuario ${$('#uUsuario').value} creado`);
+        cargarUsuarios();
+      } catch (err) { $('#uError').textContent = err.message; }
+    });
+    $('#uBorrar').addEventListener('click', async () => {
+      const b = $('#uBorrar');
+      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Seguro? Toca otra vez'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑 Borrar usuario'; }, 3000); return; }
+      try {
+        await api(`/api/usuarios?id=${encodeURIComponent(editando.id)}`, { method: 'DELETE' });
+        $('#uModal').classList.remove('show'); toast('Usuario borrado'); cargarUsuarios();
+      } catch (err) { $('#uError').textContent = err.message; }
+    });
+
+    cargarUsuarios();
+  </script>
+</body>
+</html>

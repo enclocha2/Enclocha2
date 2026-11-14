@@ -49,6 +49,11 @@
         <div class="grafica" id="mGrafica"></div>
         <details style="margin-top:8px"><summary class="hint">Ver como tabla</summary><div class="tabla-wrap"><table class="tabla" id="mTabla"></table></div></details>
       </section>
+      <section class="card">
+        <h2>🛒 Compras vs ventas</h2>
+        <div class="kpis" id="mCompraKpis" style="margin:0 0 12px"></div>
+        <div class="tabla-wrap"><table class="tabla" id="mCompraTabla"></table></div>
+      </section>
       <div class="dos-col">
         <section class="card"><h2>📅 Promedio por jornada según el día</h2><div id="mSemana"></div></section>
         <section class="card"><h2>💸 ¿En qué se fue la plata?</h2><div id="mGastos"></div></section>
@@ -322,6 +327,8 @@
         <div class="kpi"><span><i class="dot" style="background:${C_GASTOS}"></i>Gastos</span><b>${pesos(act.gastos)}</b>${delta(act.gastos, ant.gastos, true)}</div>
         <div class="kpi ${act.utilidad >= 0 ? 'utilidad' : 'perdida'}"><span>${act.utilidad >= 0 ? '📈 Utilidad' : '📉 Pérdida'}</span><b>${pesos(Math.abs(act.utilidad))}</b>${delta(act.utilidad, ant.utilidad)}</div>
         <div class="kpi"><span>Margen</span><b>${margen}%</b>${margenAnt === null ? '<small class="hint">de cada $100 vendidos</small>' : `<small class="delta ${margen >= margenAnt ? 'sube' : 'baja'}">${margen >= margenAnt ? '▲' : '▼'} ${Math.abs(margen - margenAnt)} puntos</small>`}</div>
+        <div class="kpi"><span>🛒 Compras</span><b>${pesos(act.compras)}</b>${delta(act.compras, ant.compras, true)}</div>
+        <div class="kpi"><span>🏦 Gastos fijos</span><b>${pesos(act.fijos)}</b><small class="hint">${act.caja ? `+ ${pesos(act.caja)} de caja` : 'pagos registrados'}</small></div>
         <div class="kpi"><span>🧾 Ventas (cantidad)</span><b>${act.n}</b>${delta(act.n, ant.n)}</div>
         <div class="kpi"><span>🎟️ Ticket promedio</span><b>${pesos(ticket)}</b>${delta(ticket, ticketAnt)}</div>
         <div class="kpi"><span>📅 Promedio por jornada</span><b>${pesos(porJ)}</b>${delta(porJ, porJAnt)}</div>
@@ -339,6 +346,12 @@
         ins.push(`🔮 Si sigues a este ritmo, <b>cerrarás el mes con unos ${pesos(proy)}</b> en ventas (faltan ${act.jornadasProgramadas - act.jornadasTranscurridas} jornadas).`);
       }
       if (act.ventas) ins.push(`💸 Los gastos se llevan <b>${Math.round((act.gastos / act.ventas) * 100)}%</b> de lo vendido: de cada $10.000 te quedan ${pesos(Math.max(0, Math.round((act.utilidad / act.ventas) * 10000)))}.`);
+      if (act.ventas && act.compras) {
+        const pc = Math.round((act.compras / act.ventas) * 100), pcAnt = ant.ventas && ant.compras ? Math.round((ant.compras / ant.ventas) * 100) : null;
+        ins.push(`🛒 Las compras son el <b>${pc}% de las ventas</b>: por cada $10.000 vendidos, ${pesos(Math.round((act.compras / act.ventas) * 10000))} se fueron en compras.` + (pcAnt === null ? '' : pc === pcAnt ? ' Igual que el mes anterior.' : pc < pcAnt ? ` Mejoró: antes era ${pcAnt}%.` : ` Ojo: antes era ${pcAnt}%.`));
+        const pCo = pct(act.compras, ant.compras);
+        if (pV !== null && pCo !== null && ant.ventas && ant.compras) ins.push(pCo > pV ? `⚠️ Las compras subieron <b>${pCo}%</b> y las ventas ${pV}%: estás comprando más rápido de lo que vendes.` : `✅ Las ventas ${pV >= 0 ? 'subieron' : 'bajaron'} ${Math.abs(pV)}% y las compras ${pCo >= 0 ? 'subieron' : 'bajaron'} ${Math.abs(pCo)}%: las compras van en línea con lo que vendes.`);
+      } else if (act.ventas && !act.compras) ins.push('🛒 No hay compras registradas este mes: regístralas en Compras para ver cuánto te cuesta lo que vendes.');
       if (act.utilidad < 0) ins.push(`⚠️ <b>Te faltan ${pesos(-act.utilidad)} en ventas</b> para cubrir los gastos del mes.`);
       const sem = d.detalle.porDiaSemana.filter((x) => x.jornadas);
       if (sem.length) { const m = [...sem].sort((a, b) => b.promedio - a.promedio)[0]; ins.push(`⭐ Tu mejor día es el <b>${DIAS[m.dia].toLowerCase()}</b>: ${pesos(m.promedio)} en promedio por jornada.`); }
@@ -357,6 +370,22 @@
         [...M].reverse().map((x) => `<tr ${x.mes === act.mes ? 'class="fila-sel"' : ''}><td>${mesTxt(x.mes)}</td><td class="num">${pesos(x.ventas)}</td><td class="num">${pesos(x.compras)}</td><td class="num">${pesos(x.fijos)}</td><td class="num">${pesos(x.caja)}</td><td class="num">${pesos(x.gastos)}</td>
           <td class="num ${x.utilidad < 0 ? 'neg' : 'pos'}">${pesos(x.utilidad)}</td><td class="num">${x.ventas ? Math.round((x.utilidad / x.ventas) * 100) + '%' : '—'}</td><td class="num">${x.n}</td>
           <td class="num">${x.n ? pesos(Math.round(x.ventas / x.n)) : '—'}</td><td class="num">${x.jornadas ? pesos(Math.round(x.ventas / x.jornadas)) : '—'}</td></tr>`).join('') + '</tbody>';
+
+      // ---------- Compras vs ventas ----------
+      const pc = (x) => (x.ventas ? Math.round((x.compras / x.ventas) * 100) : null);
+      const conDatos = M.filter((x) => x.ventas && x.compras), promPc = conDatos.length ? Math.round(conDatos.reduce((s, x) => s + x.compras / x.ventas, 0) / conDatos.length * 100) : null;
+      $('#mCompraKpis').innerHTML = `
+        <div class="kpi"><span>Ventas</span><b>${pesos(act.ventas)}</b></div>
+        <div class="kpi"><span>🛒 Compras</span><b>${pesos(act.compras)}</b><small>${pc(act) === null ? '—' : pc(act) + '% de las ventas'}</small></div>
+        <div class="kpi ${act.ventas - act.compras >= 0 ? 'utilidad' : 'perdida'}"><span>Ventas − compras</span><b>${pesos(act.ventas - act.compras)}</b><small>antes de gastos fijos</small></div>
+        <div class="kpi"><span>Promedio 12 meses</span><b>${promPc === null ? '—' : promPc + '%'}</b><small>compras / ventas</small></div>`;
+      $('#mCompraTabla').innerHTML = `<thead><tr><th>Mes</th><th class="num">Ventas</th><th class="num">Compras</th><th class="num">% compras</th><th class="num">Ventas − compras</th><th>Lo que más se compró</th></tr></thead><tbody>` +
+        [...M].reverse().filter((x) => x.ventas || x.compras).map((x) => {
+          const top = Object.entries(x.comprasPorCat || {}).sort((a, b) => b[1] - a[1])[0];
+          return `<tr ${x.mes === act.mes ? 'class="fila-sel"' : ''}><td>${mesTxt(x.mes)}</td><td class="num">${pesos(x.ventas)}</td><td class="num">${pesos(x.compras)}</td>
+            <td class="num">${pc(x) === null ? '—' : pc(x) + '%'}</td><td class="num ${x.ventas - x.compras < 0 ? 'neg' : 'pos'}">${pesos(x.ventas - x.compras)}</td>
+            <td>${top ? `${CATS[top[0]] || top[0]} · ${pesos(top[1])}` : '<span class="hint">—</span>'}</td></tr>`;
+        }).join('') + '</tbody>';
 
       // ---------- Por día de la semana ----------
       const filasSem = d.detalle.porDiaSemana.filter((x) => x.jornadas).map((x) => [`${DIAS[x.dia]} <span class="hint">(${x.jornadas})</span>`, x.promedio, pesos(x.promedio)]);
