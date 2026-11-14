@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta } from './_lib/store.js';
+import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe } from '../catalog.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir } from './_lib/store.js';
 import { usuarioDe } from './_lib/auth.js';
 
 class ErrorUsuario extends Error {}
@@ -67,7 +67,10 @@ export default async function handler(req, res) {
         creado: t,
         historial: [{ accion: 'tomado', usuario, en: t }],
       };
+      // Inventario: descontar lo que consume este pedido
+      pedido.inventario = consumoDe(items, await leerInventario());
       await guardar(pedido);
+      await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario });
       const resp = { pedido };
       if (cuenta) {
         const c = agruparCuentas(await listar(300)).find((x) => x.id === cuenta);
@@ -108,7 +111,13 @@ export default async function handler(req, res) {
         if (!ESTADOS.includes(body.estado)) throw new ErrorUsuario('Estado inválido');
         pedido.estado = body.estado;
         pedido.historial.push({ accion: body.estado, usuario, en: t });
-        if (body.estado === 'cancelado') await anularVenta(pedido); // un pedido cancelado no cuenta como venta
+        if (body.estado === 'cancelado') {
+          await anularVenta(pedido); // un pedido cancelado no cuenta como venta
+          if (pedido.inventario && !pedido.inventarioDevuelto) { // y lo que consumió vuelve al inventario
+            await moverStock(invertir(pedido.inventario), { tipo: 'cancelado', pedido: pedido.numero, cliente: pedido.cliente, usuario });
+            pedido.inventarioDevuelto = true;
+          }
+        }
       }
 
       if (body.pago !== undefined) {

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <meta name="description" content="Pide tus granizados Enclocha 2 a domicilio" />
+  <meta property="og:title" content="Enclocha 2 Granizados · Domicilios" />
+  <meta property="og:description" content="Arma tu granizado y te lo llevamos" />
+  <meta property="og:image" content="/img/icon-512.png" />
+  <title>Enclocha 2 · Pide a domicilio</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="publico">
+  <main class="dom">
+    <div class="hero dom-hero">
+      <img src="/img/logo.png" alt="Enclocha 2 Granizados" />
+      <h1>Pide tu granizado a domicilio 🛵</h1>
+      <div id="estadoTienda" class="estado-tienda">Cargando...</div>
+    </div>
+
+    <!-- Seguimiento -->
+    <section class="card seguimiento" id="seguimiento" hidden></section>
+
+    <div id="formulario" hidden>
+      <!-- Armar -->
+      <section class="card">
+        <h2>🍧 Arma tu granizado <span class="para" id="numG">#1</span></h2>
+
+        <h3 class="sub">1. Tamaño</h3>
+        <div id="tamanos"></div>
+
+        <h3 class="sub">2. Sabores <span class="hint">(puedes mezclar varios)</span></h3>
+        <div class="chips" id="sabores"></div>
+
+        <h3 class="sub">3. Toppings incluidos <span class="hint">(gratis)</span></h3>
+        <div id="incluidos"></div>
+
+        <details class="plegable" style="margin-top:10px">
+          <summary><b>4. ¿Quieres toppings adicionales?</b> <span class="hint">(con costo)</span></summary>
+          <div id="adicionales"></div>
+        </details>
+
+        <div class="row" style="justify-content:space-between;margin:14px 0 8px">
+          <span>¿Cuántos iguales a este?</span><div class="qty" id="cantidad"></div>
+        </div>
+        <input class="field" id="nota" maxlength="200" placeholder="Nota para este granizado (opcional)" />
+        <div class="total"><span>Este granizado</span><span id="subtotal">$0</span></div>
+        <button class="btn alt" id="agregar" disabled>+ Agregar a mi pedido</button>
+      </section>
+
+      <!-- Carrito -->
+      <section class="card" id="panel">
+        <h2>🧾 Tu pedido</h2>
+        <div id="carrito"><div class="empty">Aún no has agregado granizados</div></div>
+        <div class="dom-totales" id="totales"></div>
+      </section>
+
+      <!-- Datos -->
+      <section class="card">
+        <h2>📍 ¿A dónde te lo llevamos?</h2>
+        <div class="form-compra">
+          <label class="campo"><span>Tu nombre</span><input class="field" id="cliente" maxlength="60" autocomplete="name" placeholder="Nombre"></label>
+          <label class="campo"><span>Celular</span><input class="field" id="telefono" maxlength="15" inputmode="tel" autocomplete="tel" placeholder="300 123 4567"></label>
+          <label class="campo"><span>Barrio</span><input class="field" id="barrio" maxlength="60" placeholder="Barrio"></label>
+          <label class="campo ancho"><span>Dirección</span><input class="field" id="direccion" maxlength="120" autocomplete="street-address" placeholder="Calle 00 # 00-00"></label>
+          <label class="campo ancho"><span>Referencia (opcional)</span><input class="field" id="referencia" maxlength="120" placeholder="Apto, torre, casa de rejas negras..."></label>
+          <label class="campo ancho"><span>Nota para el domiciliario (opcional)</span><input class="field" id="notaPedido" maxlength="200" placeholder="Ej: timbre dañado, llamar al llegar"></label>
+          <input type="text" id="web" name="web" tabindex="-1" autocomplete="off" class="trampa" aria-hidden="true">
+        </div>
+      </section>
+
+      <!-- Pago -->
+      <section class="card">
+        <h2>💰 ¿Cómo vas a pagar?</h2>
+        <div class="g2" id="metodos">
+          <button type="button" class="opt" data-metodo="efectivo">💵 Efectivo</button>
+          <button type="button" class="opt" data-metodo="transferencia">📲 Transferencia</button>
+        </div>
+        <div id="pagoDet"></div>
+      </section>
+
+      <div class="error" id="error"></div>
+      <button class="btn grande" id="pedir" disabled>🛵 Pedir domicilio</button>
+      <p class="hint" style="text-align:center">Al pedir, te mostramos el estado de tu pedido en esta misma página.</p>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { GRUPOS, SECCIONES, pesos, armarItem } from '/catalog.js';
+
+    const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let tt; const toast = (m, err) => { const t = $('#toast'); t.textContent = m; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(tt); tt = setTimeout(() => (t.className = 'toast'), 3500); };
+    const guardarLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+    const leerLS = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+
+    let info, cfg, item, carrito = [], metodo = null;
+    const nuevo = () => ({ tipo: 'granizado', tamano: null, sabores: [], incluidos: Object.fromEntries(GRUPOS.map((g) => [g.id, null])), adicionales: {}, cantidad: 1, nota: '' });
+    const armar = (d) => { try { return armarItem(d, cfg); } catch { return null; } };
+    const subtotalCarrito = () => carrito.reduce((s, d) => s + (armar(d)?.subtotal || 0), 0);
+
+    // ---------- Cargar ----------
+    async function cargar() {
+      const r = await fetch('/api/publico', { cache: 'no-store' });
+      info = await r.json();
+      // cfg mínimo para armarItem
+      cfg = { tamanos: info.menu.tamanos, sabores: info.menu.sabores, toppings: info.menu.toppings, productos: [], categorias: [] };
+      $('#estadoTienda').className = 'estado-tienda ' + (info.abierto ? 'abierta' : 'cerrada');
+      $('#estadoTienda').innerHTML = info.abierto
+        ? `🟢 Estamos recibiendo pedidos${info.horario ? ` · hoy ${info.horario}` : ''}${info.domicilio.costo ? ` · domicilio ${pesos(info.domicilio.costo)}` : ''}`
+        : `🔴 ${esc(info.motivo)}`;
+      if (info.domicilio.mensaje && info.abierto) $('#estadoTienda').innerHTML += `<br><span class="hint">${esc(info.domicilio.mensaje)}</span>`;
+      $('#formulario').hidden = !info.abierto;
+      const yo = leerLS('dom-cliente');
+      if (yo) for (const k of ['cliente', 'telefono', 'barrio', 'direccion', 'referencia']) $('#' + k).value = yo[k] || '';
+      item = nuevo();
+      render();
+    }
+
+    // ---------- Armar granizado ----------
+    function render() {
+      const n = carrito.length + 1;
+      $('#numG').textContent = '#' + n;
+      const secciones = [...new Set([...SECCIONES, ...cfg.tamanos.map((t) => t.seccion || 'Tamaños')])];
+      $('#tamanos').innerHTML = secciones.map((sec) => {
+        const lista = cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === sec);
+        return lista.length ? `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => `
+          <button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}"><strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span></button>`).join('')}</div>` : '';
+      }).join('');
+      $('#sabores').innerHTML = cfg.sabores.map((s) => `<button class="chip ${item.sabores.includes(s.id) ? 'on' : ''}" data-sabor="${s.id}">${esc(s.nombre)}</button>`).join('');
+      $('#incluidos').innerHTML = GRUPOS.map((g) => {
+        const ops = cfg.toppings.filter((t) => t.grupo === g.id);
+        if (!ops.length) return '';
+        const sel = item.incluidos[g.id];
+        const bs = ops.length === 1
+          ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}">Sí</button>`
+          : ops.map((t) => `<button class="${sel === t.id ? 'on' : ''}" data-inc="${g.id}" data-val="${t.id}">${esc(t.nombre.replace(/^Paleta de /, ''))}</button>`).join('');
+        return `<div class="grupo"><span class="lbl">${g.nombre}</span><div class="seg">${bs}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">No</button></div></div>`;
+      }).join('');
+      $('#adicionales').innerHTML = cfg.toppings.map((t) => {
+        const q = item.adicionales[t.id] || 0;
+        return `<div class="extra"><div>${esc(t.nombre)}<small>+${pesos(t.precio)} c/u</small></div><div class="qty ${q ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${q}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
+      }).join('');
+      $('#cantidad').innerHTML = `<button data-cant="-1">−</button><b>${item.cantidad}</b><button data-cant="1">+</button>`;
+      const a = armar(item);
+      $('#subtotal').textContent = a ? pesos(a.subtotal) : '$0';
+      $('#agregar').disabled = !a;
+      $('#agregar').textContent = !item.tamano ? 'Escoge un tamaño' : !item.sabores.length ? 'Escoge al menos un sabor' : `+ Agregar granizado #${n} a mi pedido`;
+      renderCarrito();
+    }
+
+    function renderCarrito() {
+      $('#carrito').innerHTML = carrito.length ? carrito.map((d, i) => {
+        const a = armar(d);
+        return `<div class="cart-item"><div class="det"><b>🍧 ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${pesos(a.subtotal)}<br>
+          ${a.sabores.map((s) => esc(s.nombre)).join(' + ')}<br>
+          ${a.incluidos.length ? 'Con: ' + a.incluidos.map((t) => esc(t.nombre)).join(', ') : 'Sin toppings'}
+          ${a.adicionales.length ? '<br>Adicionales: ' + a.adicionales.map((x) => `${x.cantidad}× ${esc(x.nombre)}`).join(', ') : ''}
+          ${a.nota ? '<br>📝 ' + esc(a.nota) : ''}</div><button class="x" data-del="${i}">✕</button></div>`;
+      }).join('') : '<div class="empty">Aún no has agregado granizados</div>';
+      const sub = subtotalCarrito(), costo = info.domicilio.costo, total = sub + (carrito.length ? costo : 0);
+      const falta = info.domicilio.minimo && sub < info.domicilio.minimo ? info.domicilio.minimo - sub : 0;
+      $('#totales').innerHTML = carrito.length ? `
+        <div class="fila"><span>Granizados</span><b>${pesos(sub)}</b></div>
+        <div class="fila"><span>🛵 Domicilio</span><b>${costo ? pesos(costo) : 'Gratis'}</b></div>
+        <div class="total"><span>Total</span><span>${pesos(total)}</span></div>
+        ${falta ? `<div class="warnbar">El pedido mínimo es ${pesos(info.domicilio.minimo)}. Te faltan ${pesos(falta)}.</div>` : ''}` : '';
+      renderPago(total);
+      $('#pedir').disabled = !carrito.length || !!falta || !metodo;
+      $('#pedir').textContent = !carrito.length ? '🛵 Agrega al menos un granizado' : !metodo ? '🛵 Escoge cómo vas a pagar' : `🛵 Pedir domicilio · ${pesos(total)}`;
+    }
+
+    function renderPago(total) {
+      document.querySelectorAll('#metodos .opt').forEach((b) => b.classList.toggle('on', b.dataset.metodo === metodo));
+      if (metodo === 'efectivo') {
+        const v = $('#pagaCon')?.value || '';
+        $('#pagoDet').innerHTML = `<label class="campo" style="margin-top:12px"><span>¿Con cuánto vas a pagar? (para llevarte las vueltas)</span>
+          <div class="precio"><span>$</span><input class="field" id="pagaCon" type="number" min="0" step="1000" inputmode="numeric" value="${v}" placeholder="${total || ''}"></div></label>`;
+      } else if (metodo === 'transferencia') {
+        $('#pagoDet').innerHTML = info.qr ? `<div class="qr-box"><img src="${info.qr}" alt="QR para transferir"><div class="qr-monto">${pesos(total)}</div>
+          ${info.qrTexto ? `<div class="qr-texto">${esc(info.qrTexto)}</div>` : ''}</div>
+          <p class="hint" style="text-align:center">Escanea el QR desde Nequi o tu banco.${info.domicilio.whatsapp ? ` Envíanos el comprobante por <a href="https://wa.me/57${info.domicilio.whatsapp}" target="_blank" rel="noopener">WhatsApp</a>.` : ' Muéstrale el comprobante al domiciliario.'}</p>`
+          : `<p class="hint">Al confirmar te enviaremos los datos para transferir.</p>`;
+      } else $('#pagoDet').innerHTML = '';
+    }
+
+    document.querySelector('#formulario').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const ds = b.dataset;
+      if (ds.metodo) { metodo = ds.metodo; return renderCarrito(); }
+      if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
+      if (ds.tam) item.tamano = ds.tam;
+      else if (ds.sabor) item.sabores = item.sabores.includes(ds.sabor) ? item.sabores.filter((s) => s !== ds.sabor) : [...item.sabores, ds.sabor];
+      else if (ds.inc !== undefined) item.incluidos[ds.inc] = ds.val || null;
+      else if (ds.adi) { const n = Math.max(0, (item.adicionales[ds.adi] || 0) + Number(ds.d)); if (n) item.adicionales[ds.adi] = n; else delete item.adicionales[ds.adi]; }
+      else if (ds.cant) item.cantidad = Math.max(1, Math.min(20, item.cantidad + Number(ds.cant)));
+      else return;
+      render();
+    });
+    $('#nota').addEventListener('input', (e) => { item.nota = e.target.value; });
+    $('#agregar').addEventListener('click', () => {
+      carrito.push(structuredClone(item)); item = nuevo(); $('#nota').value = '';
+      render(); toast('✅ Agregado. Puedes armar otro o bajar a terminar tu pedido.');
+      $('#panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    // ---------- Enviar ----------
+    $('#pedir').addEventListener('click', async () => {
+      $('#error').textContent = '';
+      const datos = Object.fromEntries(['cliente', 'telefono', 'barrio', 'direccion', 'referencia'].map((k) => [k, $('#' + k).value.trim()]));
+      if (!datos.cliente) return ($('#error').textContent = 'Escribe tu nombre');
+      if (datos.telefono.replace(/\D/g, '').length < 7) return ($('#error').textContent = 'Escribe tu número de celular');
+      if (datos.direccion.length < 5) return ($('#error').textContent = 'Escribe tu dirección completa');
+      const btn = $('#pedir'); btn.disabled = true; btn.textContent = 'Enviando...';
+      try {
+        const r = await fetch('/api/publico', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...datos, nota: $('#notaPedido').value, items: carrito, web: $('#web').value,
+            pago: { metodo, pagaCon: Number($('#pagaCon')?.value) || 0 } }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'No se pudo enviar el pedido');
+        guardarLS('dom-cliente', datos);
+        guardarLS('dom-pedido', { id: d.id, t: d.token, numero: d.numero, total: d.total });
+        carrito = []; item = nuevo(); render();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        seguir();
+      } catch (err) { $('#error').textContent = err.message; renderCarrito(); }
+    });
+
+    // ---------- Seguimiento del pedido ----------
+    const PASOS = [['nuevo', '📥', 'Recibido'], ['preparando', '🍧', 'Preparando'], ['encamino', '🛵', 'En camino'], ['entregado', '✅', 'Entregado']];
+    let timer = null;
+    async function seguir() {
+      const p = leerLS('dom-pedido');
+      if (!p) { $('#seguimiento').hidden = true; return; }
+      try {
+        const r = await fetch(`/api/publico?seguir=${encodeURIComponent(p.id)}&t=${encodeURIComponent(p.t)}`, { cache: 'no-store' });
+        if (r.status === 404) { localStorage.removeItem('dom-pedido'); $('#seguimiento').hidden = true; return; }
+        const d = await r.json();
+        if (!r.ok) return;
+        const idx = PASOS.findIndex((x) => x[0] === d.estado);
+        const terminado = d.estado === 'entregado' || d.estado === 'cancelado';
+        $('#seguimiento').hidden = false;
+        $('#seguimiento').innerHTML = `
+          <h2>${({ nuevo: '📥 ¡Recibimos tu pedido!', preparando: '🍧 Estamos preparando tu pedido', encamino: '🛵 ¡Tu pedido va en camino!', entregado: '🎉 ¡Entregado! Disfrútalo', cancelado: '❌ Tu pedido fue cancelado' })[d.estado] || 'Tu pedido'}</h2>
+          <p class="hint" style="margin-top:-6px">Pedido <b>#${d.numero}</b> · ${esc(d.cliente)} · ${pesos(d.total)}</p>
+          ${d.estado === 'cancelado' ? '<p>Si tienes dudas, escríbenos.</p>' : `<div class="pasos">${PASOS.map(([k, ic, n], i) => `
+            <div class="paso ${i < idx ? 'hecho' : i === idx ? 'actual' : ''}"><span>${ic}</span><b>${n}</b></div>`).join('')}</div>`}
+          ${terminado ? '<button class="btn alt" id="otroPedido">Hacer otro pedido</button>' : '<p class="hint" style="text-align:center">Esta página se actualiza sola.</p>'}`;
+        $('#otroPedido')?.addEventListener('click', () => { localStorage.removeItem('dom-pedido'); $('#seguimiento').hidden = true; });
+        clearTimeout(timer);
+        if (!terminado) timer = setTimeout(() => { if (!document.hidden) seguir(); else document.addEventListener('visibilitychange', seguir, { once: true }); }, 20000);
+      } catch {}
+    }
+
+    try { await cargar(); } catch { $('#estadoTienda').textContent = 'No pudimos cargar el menú. Intenta de nuevo en un momento.'; }
+    seguir();
+  </script>
+</body>
+</html>

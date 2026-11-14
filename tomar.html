@@ -152,6 +152,24 @@
     try { ({ config: cfg } = await api('/api/catalogo')); }
     catch (e) { toast('No se pudo cargar el catálogo: ' + e.message, true); throw e; }
 
+    // Stock disponible (inventario) para mostrar "quedan N" / "agotado" (no bloquea la venta)
+    let inv = { items: [], stock: {} };
+    try { inv = await api('/api/inventario'); } catch {}
+    function disponible(tipo, id) {
+      let min = null, aviso = 0;
+      for (const it of inv.items) for (const r of it.reglas || []) if (r.tipo === tipo && r.id === id) {
+        const n = Math.floor((inv.stock[it.id] || 0) / (r.cantidad || 1));
+        if (min === null || n < min) { min = n; aviso = Math.max(it.minimo || 0, 5); }
+      }
+      return min === null ? null : { n: min, aviso };
+    }
+    const tagStock = (tipo, id) => {
+      const d = disponible(tipo, id);
+      if (!d) return '';
+      if (d.n <= 0) return '<em class="stock-tag agotado">🔴 Agotado</em>';
+      return d.n <= d.aviso ? `<em class="stock-tag bajo">🟠 Quedan ${d.n}</em>` : '';
+    };
+
     const act = (l) => l.filter((x) => x.activo);
     const tamanos = act(cfg.tamanos);
     const sabores = act(cfg.sabores);
@@ -243,7 +261,7 @@
         if (!lista.length) return '';
         return `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => t.precio
           ? `<button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
-              <strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span></button>`
+              <strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span>${tagStock('tamano', t.id)}</button>`
           : `<button class="opt off" disabled title="Ponle precio en Productos"><strong class="largo">${esc(t.nombre)}</strong><span>Sin precio</span></button>`).join('')}</div>`;
       }).join('') || '<div class="empty">No hay presentaciones activas</div>';
 
@@ -288,7 +306,7 @@
         const n = enCarrito(p.id)?.cantidad || 0;
         if (!p.precio) return `<div class="prod off"><div><b>${esc(p.nombre)}</b><span>Sin precio</span></div></div>`;
         return `<div class="prod ${n ? 'has' : ''}">
-          <button class="prod-main" data-prod="${p.id}" data-d="1"><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span></button>
+          <button class="prod-main" data-prod="${p.id}" data-d="1"><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span>${tagStock('producto', p.id)}</button>
           ${n ? `<div class="qty has"><button data-prod="${p.id}" data-d="-1">−</button><b>${n}</b><button data-prod="${p.id}" data-d="1">+</button></div>` : ''}
         </div>`;
       }).join('');

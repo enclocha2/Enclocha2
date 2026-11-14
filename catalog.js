@@ -9,7 +9,7 @@ export const GRUPOS = [
   { id: 'bandera', nombre: 'Bandera de sandía' },
 ];
 
-export const ESTADOS = ['nuevo', 'preparando', 'entregado', 'cancelado'];
+export const ESTADOS = ['nuevo', 'preparando', 'encamino', 'entregado', 'cancelado'];
 
 export const METODOS_PAGO = [
   { id: 'efectivo', nombre: 'Efectivo', icono: '💵' },
@@ -283,3 +283,42 @@ export const PERIODOS_FIJO = [
   { id: 'quincenal', nombre: 'Quincenal', veces: 2 },
   { id: 'semanal', nombre: 'Semanal', veces: 4 },
 ];
+
+// ---------- Inventario ----------
+// Cada ítem de inventario puede tener "reglas de consumo": se descuenta solo cuando se vende algo.
+//   { tipo: 'producto', id }  → por cada unidad de ese producto (ej: Aguila)
+//   { tipo: 'tamano', id }    → por cada granizado de esa presentación (ej: vasos 16 oz)
+//   { tipo: 'topping', id }   → por cada topping (incluido o adicional) de ese tipo
+//   { tipo: 'granizado' }     → por cada granizado de cualquier tamaño (ej: pitillos)
+// cantidad = cuánto se descuenta por cada uno.
+export const UNIDADES_INV = ['und', 'vaso', 'bolsa', 'kg', 'g', 'litro', 'ml', 'botella', 'lata', 'paquete'];
+
+export function consumoDe(items, inventario) {
+  const deltas = {};
+  const sumar = (id, n) => { deltas[id] = Math.round(((deltas[id] || 0) - n) * 1000) / 1000; };
+  for (const inv of inventario || []) {
+    for (const r of inv.reglas || []) {
+      const k = Number(r.cantidad) || 0;
+      if (!k) continue;
+      for (const it of items) {
+        const q = it.cantidad || 1;
+        if (r.tipo === 'producto' && it.tipo === 'producto' && it.productoId === r.id) sumar(inv.id, q * k);
+        if (it.tipo !== 'granizado') continue;
+        if (r.tipo === 'granizado') sumar(inv.id, q * k);
+        if (r.tipo === 'tamano' && it.tamano === r.id) sumar(inv.id, q * k);
+        if (r.tipo === 'topping') {
+          const n = (it.incluidos || []).filter((t) => t.id === r.id).length
+            + (it.adicionales || []).filter((a) => a.id === r.id).reduce((s, a) => s + a.cantidad, 0);
+          if (n) sumar(inv.id, q * n * k);
+        }
+      }
+    }
+  }
+  return deltas; // { idInventario: -cantidad }
+}
+
+export function estadoStock(item, stock) {
+  if (stock <= 0) return { clase: 'agotado', txt: 'Agotado', icono: '🔴' };
+  if (item.minimo && stock <= item.minimo) return { clase: 'bajo', txt: 'Bajo', icono: '🟠' };
+  return { clase: 'ok', txt: 'OK', icono: '🟢' };
+}

@@ -15,6 +15,7 @@ export async function requerirSesion() {
     const yo = document.querySelector('#yo');
     if (yo) yo.textContent = data.usuario;
     document.querySelector('#salir')?.addEventListener('click', salir);
+    montarNav(data);
     return data;
   } catch {
     document.body.style.visibility = 'visible';
@@ -113,3 +114,74 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-qr-grande]');
   if (b) { e.preventDefault(); mostrarQR(b.dataset.monto || b.closest('.qr-box')?.querySelector('.qr-monto')?.textContent || ''); }
 });
+
+// =====================================================================
+// NAVEGACIÓN: barra inferior en celular + barra lateral en computador
+// =====================================================================
+export const SECCIONES_NAV = [
+  { grupo: 'Operación', items: [
+    { href: '/', ico: '🏠', txt: 'Inicio', principal: true },
+    { href: '/tomar', ico: '🧾', txt: 'Tomar pedido', corto: 'Tomar', principal: true },
+    { href: '/pedidos', ico: '📋', txt: 'Pedidos', principal: true },
+    { href: '/cuentas', ico: '💳', txt: 'Cuentas abiertas', corto: 'Cuentas', principal: true },
+  ] },
+  { grupo: 'Caja y dinero', items: [
+    { href: '/cierre', ico: '🔒', txt: 'Cierre de caja', admin: true },
+    { href: '/ventas', ico: '💰', txt: 'Ventas', admin: true },
+    { href: '/reportes', ico: '📊', txt: 'Reportes', admin: true },
+    { href: '/compras', ico: '🛒', txt: 'Compras' },
+    { href: '/gastos', ico: '🏦', txt: 'Gastos fijos', admin: true },
+  ] },
+  { grupo: 'Negocio', items: [
+    { href: '/inventario', ico: '📦', txt: 'Inventario' },
+    { href: '/productos#productos', ico: '🛠️', txt: 'Productos y precios', admin: true },
+    { href: '/productos#sabores', ico: '🍧', txt: 'Sabores', admin: true },
+    { href: '/productos#domicilios', ico: '🛵', txt: 'Domicilios', admin: true },
+    { href: '/productos#qr', ico: '📲', txt: 'QR de pago', admin: true },
+  ] },
+];
+
+function montarNav({ usuario, admin }) {
+  if (document.querySelector('.nav-lateral')) return;
+  const ruta = location.pathname.replace(/\.html$/, '') || '/';
+  const activo = (href) => {
+    const [h, hash] = href.split('#');
+    if (h === '/') return ruta === '/' || ruta === '/index';
+    if (hash) return ruta === h && (location.hash.slice(1) || 'sabores') === hash;
+    return ruta === h;
+  };
+  const secciones = SECCIONES_NAV.map((g) => ({ ...g, items: g.items.filter((i) => admin || !i.admin) })).filter((g) => g.items.length);
+  const link = (i, cls = '') => `<a href="${i.href}" class="${cls} ${activo(i.href) ? 'activo' : ''}"><span class="ni">${i.ico}</span><span class="nt">${i.txt}</span></a>`;
+
+  // Lateral (computador)
+  const lateral = document.createElement('nav');
+  lateral.className = 'nav-lateral';
+  lateral.innerHTML = `<a href="/" class="nl-logo"><img src="/img/logo.png" alt="Enclocha 2"></a>` +
+    secciones.map((g) => `<div class="nl-grupo"><span>${g.grupo}</span>${g.items.map((i) => link(i)).join('')}</div>`).join('') +
+    `<div class="nl-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Salir</button></div>`;
+
+  // Inferior (celular): 4 principales + "Más"
+  const inferior = document.createElement('nav');
+  inferior.className = 'nav-inferior';
+  const principales = SECCIONES_NAV[0].items;
+  const enMas = !principales.some((i) => activo(i.href));
+  inferior.innerHTML = principales.map((i) => `<a href="${i.href}" class="${activo(i.href) ? 'activo' : ''}"><span class="ni">${i.ico}</span><span class="nt">${i.corto || i.txt}</span></a>`).join('') +
+    `<button type="button" class="ni-mas ${enMas ? 'activo' : ''}"><span class="ni">☰</span><span class="nt">Más</span></button>`;
+
+  // Hoja "Más"
+  const hoja = document.createElement('div');
+  hoja.className = 'nav-hoja';
+  hoja.innerHTML = `<div class="nh-caja"><div class="nh-asa"></div>
+    ${secciones.slice(1).map((g) => `<div class="nh-grupo"><span>${g.grupo}</span><div class="nh-grid">${g.items.map((i) => link(i, 'nh-item')).join('')}</div></div>`).join('')}
+    <div class="nh-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Cerrar sesión</button></div></div>`;
+
+  document.body.append(lateral, inferior, hoja);
+  document.body.classList.add('con-nav');
+  inferior.querySelector('.ni-mas').addEventListener('click', () => hoja.classList.add('show'));
+  hoja.addEventListener('click', (e) => { if (e.target === hoja) hoja.classList.remove('show'); });
+  document.querySelectorAll('.nl-salir').forEach((b) => b.addEventListener('click', salir));
+  window.addEventListener('hashchange', () => {
+    document.querySelectorAll('.nav-lateral a, .nh-item').forEach((a) => a.classList.toggle('activo', activo(a.getAttribute('href'))));
+    hoja.classList.remove('show');
+  });
+}

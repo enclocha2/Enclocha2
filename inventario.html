@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <title>Enclocha 2 · Inventario</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>📦 Inventario</h1></div>
+    <div class="row"><a href="/compras">🛒 Compras</a></div>
+  </header>
+
+  <main class="admin" style="max-width:1100px">
+    <div class="kpis" id="kpis"></div>
+    <div id="vacio"></div>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px;gap:10px">
+        <div class="chips" id="filtros"></div>
+        <div class="row" style="gap:8px">
+          <input class="field" id="buscar" placeholder="🔍 Buscar..." style="max-width:220px">
+          <button class="mini" id="btnConteo">📋 Conteo físico</button>
+        </div>
+      </div>
+      <div class="inv-lista" id="lista"></div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h2 style="margin:0">📜 Movimientos <span class="hint" id="movFiltro"></span></h2>
+        <button class="mini" id="movTodos" hidden>Ver todos</button>
+      </div>
+      <div class="tabla-wrap"><table class="tabla" id="movs"></table></div>
+    </section>
+
+    <details class="card solo-admin plegable" id="cfgInv">
+      <summary><h2 style="display:inline">⚙️ Configurar ítems</h2> <span class="hint">(nombres, mínimos y reglas de descuento)</span></summary>
+      <p class="hint">Las <b>reglas</b> dicen qué se descuenta solo al vender. Ej: "Vasos 16 oz" → 1 por cada granizado de 16 oz · "Aguila" → 1 por cada Aguila vendida · "Pitillos" → 1 por cada granizado.</p>
+      <div id="adm"></div>
+      <form class="add" id="fNuevo">
+        <input class="field" name="nombre" placeholder="Nuevo ítem, ej: Vasos 16 oz" maxlength="60" required style="min-width:200px">
+        <select class="field" name="categoria" id="selCat" style="max-width:220px"></select>
+        <select class="field" name="unidad" id="selUni" style="max-width:120px"></select>
+        <input class="field" name="stock" type="number" min="0" step="any" placeholder="Stock inicial" style="max-width:130px">
+        <button class="btn alt">+ Agregar</button>
+      </form>
+    </details>
+  </main>
+
+  <div class="savebar" id="savebar">
+    <span>Tienes cambios sin guardar en el inventario</span>
+    <div class="row"><button class="btn ghost" id="descartar">Descartar</button><button class="btn" id="guardar">💾 Guardar cambios</button></div>
+  </div>
+
+  <!-- Movimiento manual -->
+  <div class="modal" id="modalMov">
+    <div class="box">
+      <h3 id="mmTitulo"></h3>
+      <p class="hint" id="mmStock" style="margin:0"></p>
+      <div class="g2" id="mmTipos"></div>
+      <label class="campo"><span id="mmLbl">Cantidad</span><input class="field" id="mmCant" type="number" min="0" step="any" inputmode="decimal"></label>
+      <label class="campo"><span>Nota (opcional)</span><input class="field" id="mmNota" maxlength="120" placeholder="Ej: se dañaron 3 vasos, regalo, préstamo..."></label>
+      <div class="error" id="mmError"></div>
+      <button class="btn" id="mmGuardar">Guardar</button>
+      <button class="btn ghost" id="mmCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Reglas -->
+  <div class="modal" id="modalReglas">
+    <div class="box">
+      <h3>⚡ Se descuenta solo: <span id="mrNombre"></span></h3>
+      <div id="mrLista"></div>
+      <button class="mini" id="mrAgregar">+ Agregar regla</button>
+      <button class="btn" id="mrListo">Listo</button>
+    </div>
+  </div>
+
+  <!-- Conteo físico -->
+  <div class="modal" id="modalConteo">
+    <div class="box" style="max-width:560px">
+      <h3>📋 Conteo físico</h3>
+      <p class="hint" style="margin:0">Escribe lo que hay realmente. Deja vacío lo que no contaste. La diferencia queda registrada como ajuste.</p>
+      <div id="mcLista"></div>
+      <div class="error" id="mcError"></div>
+      <button class="btn" id="mcGuardar">💾 Guardar conteo</button>
+      <button class="btn ghost" id="mcCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { fechaHora } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
+
+    const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
+    const TIPOS_MOV = {
+      venta: ['🧾', 'Venta'], cancelado: ['↩️', 'Pedido cancelado'], compra: ['🛒', 'Compra'], 'compra-borrada': ['🗑', 'Compra borrada'],
+      'compra-editada': ['✏️', 'Compra editada'], entrada: ['➕', 'Entrada'], salida: ['➖', 'Salida'], merma: ['💥', 'Merma / daño'], conteo: ['📋', 'Ajuste por conteo'],
+    };
+    let items = [], original = [], stock = {}, movs = [], cfg = null, sucio = false, filtro = 'todos', movItem = null, aMover = null, tipoMov = 'entrada', enReglas = null;
+    const fmt = (n) => Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: 2 });
+
+    const marcar = (v = true) => { sucio = v; $('#savebar').classList.toggle('show', v); document.body.classList.toggle('con-barra', v); };
+    window.addEventListener('beforeunload', (e) => { if (sucio) { e.preventDefault(); e.returnValue = ''; } });
+
+    async function cargar() {
+      try {
+        const r = await api('/api/inventario');
+        stock = r.stock; movs = r.movs;
+        if (!sucio) { original = r.items; items = structuredClone(r.items); }
+        if (!cfg) ({ config: cfg } = await api('/api/catalogo'));
+        pintar();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---------- Nombres de reglas ----------
+    function nombreRegla(r) {
+      if (r.tipo === 'granizado') return '🍧 Cada granizado';
+      if (r.tipo === 'producto') return '🍺 ' + (cfg?.productos.find((p) => p.id === r.id)?.nombre || r.id);
+      if (r.tipo === 'tamano') return '🥤 Granizado ' + (cfg?.tamanos.find((t) => t.id === r.id)?.nombre || r.id);
+      if (r.tipo === 'topping') return '🍬 ' + (cfg?.toppings.find((t) => t.id === r.id)?.nombre || r.id);
+      return r.tipo;
+    }
+
+    // ---------- Pintar ----------
+    function pintar() {
+      const activos = items.filter((i) => i.activo !== false);
+      const est = (i) => estadoStock(i, stock[i.id] || 0);
+      const bajos = activos.filter((i) => est(i).clase === 'bajo').length;
+      const agot = activos.filter((i) => est(i).clase === 'agotado').length;
+      $('#kpis').innerHTML = `
+        <div class="kpi"><span>Ítems</span><b>${activos.length}</b></div>
+        <div class="kpi"><span>🟠 Stock bajo</span><b>${bajos}</b></div>
+        <div class="kpi"><span>🔴 Agotados</span><b>${agot}</b></div>`;
+
+      $('#vacio').innerHTML = !original.length && admin ? `<div class="card vacio-inv">
+        <h2>✨ Empieza rápido</h2>
+        <p>Puedo crear tu inventario base con lo que ya tienes en la app: cada cerveza y licor (se descuenta al venderla), vasos por tamaño de granizado, cada topping y pitillos.</p>
+        <button class="btn" id="btnBase">✨ Crear inventario base</button></div>` : '';
+      $('#btnBase')?.addEventListener('click', crearBase);
+      if (!original.length && admin) $('#cfgInv').open = true;
+
+      $('#filtros').innerHTML = [['todos', 'Todos'], ['bajo', '🟠 Bajos'], ['agotado', '🔴 Agotados'], ...CATEGORIAS_COMPRA.map((c) => [c.id, c.icono + ' ' + c.nombre])]
+        .filter(([id]) => ['todos', 'bajo', 'agotado'].includes(id) || activos.some((i) => i.categoria === id))
+        .map(([id, n]) => `<button class="chip ${filtro === id ? 'on' : ''}" data-f="${id}">${n}</button>`).join('');
+
+      const q = normalizar($('#buscar').value);
+      const lista = activos.filter((i) => (filtro === 'todos' || i.categoria === filtro || est(i).clase === filtro) && (!q || normalizar(i.nombre).includes(q)))
+        .sort((a, b) => ({ agotado: 0, bajo: 1, ok: 2 }[est(a).clase] - { agotado: 0, bajo: 1, ok: 2 }[est(b).clase]) || a.nombre.localeCompare(b.nombre));
+      $('#lista').innerHTML = lista.map((i) => {
+        const s = stock[i.id] || 0, e = est(i);
+        return `<div class="inv-item ${e.clase}">
+          <div class="inv-info">
+            <b>${CAT[i.categoria]?.icono || '📦'} ${esc(i.nombre)}</b>
+            <span class="hint">${i.reglas?.length ? '⚡ ' + i.reglas.map(nombreRegla).map(esc).join(' · ') : 'Solo movimientos manuales'}${i.minimo ? ` · mínimo ${fmt(i.minimo)}` : ''}</span>
+          </div>
+          <div class="inv-stock"><b>${fmt(s)}</b><span>${esc(i.unidad)}</span><em class="estado-pago ${e.clase === 'ok' ? 'ok' : e.clase === 'bajo' ? 'pend' : 'venc'}">${e.icono} ${e.txt}</em></div>
+          <div class="inv-acts">
+            <button class="mini" data-mov="${i.id}" data-t="entrada">➕</button>
+            <button class="mini" data-mov="${i.id}" data-t="merma">➖</button>
+            <button class="mini" data-mov="${i.id}" data-t="conteo">📋</button>
+            <button class="mini" data-hist="${i.id}">📜</button>
+          </div></div>`;
+      }).join('') || '<p class="empty">No hay ítems con ese filtro.</p>';
+
+      pintarMovs();
+      if (admin) pintarAdm();
+    }
+
+    function pintarMovs() {
+      const nom = Object.fromEntries(items.map((i) => [i.id, i]));
+      const lista = (movItem ? movs.filter((m) => m.deltas[movItem] !== undefined) : movs).slice(0, 150);
+      $('#movFiltro').textContent = movItem ? `· ${nom[movItem]?.nombre || ''}` : '';
+      $('#movTodos').hidden = !movItem;
+      $('#movs').innerHTML = lista.length ? `<thead><tr><th>Fecha</th><th>Movimiento</th><th>Detalle</th><th>Quién</th></tr></thead><tbody>` +
+        lista.map((m) => {
+          const [ic, t] = TIPOS_MOV[m.tipo] || ['•', m.tipo];
+          const det = Object.entries(m.deltas).filter(([id]) => !movItem || id === movItem)
+            .map(([id, d]) => `<span class="${d < 0 ? 'neg-txt' : 'pos-txt'}">${d > 0 ? '+' : ''}${fmt(d)} ${esc(nom[id]?.unidad || '')}</span> ${esc(nom[id]?.nombre || id)}`).join('<br>');
+          const ref = m.pedido ? `Pedido #${m.pedido}${m.cliente ? ' · ' + esc(m.cliente) : ''}` : esc(m.nota || '');
+          return `<tr><td style="white-space:nowrap">${fechaHora(m.en)}</td><td>${ic} ${t}<br><span class="hint">${ref}</span></td><td>${det}</td><td class="hint">${esc(m.usuario || '')}</td></tr>`;
+        }).join('') + '</tbody>' : '<tr><td class="empty">Sin movimientos todavía.</td></tr>';
+    }
+
+    function pintarAdm() {
+      const opc = (lista, sel) => lista.map((x) => `<option value="${x.id || x}" ${(x.id || x) === sel ? 'selected' : ''}>${x.icono ? x.icono + ' ' : ''}${x.nombre || x}</option>`).join('');
+      $('#selCat').innerHTML = opc(CATEGORIAS_COMPRA, 'desechables');
+      $('#selUni').innerHTML = opc(UNIDADES_INV, 'und');
+      $('#adm').innerHTML = items.map((i) => `
+        <div class="fila fijo-adm ${i.activo !== false ? '' : 'apagado'}">
+          <label class="switch" title="Activo"><input type="checkbox" data-id="${i.id}" data-k="activo" ${i.activo !== false ? 'checked' : ''}><span></span></label>
+          <input class="field" data-id="${i.id}" data-k="nombre" value="${esc(i.nombre)}" maxlength="60" style="flex:1;min-width:160px">
+          <select class="field" data-id="${i.id}" data-k="categoria">${opc(CATEGORIAS_COMPRA, i.categoria)}</select>
+          <select class="field" data-id="${i.id}" data-k="unidad" style="max-width:110px">${opc(UNIDADES_INV, i.unidad)}</select>
+          <span class="hint">mín.</span><input class="field dia" type="number" min="0" step="any" data-id="${i.id}" data-k="minimo" value="${i.minimo || 0}">
+          <button class="mini" data-reglas="${i.id}">⚡ Reglas (${i.reglas?.length || 0})</button>
+          <button class="del" data-del="${i.id}">🗑</button>
+        </div>`).join('') || '<p class="hint">No hay ítems todavía.</p>';
+    }
+
+    // ---------- Inventario base desde el catálogo ----------
+    async function crearBase() {
+      const nuevos = [];
+      const add = (nombre, categoria, unidad, reglas, minimo = 0) => { let id = slug(nombre); while (nuevos.some((x) => x.id === id)) id += '-2'; nuevos.push({ id, nombre, categoria, unidad, minimo, reglas, activo: true }); };
+      for (const p of cfg.productos.filter((p) => p.activo)) add(p.nombre, p.categoria === 'cervezas' ? 'reventa' : 'reventa', p.categoria === 'cervezas' ? 'und' : 'botella', [{ tipo: 'producto', id: p.id, cantidad: 1 }], 6);
+      for (const t of cfg.tamanos.filter((t) => t.activo && (t.seccion || 'Tamaños') === 'Tamaños')) add(`Vasos ${t.nombre}`, 'desechables', 'vaso', [{ tipo: 'tamano', id: t.id, cantidad: 1 }], 25);
+      for (const t of cfg.toppings.filter((t) => t.activo)) add(t.nombre, 'toppings', 'und', [{ tipo: 'topping', id: t.id, cantidad: 1 }], 20);
+      add('Pitillos', 'desechables', 'und', [{ tipo: 'granizado', cantidad: 1 }], 50);
+      add('Hielo', 'hielo', 'bolsa', [], 3);
+      try {
+        const r = await api('/api/inventario', { method: 'PUT', body: JSON.stringify({ items: nuevos }) });
+        original = r.items; items = structuredClone(r.items); marcar(false);
+        toast(`✅ ${nuevos.length} ítems creados. Ahora haz un conteo físico para poner el stock real.`);
+        pintar();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---------- Eventos ----------
+    document.querySelector('main').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.f) { filtro = b.dataset.f; pintar(); }
+      if (b.dataset.hist) { movItem = b.dataset.hist; pintarMovs(); $('#movs').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+      if (b.dataset.mov) abrirMov(b.dataset.mov, b.dataset.t);
+      if (b.dataset.reglas) abrirReglas(b.dataset.reglas);
+      if (b.dataset.del) {
+        if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
+        items = items.filter((i) => i.id !== b.dataset.del); marcar(); pintar();
+      }
+    });
+    $('#movTodos').addEventListener('click', () => { movItem = null; pintarMovs(); });
+    $('#buscar').addEventListener('input', pintar);
+    $('#adm')?.addEventListener('input', (e) => {
+      const el = e.target, it = items.find((x) => x.id === el.dataset.id);
+      if (!it) return;
+      it[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.dataset.k === 'minimo' ? Math.max(0, Number(el.value) || 0) : el.value;
+      marcar();
+    });
+    $('#fNuevo')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.target, nombre = f.nombre.value.trim();
+      let id = slug(nombre); while (items.some((i) => i.id === id)) id += '-2';
+      items.push({ id, nombre, categoria: f.categoria.value, unidad: f.unidad.value, minimo: 0, reglas: [], activo: true, _stockInicial: Number(f.stock.value) || 0 });
+      f.reset(); marcar(); pintar();
+      toast(`"${nombre}" agregado — ponle reglas si se descuenta solo, y guarda`);
+    });
+    $('#descartar').addEventListener('click', () => { items = structuredClone(original); marcar(false); pintar(); });
+    $('#guardar').addEventListener('click', async () => {
+      try {
+        const iniciales = items.filter((i) => i._stockInicial > 0).map((i) => [i.id, i._stockInicial]);
+        const r = await api('/api/inventario', { method: 'PUT', body: JSON.stringify({ items }) });
+        for (const [id, n] of iniciales) await api('/api/inventario', { method: 'POST', body: JSON.stringify({ id, tipo: 'conteo', cantidad: n, nota: 'Stock inicial' }) });
+        original = r.items; items = structuredClone(r.items); marcar(false); toast('✅ Inventario guardado'); cargar();
+      } catch (err) { toast(err.message, true); }
+    });
+
+    // ---------- Movimiento manual ----------
+    const TIPOS = [['entrada', '➕ Entrada'], ['merma', '💥 Merma / daño'], ['salida', '➖ Otra salida'], ['conteo', '📋 Conteo (hay realmente)']];
+    function abrirMov(id, tipo) {
+      aMover = items.find((i) => i.id === id); tipoMov = tipo;
+      $('#mmTitulo').textContent = aMover.nombre;
+      $('#mmStock').textContent = `Stock en sistema: ${fmt(stock[id] || 0)} ${aMover.unidad}`;
+      $('#mmCant').value = ''; $('#mmNota').value = ''; $('#mmError').textContent = '';
+      pintarTipos();
+      $('#modalMov').classList.add('show'); setTimeout(() => $('#mmCant').focus(), 50);
+    }
+    function pintarTipos() {
+      $('#mmTipos').innerHTML = TIPOS.map(([t, n]) => `<button type="button" class="opt ${tipoMov === t ? 'on' : ''}" data-tm="${t}">${n}</button>`).join('');
+      $('#mmLbl').textContent = tipoMov === 'conteo' ? `¿Cuánto hay realmente? (${aMover.unidad})` : `Cantidad (${aMover.unidad})`;
+    }
+    $('#mmTipos').addEventListener('click', (e) => { const b = e.target.closest('[data-tm]'); if (b) { tipoMov = b.dataset.tm; pintarTipos(); } });
+    $('#mmCancelar').addEventListener('click', () => $('#modalMov').classList.remove('show'));
+    $('#mmGuardar').addEventListener('click', async () => {
+      try {
+        await api('/api/inventario', { method: 'POST', body: JSON.stringify({ id: aMover.id, tipo: tipoMov, cantidad: $('#mmCant').value, nota: $('#mmNota').value }) });
+        $('#modalMov').classList.remove('show'); toast('✅ Movimiento guardado'); cargar();
+      } catch (err) { $('#mmError').textContent = err.message; }
+    });
+
+    // ---------- Reglas ----------
+    function opcionesRegla(tipo, sel) {
+      const lista = tipo === 'producto' ? cfg.productos : tipo === 'tamano' ? cfg.tamanos : tipo === 'topping' ? cfg.toppings : [];
+      return lista.map((x) => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
+    }
+    function abrirReglas(id) { enReglas = items.find((i) => i.id === id); enReglas.reglas ||= []; $('#mrNombre').textContent = enReglas.nombre; pintarReglas(); $('#modalReglas').classList.add('show'); }
+    function pintarReglas() {
+      $('#mrLista').innerHTML = enReglas.reglas.map((r, k) => `
+        <div class="fila regla">
+          <select class="field" data-rk="${k}" data-rc="tipo">
+            <option value="producto" ${r.tipo === 'producto' ? 'selected' : ''}>🍺 Producto vendido</option>
+            <option value="tamano" ${r.tipo === 'tamano' ? 'selected' : ''}>🥤 Granizado de tamaño</option>
+            <option value="topping" ${r.tipo === 'topping' ? 'selected' : ''}>🍬 Topping</option>
+            <option value="granizado" ${r.tipo === 'granizado' ? 'selected' : ''}>🍧 Cualquier granizado</option>
+          </select>
+          ${r.tipo !== 'granizado' ? `<select class="field" data-rk="${k}" data-rc="id">${opcionesRegla(r.tipo, r.id)}</select>` : '<span style="flex:1"></span>'}
+          <span class="hint">×</span><input class="field dia" type="number" min="0" step="any" data-rk="${k}" data-rc="cantidad" value="${r.cantidad}">
+          <button class="del" data-rdel="${k}">🗑</button>
+        </div>`).join('') || '<p class="hint">Sin reglas: este ítem solo cambia con compras y movimientos manuales.</p>';
+    }
+    $('#mrLista').addEventListener('change', (e) => {
+      const el = e.target, r = enReglas.reglas[el.dataset.rk];
+      if (!r) return;
+      if (el.dataset.rc === 'tipo') { r.tipo = el.value; r.id = el.value === 'granizado' ? null : (opcionesRegla(el.value).match(/value="([^"]+)"/) || [])[1]; pintarReglas(); }
+      else r[el.dataset.rc] = el.dataset.rc === 'cantidad' ? Number(el.value) || 1 : el.value;
+      marcar();
+    });
+    $('#mrLista').addEventListener('click', (e) => { const b = e.target.closest('[data-rdel]'); if (b) { enReglas.reglas.splice(Number(b.dataset.rdel), 1); marcar(); pintarReglas(); } });
+    $('#mrAgregar').addEventListener('click', () => { enReglas.reglas.push({ tipo: 'producto', id: cfg.productos[0]?.id, cantidad: 1 }); marcar(); pintarReglas(); });
+    $('#mrListo').addEventListener('click', () => { $('#modalReglas').classList.remove('show'); pintar(); });
+
+    // ---------- Conteo físico ----------
+    $('#btnConteo').addEventListener('click', () => {
+      $('#mcLista').innerHTML = items.filter((i) => i.activo !== false).map((i) => `
+        <div class="fila"><span style="flex:1">${esc(i.nombre)} <span class="hint">· sistema: ${fmt(stock[i.id] || 0)} ${esc(i.unidad)}</span></span>
+        <input class="field dia" style="max-width:110px" type="number" min="0" step="any" data-cid="${i.id}" placeholder="—"></div>`).join('');
+      $('#mcError').textContent = '';
+      $('#modalConteo').classList.add('show');
+    });
+    $('#mcCancelar').addEventListener('click', () => $('#modalConteo').classList.remove('show'));
+    $('#mcGuardar').addEventListener('click', async () => {
+      const filas = [...document.querySelectorAll('[data-cid]')].filter((x) => x.value !== '');
+      if (!filas.length) return ($('#mcError').textContent = 'No escribiste ningún conteo');
+      const btn = $('#mcGuardar'); btn.disabled = true;
+      try {
+        let cambios = 0;
+        for (const x of filas) {
+          const r = await api('/api/inventario', { method: 'POST', body: JSON.stringify({ id: x.dataset.cid, tipo: 'conteo', cantidad: x.value, nota: 'Conteo físico' }) });
+          if (!r.sinCambio) cambios++;
+        }
+        $('#modalConteo').classList.remove('show'); toast(`✅ Conteo guardado · ${cambios} ajuste${cambios === 1 ? '' : 's'}`); cargar();
+      } catch (err) { $('#mcError').textContent = err.message; }
+      finally { btn.disabled = false; }
+    });
+
+    cargar();
+  </script>
+</body>
+</html>

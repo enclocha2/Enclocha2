@@ -107,7 +107,11 @@ function resumenVenta(p) {
   return {
     id: p.id, n: p.numero, c: p.cliente, t: p.total, m: p.pago.metodo,
     pa: p.pago.pagadoEn, cr: p.creado, u: p.tomadoPor || '', cb: p.pago.cobradoPor || '',
-    it: p.items.map((i) => { const [nombre, cat] = nombreItem(i); return [nombre, i.cantidad || 1, i.subtotal || 0, cat]; }),
+    it: [
+      ...p.items.map((i) => { const [nombre, cat] = nombreItem(i); return [nombre, i.cantidad || 1, i.subtotal || 0, cat]; }),
+      ...(p.domicilio?.costo ? [['Domicilio', 1, p.domicilio.costo, 'Domicilio']] : []),
+    ],
+    ...(p.tipo === 'domicilio' ? { dom: 1 } : {}),
   };
 }
 
@@ -292,4 +296,55 @@ export async function pagosFijosAnio(anio) {
     return Object.fromEntries(meses.map((m, i) => [m, r[i] || []]));
   }
   return Object.fromEntries(meses.map((m) => [m, (mem.pagosFijos ||= {})[m] || []]));
+}
+
+// ---------- Inventario ----------
+// Definiciones (nombre, unidad, mínimo, reglas) en "inventario"; el stock en un hash
+// aparte ("inv:stock") que se suma/resta de forma atómica, para que dos ventas al
+// mismo tiempo no se pisen. Movimientos en una lista (últimos 3000).
+export async function leerInventario() {
+  if (redis) return (await redis.get('inventario')) || [];
+  return mem.inventario || [];
+}
+export async function guardarInventario(lista) {
+  if (redis) await redis.set('inventario', lista); else mem.inventario = lista;
+  return lista;
+}
+export async function leerStock() {
+  const raw = redis ? (await redis.hgetall('inv:stock')) || {} : (mem.stock ||= {});
+  return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Math.round(Number(v) * 1000) / 1000]));
+}
+// deltas = { id: +n / -n }; mov = descripción del movimiento (se guarda con los deltas)
+export async function moverStock(deltas, mov) {
+  const ids = Object.keys(deltas).filter((k) => deltas[k]);
+  if (!ids.length) return;
+  const registro = { ...mov, deltas, en: Date.now() };
+  if (redis) {
+    const pl = redis.pipeline();
+    for (const id of ids) pl.hincrbyfloat('inv:stock', id, deltas[id]);
+    pl.lpush('inv:movs', JSON.stringify(registro));
+    pl.ltrim('inv:movs', 0, 2999);
+    await pl.exec();
+  } else {
+    mem.stock ||= {};
+    for (const id of ids) mem.stock[id] = (mem.stock[id] || 0) + deltas[id];
+    (mem.movs ||= []).unshift(registro);
+  }
+}
+export async function listarMovs(n = 300) {
+  const raw = redis ? await redis.lrange('inv:movs', 0, n - 1) : (mem.movs || []).slice(0, n);
+  return raw.map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
+}
+export const invertir = (d) => Object.fromEntries(Object.entries(d || {}).map(([k, v]) => [k, -v]));
+
+// ---------- Límite de intentos (para la página pública) ----------
+export async function limitar(clave, max, segundos) {
+  if (redis) {
+    const n = await redis.incr(`rl:${clave}`);
+    if (n === 1) await redis.expire(`rl:${clave}`, segundos);
+    return n <= max;
+  }
+  const m = (mem.rl ||= {}), ahora = Date.now();
+  if (!m[clave] || m[clave].hasta < ahora) m[clave] = { n: 0, hasta: ahora + segundos * 1000 };
+  return ++m[clave].n <= max;
 }

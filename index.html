@@ -14,178 +14,146 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
-  <title>Enclocha 2 · Menú</title>
+    <title>Enclocha 2 · Inicio</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body style="visibility:hidden">
-  <header class="top">
-    <div class="row"><img src="/img/logo.png" alt="" class="logo-mini" /><h1>Enclocha 2</h1></div>
-    <div class="row">
-      <span class="user-pill">👤 <span id="yo"></span></span>
-      <button class="link" id="salir">Salir</button>
-    </div>
+  <header class="top inicio-top">
+    <div class="row"><a href="/" class="marca"><img src="/img/logo.png" alt="" class="logo-mini" /></a><h1>Enclocha 2</h1></div>
+    <div class="row"><span class="user-pill">👤 <span id="yo"></span></span><button class="link" id="salir">Salir</button></div>
   </header>
 
-  <main class="menu">
-    <div class="hero">
-      <img src="/img/logo.png" alt="Enclocha 2 Granizados" />
-      <p class="saludo" id="saludo"></p>
-      <p class="jornada" id="jornada"></p>
-    </div>
+  <main class="inicio">
+    <section class="saludo-box">
+      <div>
+        <p class="saludo" id="saludo"></p>
+        <p class="jornada-chip" id="jornada"></p>
+      </div>
+      <img src="/img/logo.png" alt="" class="saludo-logo" />
+    </section>
 
-    <div class="tiles">
-      <a class="tile t-tomar" href="/tomar">
-        <span class="ico">🧾</span>
-        <strong>Tomar pedido</strong>
-        <span>Granizados, cervezas y licor</span>
-      </a>
-      <a class="tile t-pedidos" href="/pedidos">
-        <span class="ico">📋</span>
-        <strong>Pedidos</strong>
-        <span id="tPedidos">Ver y despachar pedidos</span>
-        <em class="cnt" id="cntNuevos" hidden></em>
-      </a>
-      <a class="tile t-cuentas" href="/cuentas">
-        <span class="ico">💳</span>
-        <strong>Cuentas abiertas</strong>
-        <span id="tCuentas">Pedidos sin pagar por persona</span>
-        <em class="cnt" id="cntCuentas" hidden></em>
-      </a>
-      <a class="tile t-cierre solo-admin" href="/cierre">
-        <span class="ico">🔒</span>
-        <strong>Cierre de caja</strong>
-        <span id="tCierre">Cuadrar el efectivo y las transferencias</span>
-        <em class="cnt" id="cntCierre" hidden>!</em>
-      </a>
-      <a class="tile t-compras" href="/compras">
-        <span class="ico">🛒</span>
-        <strong>Compras</strong>
-        <span id="tCompras">Insumos: hielo, vasos, pulpas, licor…</span>
-      </a>
-      <a class="tile t-gastos solo-admin" href="/gastos">
-        <span class="ico">🏠</span>
-        <strong>Gastos fijos</strong>
-        <span id="tGastos">Arriendo, servicios, sueldos…</span>
-        <em class="cnt" id="cntGastos" hidden></em>
-      </a>
-      <a class="tile t-ventas solo-admin" href="/ventas">
-        <span class="ico">🧾</span>
-        <strong>Ventas</strong>
-        <span>Historial de todo lo vendido</span>
-      </a>
-      <a class="tile t-reportes solo-admin" href="/reportes">
-        <span class="ico">📊</span>
-        <strong>Reportes</strong>
-        <span>Por día, semana, mes · efectivo y transferencia</span>
-      </a>
-      <a class="tile t-sabores solo-admin" href="/productos#sabores">
-        <span class="ico">🍧</span>
-        <strong>Sabores disponibles</strong>
-        <span id="tSabores">Escoge qué sabores se venden</span>
-      </a>
-      <a class="tile t-productos solo-admin" href="/productos#productos">
-        <span class="ico">🛠️</span>
-        <strong>Productos y precios</strong>
-        <span id="tProductos">Agregar, quitar, precios y categorías</span>
-      </a>
-      <a class="tile t-qr solo-admin" href="/productos#qr">
-        <span class="ico">📲</span>
-        <strong>QR de pago</strong>
-        <span>El QR que se muestra para transferencias</span>
-      </a>
-    </div>
+    <!-- Acciones principales -->
+    <section class="acciones">
+      <a href="/tomar" class="accion a-tomar"><span class="ai">🧾</span><span><b>Tomar pedido</b><small>Granizados, cervezas y licor</small></span><span class="flecha">→</span></a>
+      <a href="/pedidos" class="accion a-pedidos"><span class="ai">📋</span><span><b>Pedidos</b><small id="sPedidos">Ver y despachar</small></span><em class="cnt" id="cntPedidos" hidden></em><span class="flecha">→</span></a>
+    </section>
 
-    <h3 class="sub">Jornada de hoy</h3>
-    <div class="resumen" id="resumen"><div>Cargando...</div></div>
+    <!-- Números de la jornada -->
+    <section class="numeros" id="numeros"></section>
+
+    <!-- Pendientes -->
+    <section class="pendientes" id="pendientes" hidden>
+      <h3 class="sub">⚡ Pendientes</h3>
+      <div id="listaPend"></div>
+    </section>
+
+    <!-- Accesos -->
+    <section id="accesos"></section>
   </main>
 
   <script type="module">
-    import { pesos, agruparCuentas } from '/catalog.js';
-    import { requerirSesion, api, traerPedidos, cadaTanto } from '/sesion.js';
+    import { pesos, agruparCuentas, estadoStock } from '/catalog.js';
+    import { requerirSesion, api, esc, traerPedidos, cadaTanto, SECCIONES_NAV } from '/sesion.js';
     import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const { usuario, admin } = await requerirSesion();
 
+    // ---------- Saludo y jornada ----------
     const h = new Date().getHours();
     $('#saludo').textContent = `${h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'}, ${usuario} 👋`;
-    if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
-    const pintarJornada = () => {
-      const j = hoy();
-      $('#jornada').innerHTML = horarioDe(j)
-        ? `🕓 Jornada del <b>${fechaLarga(j)}</b>${esFestivo(j) ? ' (festivo)' : ''} · ${textoHorario(j)}`
-        : `🕓 ${fechaLarga(j)} · hoy no hay jornada programada`;
+    const j = hoy();
+    $('#jornada').innerHTML = horarioDe(j)
+      ? `🕓 Jornada del <b>${fechaLarga(j)}</b>${esFestivo(j) ? ' · festivo' : ''} · ${textoHorario(j)}`
+      : `🕓 ${fechaLarga(j)} · sin jornada programada`;
+
+    // ---------- Accesos agrupados ----------
+    const DESC = {
+      '/tomar': 'Nuevo pedido', '/pedidos': 'Despachar', '/cuentas': 'Sin pagar', '/cierre': 'Cuadrar caja', '/ventas': 'Historial',
+      '/reportes': 'Día, semana, mes', '/compras': 'Insumos', '/gastos': 'Arriendo, servicios', '/inventario': 'Stock',
+      '/productos#productos': 'Precios', '/productos#sabores': 'Disponibles', '/productos#domicilios': 'Link y ajustes', '/productos#qr': 'Transferencias',
     };
-    pintarJornada();
-    // Compras del mes y gastos fijos pendientes
-    (async () => {
-      try {
-        const H = hoy(), mes = H.slice(0, 7);
-        const { compras } = await api(`/api/compras?desde=${mes}-01&hasta=${H}`);
-        $('#tCompras').textContent = compras.length ? `Este mes: ${pesos(compras.reduce((s, c) => s + c.valor, 0))} en ${compras.length} compra${compras.length === 1 ? '' : 's'}` : 'Insumos: hielo, vasos, pulpas, licor…';
-        if (!admin) return;
-        const { gastos, pagos } = await api(`/api/gastosfijos?mes=${mes}`);
-        const veces = { mensual: 1, quincenal: 2, semanal: 4 };
-        const pend = gastos.filter((g) => g.activo && pagos.filter((p) => p.gastoId === g.id).reduce((s, p) => s + p.valor, 0) < g.valor * (veces[g.periodo] || 1));
-        $('#cntGastos').hidden = !pend.length; $('#cntGastos').textContent = pend.length;
-        if (gastos.length) $('#tGastos').textContent = pend.length ? `${pend.length} por pagar este mes` : '✅ Todo pagado este mes';
-      } catch {}
-    })();
+    $('#accesos').innerHTML = SECCIONES_NAV.map((g) => {
+      const items = g.items.filter((i) => i.href !== '/' && (admin || !i.admin));
+      return items.length ? `<h3 class="sub">${g.grupo}</h3><div class="accesos-grid">${items.map((i) => `
+        <a href="${i.href}" class="acceso" data-href="${i.href}"><span class="ai">${i.ico}</span><b>${i.txt}</b><small>${DESC[i.href] || ''}</small><em class="cnt" hidden></em></a>`).join('')}</div>` : '';
+    }).join('');
+    const badge = (href, n, color) => { const e = document.querySelector(`.acceso[data-href="${href}"] .cnt`); if (e) { e.hidden = !n; e.textContent = n; if (color) e.style.background = color; } };
 
-    // Estado del cierre de la jornada anterior / actual
-    if (admin) (async () => {
-      try {
-        const ayer = sumarDias(hoy(), -1);
-        const [rHoy, rAyer] = await Promise.all([api(`/api/cierre?jornada=${hoy()}`), api(`/api/cierre?jornada=${ayer}`)]);
-        if (rAyer.sistema.n && !rAyer.cierre) {
-          $('#tCierre').innerHTML = `<b class="alerta">⚠️ Falta cerrar la jornada de ayer</b>`;
-          $('#cntCierre').hidden = false;
-          document.querySelector('.t-cierre').href = `/cierre?jornada=${ayer}`;
-        } else if (rHoy.cierre) $('#tCierre').textContent = `✅ Jornada cerrada por ${rHoy.cierre.cerradoPor}`;
-        else $('#tCierre').textContent = rHoy.sistema.n ? `Jornada abierta · ${pesos(rHoy.sistema.total)} cobrado` : 'Cuadrar el efectivo y las transferencias';
-      } catch {}
-    })();
-
+    // ---------- Datos ----------
     const estado = { rev: null, pedidos: [] };
-    let config = null;
-    async function cargar() {
+    const pend = new Map(); // clave -> html
+    const pintarPend = () => {
+      $('#pendientes').hidden = !pend.size;
+      $('#listaPend').innerHTML = [...pend.values()].join('');
+    };
+    const alerta = (clave, html) => { if (html) pend.set(clave, html); else pend.delete(clave); pintarPend(); };
+    const item = (href, ico, txt, tipo = 'warn') => `<a class="pend ${tipo}" href="${href}"><span>${ico}</span><span>${txt}</span><span class="flecha">→</span></a>`;
+
+    async function cargarPedidos() {
       try {
-        if (!config) ({ config } = await api('/api/catalogo'));
         if (!(await traerPedidos(estado))) return;
-        const pedidos = estado.pedidos;
-        pintarJornada();
-        const desde = inicioJornada(hoy());
-        const delDia = pedidos.filter((p) => p.creado >= desde && p.estado !== 'cancelado');
-        const nuevos = pedidos.filter((p) => p.estado === 'nuevo').length;
-        const prep = pedidos.filter((p) => p.estado === 'preparando').length;
+        const ps = estado.pedidos, desde = inicioJornada(hoy());
+        const delDia = ps.filter((p) => p.creado >= desde && p.estado !== 'cancelado');
+        const nuevos = ps.filter((p) => p.estado === 'nuevo').length;
+        const prep = ps.filter((p) => p.estado === 'preparando' || p.estado === 'encamino').length;
         const suma = (f) => delDia.filter(f).reduce((s, p) => s + p.total, 0);
-
-        $('#cntNuevos').hidden = !nuevos;
-        $('#cntNuevos').textContent = nuevos;
-        $('#tPedidos').textContent = nuevos || prep ? `${nuevos} nuevos · ${prep} en preparación` : 'Sin pedidos pendientes';
-
-        const abiertas = agruparCuentas(pedidos).filter((c) => c.abierta);
-        $('#cntCuentas').hidden = !abiertas.length;
-        $('#cntCuentas').textContent = abiertas.length;
-        $('#tCuentas').textContent = abiertas.length
-          ? `${abiertas.length} por cobrar · ${pesos(abiertas.reduce((s, c) => s + c.pendiente, 0))}` : 'Todo está pagado';
-
-        const sab = config.sabores.filter((s) => s.activo).length;
-        const sinPrecio = config.productos.filter((p) => p.activo && !p.precio).length + config.tamanos.filter((t) => t.activo && !t.precio).length;
-        if ($('#tSabores')) $('#tSabores').textContent = `${sab} de ${config.sabores.length} disponibles`;
-        if ($('#tProductos')) $('#tProductos').innerHTML = sinPrecio
-          ? `<b class="alerta">⚠️ ${sinPrecio} productos sin precio</b>` : `${config.productos.length} productos`;
-
-        $('#resumen').innerHTML = `
-          <div>Pedidos<b>${delDia.length}</b></div>
-          <div>Vendido<b>${pesos(suma(() => true))}</b></div>
-          <div>💵 Efectivo<b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'efectivo'))}</b></div>
-          <div>📲 Transferencia<b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'transferencia'))}</b></div>
-          <div>⏳ Por cobrar<b>${pesos(suma((p) => !p.pago?.pagado))}</b></div>`;
+        $('#cntPedidos').hidden = !nuevos; $('#cntPedidos').textContent = nuevos;
+        $('#sPedidos').textContent = nuevos || prep ? `${nuevos} nuevo${nuevos === 1 ? '' : 's'} · ${prep} en preparación` : 'Todo despachado ✨';
+        $('#numeros').innerHTML = `
+          <div class="num-card"><span>Vendido</span><b>${pesos(suma(() => true))}</b><small>${delDia.length} pedido${delDia.length === 1 ? '' : 's'}</small></div>
+          <div class="num-card"><span><i class="dot ef"></i>Efectivo</span><b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'efectivo'))}</b></div>
+          <div class="num-card"><span><i class="dot tr"></i>Transferencia</span><b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'transferencia'))}</b></div>
+          <div class="num-card"><span>⏳ Por cobrar</span><b>${pesos(suma((p) => !p.pago?.pagado))}</b></div>`;
+        const abiertas = agruparCuentas(ps).filter((c) => c.abierta);
+        badge('/cuentas', abiertas.length, 'var(--warn)');
+        badge('/pedidos', nuevos);
+        alerta('cuentas', abiertas.length ? item('/cuentas', '💳', `<b>${abiertas.length} cuenta${abiertas.length === 1 ? '' : 's'} abierta${abiertas.length === 1 ? '' : 's'}</b> · ${pesos(abiertas.reduce((s, c) => s + c.pendiente, 0))} por cobrar`) : '');
+        const doms = ps.filter((p) => p.tipo === 'domicilio' && ['nuevo', 'preparando', 'encamino'].includes(p.estado)).length;
+        alerta('dom', doms ? item('/pedidos', '🛵', `<b>${doms} domicilio${doms === 1 ? '' : 's'}</b> en curso`, 'info') : '');
       } catch {}
     }
-    cargar();
-    cadaTanto(cargar, 20000);
+
+    async function cargarResto() {
+      const tareas = [
+        api('/api/inventario').then(({ items, stock }) => {
+          const malos = items.filter((i) => i.activo !== false && estadoStock(i, stock[i.id] || 0).clase !== 'ok');
+          const agot = malos.filter((i) => (stock[i.id] || 0) <= 0).length;
+          badge('/inventario', malos.length, agot ? 'var(--danger)' : 'var(--warn)');
+          alerta('inv', malos.length ? item('/inventario', '📦', `<b>${malos.length} ítem${malos.length === 1 ? '' : 's'} de inventario</b> bajos o agotados: ${malos.slice(0, 4).map((i) => esc(i.nombre)).join(', ')}${malos.length > 4 ? '…' : ''}`, agot ? 'mal' : 'warn') : '');
+        }),
+      ];
+      if (admin) tareas.push(
+        api('/api/catalogo').then(({ config }) => {
+          const sin = config.productos.filter((p) => p.activo && !p.precio).length + config.tamanos.filter((t) => t.activo && !t.precio).length;
+          badge('/productos#productos', sin, 'var(--danger)');
+          alerta('precios', sin ? item('/productos#productos', '🏷️', `<b>${sin} producto${sin === 1 ? '' : 's'} sin precio</b> (no se pueden vender)`) : '');
+          const sab = config.sabores.filter((s) => s.activo).length;
+          const e = document.querySelector('.acceso[data-href="/productos#sabores"] small'); if (e) e.textContent = `${sab} de ${config.sabores.length} activos`;
+        }),
+        Promise.all([api(`/api/cierre?jornada=${sumarDias(hoy(), -1)}`), api(`/api/cierre?jornada=${hoy()}`)]).then(([ayer, hoyC]) => {
+          const falta = ayer.sistema.n && !ayer.cierre;
+          badge('/cierre', falta ? '!' : 0, 'var(--danger)');
+          alerta('cierre', falta ? item(`/cierre?jornada=${sumarDias(hoy(), -1)}`, '🔒', `<b>Falta cerrar la caja</b> de la jornada de ayer`, 'mal') : '');
+          const e = document.querySelector('.acceso[data-href="/cierre"] small'); if (e) e.textContent = hoyC.cierre ? '✅ Cerrada hoy' : 'Cuadrar caja';
+        }),
+        api(`/api/gastosfijos?mes=${hoy().slice(0, 7)}`).then(({ gastos, pagos }) => {
+          const veces = { mensual: 1, quincenal: 2, semanal: 4 };
+          const p = gastos.filter((g) => g.activo && pagos.filter((x) => x.gastoId === g.id).reduce((s, x) => s + x.valor, 0) < g.valor * (veces[g.periodo] || 1));
+          const venc = p.filter((g) => g.periodo === 'mensual' && `${hoy().slice(0, 7)}-${String(g.dia).padStart(2, '0')}` < hoy());
+          badge('/gastos', p.length, venc.length ? 'var(--danger)' : 'var(--warn)');
+          alerta('gastos', venc.length ? item('/gastos', '🏦', `<b>${venc.length} gasto${venc.length === 1 ? '' : 's'} fijo${venc.length === 1 ? '' : 's'} vencido${venc.length === 1 ? '' : 's'}</b>: ${venc.map((g) => esc(g.nombre)).join(', ')}`, 'mal') : '');
+        }),
+        api('/api/ajustes').then(({ domicilio }) => {
+          const e = document.querySelector('.acceso[data-href="/productos#domicilios"] small');
+          if (e) e.textContent = domicilio?.activo ? '🟢 Recibiendo' : '⚪ Apagados';
+        }),
+      );
+      await Promise.allSettled(tareas);
+    }
+
+    cargarPedidos(); cargarResto();
+    cadaTanto(cargarPedidos, 20000);
   </script>
 </body>
 </html>

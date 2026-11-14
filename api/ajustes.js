@@ -1,6 +1,7 @@
 import { usuarioDe, esAdmin } from './_lib/auth.js';
 import { leerAjustes, guardarAjustes } from './_lib/store.js';
 
+export const DOM_DEFECTO = { activo: false, soloEnHorario: true, costo: 0, minimo: 0, mensaje: '', whatsapp: '' };
 const MAX_QR = 900 * 1024; // ~900 KB (la imagen se reduce en el navegador antes de subirla)
 
 export default async function handler(req, res) {
@@ -11,7 +12,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const a = await leerAjustes();
-      return res.status(200).json({ qr: a.qr || null, qrTexto: a.qrTexto || '' });
+      return res.status(200).json({ qr: a.qr || null, qrTexto: a.qrTexto || '', domicilio: { ...DOM_DEFECTO, ...(a.domicilio || {}) } });
     }
 
     if (req.method === 'PUT') {
@@ -31,6 +32,17 @@ export default async function handler(req, res) {
         }
       }
       if ('qrTexto' in body) nuevo.qrTexto = String(body.qrTexto || '').slice(0, 160).trim();
+      if (body.domicilio && typeof body.domicilio === 'object') {
+        const d = body.domicilio;
+        nuevo.domicilio = {
+          activo: !!d.activo,
+          soloEnHorario: d.soloEnHorario !== false,
+          costo: Math.max(0, Math.round(Number(d.costo) || 0)),
+          minimo: Math.max(0, Math.round(Number(d.minimo) || 0)),
+          mensaje: String(d.mensaje || '').slice(0, 200).trim(),
+          whatsapp: String(d.whatsapp || '').replace(/[^0-9]/g, '').slice(0, 15),
+        };
+      }
 
       nuevo.actualizadoPor = usuario;
       nuevo.actualizado = Date.now();

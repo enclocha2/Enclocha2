@@ -58,7 +58,7 @@
     let cuentas = [];
     let aCobrar = null;
     const hora = (t) => new Date(t).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
-    const ESTADO = { nuevo: '🆕 Nuevo', preparando: '⏳ Preparando', entregado: '✅ Entregado' };
+    const ESTADO = { nuevo: '🆕 Nuevo', preparando: '⏳ Preparando', encamino: '🛵 En camino', entregado: '✅ Entregado' };
 
     function resumenItems(p) {
       return p.items.map(vistaItem).map((d) => d.esGranizado

@@ -45,6 +45,15 @@
         <label class="campo"><span>Proveedor (opcional)</span><input class="field" name="proveedor" maxlength="60" list="dlProveedores" placeholder="Ej: D1, Makro, Don Pedro"></label>
         <datalist id="dlProveedores"></datalist>
         <label class="campo"><span>Nota (opcional)</span><input class="field" name="nota" maxlength="200"></label>
+        <div class="campo ancho inv-link">
+          <span>📦 ¿Entra al inventario?</span>
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <select class="field" name="invId" id="selInv" style="flex:1;min-width:200px"><option value="">No, no se suma al inventario</option></select>
+            <input class="field" name="invCant" type="number" min="0" step="any" placeholder="Cantidad" style="max-width:130px" hidden>
+            <span class="hint" id="invUni"></span>
+          </div>
+          <span class="hint" id="invAyuda" hidden>Ej: compraste 2 paquetes de 50 vasos → entran 100 vasos.</span>
+        </div>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
           <button class="btn ghost" type="button" id="btnCancelarEdicion" hidden>Cancelar edición</button>
@@ -108,8 +117,26 @@
     const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="opt ${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.nombre}</button>`).join(''); };
     $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
 
+    // Inventario para enlazar compras
+    let inventario = [];
+    try { ({ items: inventario } = await api('/api/inventario')); } catch {}
+    $('#selInv').innerHTML += inventario.filter((i) => i.activo !== false).map((i) => `<option value="${i.id}">${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('');
+    const pintarInv = () => {
+      const it = inventario.find((i) => i.id === form.invId.value);
+      form.invCant.hidden = !it; $('#invAyuda').hidden = !it; $('#invUni').textContent = it ? it.unidad : '';
+      if (it && !form.invCant.value) form.invCant.value = form.cantidad.value || '';
+    };
+    form.invId.addEventListener('change', pintarInv);
+    // sugerir el ítem de inventario según el nombre de la compra
+    form.insumo.addEventListener('change', () => {
+      if (form.invId.value) return;
+      const q = normalizar(form.insumo.value);
+      const it = inventario.find((i) => q && (normalizar(i.nombre).includes(q) || q.includes(normalizar(i.nombre))));
+      if (it) { form.invId.value = it.id; pintarInv(); }
+    });
+
     function limpiarForm() {
-      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null;
+      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; pintarInv();
       $('#formTitulo').textContent = '➕ Registrar compra';
       $('#btnGuardar').textContent = '💾 Guardar compra';
       $('#btnCancelarEdicion').hidden = true;
@@ -118,8 +145,11 @@
     function llenarForm(c, conFecha = true) {
       form.insumo.value = c.insumo; form.categoria.value = c.categoria; form.unidad.value = c.unidad || 'und';
       form.proveedor.value = c.proveedor || '';
-      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; }
-      pintarPagos();
+      if (conFecha) {
+        form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago;
+        form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? '';
+      } else { form.invId.value = c.inventario?.id || ''; form.invCant.value = ''; }
+      pintarInv(); pintarPagos();
     }
     $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
 
@@ -129,6 +159,7 @@
         insumo: form.insumo.value, categoria: form.categoria.value, fecha: form.fecha.value,
         cantidad: form.cantidad.value, unidad: form.unidad.value, valor: form.valor.value,
         pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
+        inventario: form.invId.value ? { id: form.invId.value, cantidad: form.invCant.value } : null,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       try {
@@ -199,7 +230,7 @@
         <thead><tr><th>Fecha</th><th>Insumo</th><th>Categoría</th><th class="num">Cantidad</th><th>Pagó con</th><th>Proveedor</th><th class="num">Valor</th>${admin ? '<th></th>' : ''}</tr></thead>
         <tbody>${lista.map((c) => `<tr>
           <td style="white-space:nowrap">${fechaCorta(c.fecha)}<br><span class="hint">${esc(c.registradoPor)}</span></td>
-          <td><b>${esc(c.insumo)}</b>${c.nota ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}</td>
+          <td><b>${esc(c.insumo)}</b>${c.nota ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}${c.inventario ? `<br><span class="hint">📦 +${c.inventario.cantidad} ${esc(c.inventario.unidad)} a ${esc(c.inventario.nombre)}</span>` : ''}</td>
           <td>${CAT[c.categoria]?.icono || ''} ${esc(CAT[c.categoria]?.nombre || '')}</td>
           <td class="num">${c.cantidad ? `${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)}` : '—'}${c.cantidad > 0 ? `<br><span class="hint">${pesos(Math.round(c.valor / c.cantidad))}/${esc(c.unidad)}</span>` : ''}</td>
           <td style="white-space:nowrap">${PAGO[c.pago]?.icono || ''} ${esc(PAGO[c.pago]?.nombre || '')}</td>

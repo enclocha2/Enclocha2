@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { usuarioDe, esAdmin } from './_lib/auth.js';
-import { guardarCompra, leerCompra, borrarCompra, comprasEntre } from './_lib/store.js';
+import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, moverStock } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '../catalog.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,6 +26,18 @@ function validar(b) {
   };
 }
 
+// Si la compra entra al inventario: { id, cantidad } (cantidad en la unidad del ítem de inventario)
+async function validarInventario(b) {
+  if (!b.inventario?.id) return null;
+  const items = await leerInventario();
+  const it = items.find((x) => x.id === b.inventario.id);
+  const cantidad = Math.round((Number(b.inventario.cantidad) || 0) * 1000) / 1000;
+  if (!it) throw new Error('El ítem de inventario no existe');
+  if (!(cantidad > 0)) throw new Error('Escribe cuánto entra al inventario');
+  return { id: it.id, nombre: it.nombre, unidad: it.unidad, cantidad };
+}
+const entrada = (inv, signo, extra) => inv && moverStock({ [inv.id]: signo * inv.cantidad }, extra);
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const usuario = usuarioDe(req);
@@ -41,9 +53,10 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       let datos;
-      try { datos = validar(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
+      try { datos = validar(leer(req)); datos.inventario = await validarInventario(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
       const compra = { id: randomUUID(), ...datos, registradoPor: usuario, creado: Date.now() };
       await guardarCompra(compra);
+      await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
       return res.status(201).json({ compra });
     }
 
@@ -52,9 +65,16 @@ export default async function handler(req, res) {
       const id = req.method === 'DELETE' ? q.id : leer(req).id;
       const actual = id && (await leerCompra(String(id)));
       if (!actual) return res.status(404).json({ error: 'Compra no encontrada' });
-      if (req.method === 'DELETE') { await borrarCompra(actual.id); return res.status(200).json({ ok: true }); }
+      if (req.method === 'DELETE') {
+        await borrarCompra(actual.id);
+        await entrada(actual.inventario, -1, { tipo: 'compra-borrada', nota: actual.insumo, usuario });
+        return res.status(200).json({ ok: true });
+      }
       let datos;
-      try { datos = validar(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
+      try { datos = validar(leer(req)); datos.inventario = await validarInventario(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
+      // reversar la entrada anterior y aplicar la nueva
+      await entrada(actual.inventario, -1, { tipo: 'compra-editada', nota: actual.insumo + ' (antes)', usuario });
+      await entrada(datos.inventario, 1, { tipo: 'compra-editada', nota: datos.insumo, usuario });
       if (datos.fecha !== actual.fecha) await borrarCompra(actual.id); // reindexar por fecha
       const compra = { ...actual, ...datos, editadoPor: usuario, editado: Date.now() };
       await guardarCompra(compra);

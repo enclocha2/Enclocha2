@@ -30,6 +30,7 @@
       <button data-tab="granizado">📏 Presentaciones y toppings</button>
       <button data-tab="categorias">🗂️ Categorías</button>
       <button data-tab="qr">📲 QR de pago</button>
+      <button data-tab="domicilios">🛵 Domicilios</button>
     </nav>
 
     <!-- SABORES -->
@@ -94,6 +95,27 @@
         <button class="btn alt">+ Agregar</button>
       </form>
     </section>
+    <!-- DOMICILIOS -->
+    <section id="t-domicilios" class="card" hidden>
+      <h2>🛵 Pedidos a domicilio</h2>
+      <p class="hint">Los clientes piden desde una página pública (sin usuario ni contraseña) y solo ven esa página. Los pedidos llegan a <b>Pedidos</b> con sonido.</p>
+      <div class="link-cliente">
+        <span>🔗 Link para tus clientes:</span>
+        <code id="linkDom"></code>
+        <button class="mini" id="copiarLink" type="button">📋 Copiar</button>
+        <a class="mini" id="abrirLink" target="_blank" rel="noopener">Abrir ↗</a>
+      </div>
+      <div class="form-compra" style="margin-top:14px">
+        <label class="campo ancho row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="domActivo"><span></span></span><b>Recibir pedidos a domicilio</b></label>
+        <label class="campo ancho row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="domHorario"><span></span></span>Solo en horario de atención (fuera de horario la página dice "cerrado")</label>
+        <label class="campo"><span>Valor del domicilio</span><div class="precio"><span>$</span><input class="field" id="domCosto" type="number" min="0" step="500" inputmode="numeric"></div></label>
+        <label class="campo"><span>Pedido mínimo (granizados)</span><div class="precio"><span>$</span><input class="field" id="domMinimo" type="number" min="0" step="1000" inputmode="numeric"></div></label>
+        <label class="campo"><span>WhatsApp del negocio (para comprobantes)</span><input class="field" id="domWhatsapp" inputmode="tel" placeholder="3001234567"></label>
+        <label class="campo ancho"><span>Mensaje para los clientes (opcional)</span><input class="field" id="domMensaje" maxlength="200" placeholder="Ej: Domicilios solo en el barrio X y alrededores · tiempo aprox. 30 min"></label>
+      </div>
+      <button class="btn" id="domGuardar" style="margin-top:12px">💾 Guardar ajustes de domicilio</button>
+    </section>
+
     <!-- QR -->
     <section id="t-qr" class="card" hidden>
       <h2>QR para transferencias</h2>
@@ -163,7 +185,7 @@
     const borrar = (l, id) => `<button class="del" data-del="${l}" data-id="${id}" title="Eliminar">🗑</button>`;
 
     // ---------- Pestañas (#sabores, #productos, ...) ----------
-    const TABS = ['sabores', 'productos', 'granizado', 'categorias', 'qr'];
+    const TABS = ['sabores', 'productos', 'granizado', 'categorias', 'qr', 'domicilios'];
     function mostrarTab() {
       const t = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'sabores';
       TABS.forEach((x) => { $('#t-' + x).hidden = x !== t; });
@@ -340,6 +362,10 @@
     };
     async function cargarQR() {
       qr = await api('/api/ajustes');
+      const d = qr.domicilio || {};
+      $('#domActivo').checked = !!d.activo; $('#domHorario').checked = d.soloEnHorario !== false;
+      $('#domCosto').value = d.costo || ''; $('#domMinimo').value = d.minimo || '';
+      $('#domWhatsapp').value = d.whatsapp || ''; $('#domMensaje').value = d.mensaje || '';
       $('#qrTexto').value = qr.qrTexto || '';
       qrNuevo = undefined; pintarQR();
     }
@@ -383,6 +409,22 @@
         toast('✅ QR guardado');
       } catch (err) { toast(err.message, true); }
       finally { btn.disabled = false; btn.textContent = '💾 Guardar QR'; }
+    });
+
+    // ---------- Domicilios ----------
+    const link = `${location.origin}/domicilio`;
+    $('#linkDom').textContent = link; $('#abrirLink').href = link;
+    $('#copiarLink').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(link); toast('✅ Link copiado. Compártelo por WhatsApp o Instagram'); }
+      catch { toast('Copia el link: ' + link); }
+    });
+    $('#domGuardar').addEventListener('click', async () => {
+      try {
+        await api('/api/ajustes', { method: 'PUT', body: JSON.stringify({ domicilio: {
+          activo: $('#domActivo').checked, soloEnHorario: $('#domHorario').checked, costo: $('#domCosto').value,
+          minimo: $('#domMinimo').value, whatsapp: $('#domWhatsapp').value, mensaje: $('#domMensaje').value } }) });
+        toast('✅ Ajustes de domicilio guardados');
+      } catch (err) { toast(err.message, true); }
     });
 
     await cargar();
