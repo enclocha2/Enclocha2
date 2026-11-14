@@ -38,6 +38,7 @@
       <a href="/pedidos" class="accion a-pedidos"><span class="ai">📋</span><span><b>Pedidos</b><small id="sPedidos">Ver y despachar</small></span><em class="cnt" id="cntPedidos" hidden></em><span class="flecha">→</span></a>
     </section>
 
+    <div class="pausa" id="pausa" hidden></div>
     <!-- Números de la jornada -->
     <section class="numeros" id="numeros"></section>
 
@@ -53,7 +54,7 @@
 
   <script type="module">
     import { pesos, agruparCuentas, estadoStock } from '/catalog.js';
-    import { requerirSesion, api, esc, traerPedidos, cadaTanto, SECCIONES_NAV } from '/sesion.js';
+    import { requerirSesion, avisoHorario, api, esc, traerPedidos, cadaTanto, SECCIONES_NAV } from '/sesion.js';
     import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -154,6 +155,7 @@
 
     cargarPedidos(); cargarResto();
     cadaTanto(cargarPedidos, 20000);
+    avisoHorario(document.querySelector('#pausa'), () => { estado.rev = null; cargarPedidos(); });
   </script>
 </body>
 </html>

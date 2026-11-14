@@ -824,3 +824,6 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
 .ubi-res.ok { background: rgba(34,211,138,.12); border: 1px solid rgba(34,211,138,.45); color: #c8ffe6; }
 .ubi-res.mal { background: rgba(255,77,109,.12); border: 1px solid rgba(255,77,109,.45); color: #ffc2cd; }
 .falta-ubi { color: #ffcf70; font-weight: 800; text-decoration: none; }
+.pausa { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 14px; border-radius: 14px;
+  background: rgba(139,92,246,.12); border: 1px solid rgba(139,92,246,.45); color: #d9ccff; font-size: .9rem; }
+.pausa[hidden] { display: none; }

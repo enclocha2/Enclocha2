@@ -30,6 +30,7 @@
 
   <main>
     <div id="aviso"></div>
+    <div class="pausa" id="pausa" hidden></div>
     <div class="resumen" id="resumen"></div>
     <div class="status" id="status"><span class="dot"></span>Conectando...</div>
     <div class="cols">
@@ -72,7 +73,7 @@
 
   <script type="module">
     import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe } from '/catalog.js';
-    import { requerirSesion, api, traerPedidos, leerQR, htmlQR } from '/sesion.js';
+    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario } from '/sesion.js';
     import { hoy, inicioJornada } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -123,7 +124,7 @@
       try {
         const hayCambios = await traerPedidos(estado);
         $('#status').className = 'status';
-        $('#status').innerHTML = `<span class="dot"></span>En línea · ${new Date().toLocaleTimeString('es-CO')}`;
+        $('#status').innerHTML = enHorarioOperacion() ? `<span class="dot"></span>En línea · ${new Date().toLocaleTimeString('es-CO')}` : `🌙 Revisado a las ${new Date().toLocaleTimeString('es-CO')}`;
         if (!hayCambios) return;
         pedidos = estado.pedidos;
         $('#aviso').innerHTML = estado.persistente ? '' :
@@ -320,7 +321,9 @@
     });
 
     cargar();
-    setInterval(cargar, POLL_MS);
+    // Solo revisa pedidos nuevos en horario de operación (sigue aunque la pestaña esté en segundo plano, para que suene)
+    setInterval(() => { if (enHorarioOperacion()) cargar(); }, POLL_MS);
+    avisoHorario($('#pausa'), () => { estado.rev = null; cargar(); });
   </script>
 </body>
 </html>

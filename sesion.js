@@ -63,10 +63,26 @@ export async function traerPedidos(estado) {
   return true;
 }
 
-// Repite fn cada ms, solo con la pestaña visible (ahorra operaciones de la base de datos)
+// Repite fn cada ms, solo con la pestaña visible y en horario de operación
+// (fuera de horario no consulta nada; se reactiva sola cuando llega la hora)
 export function cadaTanto(fn, ms) {
-  setInterval(() => { if (!document.hidden) fn(); }, ms);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) fn(); });
+  setInterval(() => { if (!document.hidden && enHorarioOperacion()) fn(); }, ms);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && enHorarioOperacion()) fn(); });
+}
+import { enHorarioOperacion, textoPausa } from '/fechas.js';
+export { enHorarioOperacion };
+
+// Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
+export function avisoHorario(contenedor, alRevisar) {
+  const pintar = () => {
+    const fuera = !enHorarioOperacion();
+    contenedor.hidden = !fuera;
+    if (fuera) contenedor.innerHTML = `<span>🌙 Fuera de horario · la actualización automática está en pausa (${textoPausa()}).</span>
+      <button type="button" class="mini">🔄 Revisar ahora</button>`;
+    contenedor.querySelector('button')?.addEventListener('click', alRevisar);
+  };
+  pintar();
+  setInterval(pintar, 60000); // revisa el reloj (no la base de datos) cada minuto
 }
 
 // ---------- QR de transferencia ----------

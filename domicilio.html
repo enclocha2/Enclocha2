@@ -112,6 +112,7 @@
 
   <script type="module">
     import { GRUPOS, SECCIONES, pesos, armarItem } from '/catalog.js';
+    import { enHorarioOperacion } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -318,10 +319,13 @@
           <p class="hint" style="margin-top:-6px">Pedido <b>#${d.numero}</b> · ${esc(d.cliente)} · ${pesos(d.total)}</p>
           ${d.estado === 'cancelado' ? '<p>Si tienes dudas, escríbenos.</p>' : `<div class="pasos">${PASOS.map(([k, ic, n], i) => `
             <div class="paso ${i < idx ? 'hecho' : i === idx ? 'actual' : ''}"><span>${ic}</span><b>${n}</b></div>`).join('')}</div>`}
-          ${terminado ? '<button class="btn alt" id="otroPedido">Hacer otro pedido</button>' : '<p class="hint" style="text-align:center">Esta página se actualiza sola.</p>'}`;
+          ${terminado ? '<button class="btn alt" id="otroPedido">Hacer otro pedido</button>'
+            : enHorarioOperacion() ? '<p class="hint" style="text-align:center">Esta página se actualiza sola.</p>'
+            : '<button class="btn ghost" id="actualizarSeg">🔄 Ver estado</button>'}`;
+        $('#actualizarSeg')?.addEventListener('click', seguir);
         $('#otroPedido')?.addEventListener('click', () => { localStorage.removeItem('dom-pedido'); $('#seguimiento').hidden = true; });
         clearTimeout(timer);
-        if (!terminado) timer = setTimeout(() => { if (!document.hidden) seguir(); else document.addEventListener('visibilitychange', seguir, { once: true }); }, 20000);
+        if (!terminado && enHorarioOperacion()) timer = setTimeout(() => { if (!document.hidden) seguir(); else document.addEventListener('visibilitychange', seguir, { once: true }); }, 20000);
       } catch {}
     }
 

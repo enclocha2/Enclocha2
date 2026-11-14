@@ -27,6 +27,7 @@
     <div class="row" style="margin-bottom:12px">
       <input class="field" id="buscar" placeholder="🔍 Buscar por nombre..." style="flex:1" />
     </div>
+    <div class="pausa" id="pausa" hidden></div>
     <div class="resumen" id="resumen"></div>
     <div id="lista"><div class="empty">Cargando...</div></div>
   </main>
@@ -50,7 +51,7 @@
 
   <script type="module">
     import { pesos, vistaItem, agruparCuentas, normalizar } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
+    import { requerirSesion, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     await requerirSesion();
@@ -139,6 +140,7 @@
 
     cargar();
     cadaTanto(cargar, 8000);
+    avisoHorario(document.querySelector('#pausa'), () => { estado.rev = null; cargar(); });
   </script>
 </body>
 </html>

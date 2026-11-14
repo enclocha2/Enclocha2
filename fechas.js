@@ -80,3 +80,18 @@ export const textoHorario = (s) => {
   const h = horarioDe(s);
   return h ? `${textoHora(h.abre)} – ${textoHora(h.cierra)}` : 'sin jornada programada';
 };
+
+// ---------- ¿Estamos en horario de operación? ----------
+// La app solo consulta sola desde 1 h antes de abrir hasta 2 h después de cerrar
+// (para preparar, cobros tarde y el cierre de caja). Fuera de eso no gasta nada.
+export const MARGEN_ANTES = 1, MARGEN_DESPUES = 2;
+export function enHorarioOperacion(t = Date.now()) {
+  const j = jornadaDe(t), h = horarioDe(j);
+  if (!h) return false;
+  const x = horaJornada(t) + new Date(t).getMinutes() / 60; // hora con minutos (0-5 a. m. = 24-29)
+  return x >= h.abre - MARGEN_ANTES && x < h.cierra + MARGEN_DESPUES;
+}
+export function textoPausa() {
+  const h = horarioDe(jornadaActual());
+  return h ? `Hoy se activa a las ${textoHora(h.abre - MARGEN_ANTES)}` : 'Hoy no hay jornada';
+}
