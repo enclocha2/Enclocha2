@@ -101,7 +101,7 @@
     async function cargar() {
       $('#lblMes').textContent = `${nombreMes(mes + '-01')} ${mes.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
       try {
-        const r = await api(`/api/gastosfijos?mes=${mes}`);
+        const r = await api(`/api/compras?r=gastosfijos&mes=${mes}`);
         pagos = r.pagos;
         bannerPresupuesto($('#presBanner'), mes);
         if (!sucio) { original = r.gastos; gastos = structuredClone(r.gastos); }
@@ -189,7 +189,7 @@
     $('#descartar').addEventListener('click', () => { gastos = structuredClone(original); marcar(false); pintar(); });
     $('#guardar').addEventListener('click', async () => {
       try {
-        const r = await api('/api/gastosfijos', { method: 'PUT', body: JSON.stringify({ gastos }) });
+        const r = await api('/api/compras?r=gastosfijos', { method: 'PUT', body: JSON.stringify({ gastos }) });
         original = r.gastos; gastos = structuredClone(r.gastos); marcar(false); pintar(); toast('✅ Gastos fijos guardados');
       } catch (err) { toast(err.message, true); }
     });
@@ -214,7 +214,7 @@
       }
       if (b.dataset.delpago) {
         if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
-        try { await api(`/api/gastosfijos?mes=${mes}&id=${b.dataset.delpago}`, { method: 'DELETE' }); toast('Pago borrado'); cargar(); } catch (err) { toast(err.message, true); }
+        try { await api(`/api/compras?r=gastosfijos&mes=${mes}&id=${b.dataset.delpago}`, { method: 'DELETE' }); toast('Pago borrado'); cargar(); } catch (err) { toast(err.message, true); }
       }
       if (b.dataset.delg) {
         if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
@@ -224,7 +224,7 @@
     $('#mpCancelar').addEventListener('click', () => $('#modalPago').classList.remove('show'));
     $('#mpGuardar').addEventListener('click', async () => {
       try {
-        await api('/api/gastosfijos', { method: 'POST', body: JSON.stringify({ mes, pago: {
+        await api('/api/compras?r=gastosfijos', { method: 'POST', body: JSON.stringify({ mes, pago: {
           gastoId: aPagar.id, valor: $('#mpValor').value, fecha: $('#mpFecha').value, metodo: metodoSel, nota: $('#mpNota').value } }) });
         $('#modalPago').classList.remove('show'); toast(`✅ Pago de ${aPagar.nombre} registrado`); cargar();
       } catch (err) { $('#mpError').textContent = err.message; }

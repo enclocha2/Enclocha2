@@ -223,7 +223,7 @@ function montarNav({ usuario }) {
 // ---------- Aviso compacto del presupuesto del mes (Compras, Gastos fijos) ----------
 export async function bannerPresupuesto(el, mes) {
   try {
-    const r = await api(`/api/presupuesto?mes=${mes}`);
+    const r = await api(`/api/compras?r=presupuesto&mes=${mes}`);
     const p = r.presupuesto.monto, s = r.resumen;
     const pesos = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
     if (!p) { el.innerHTML = `<a href="/presupuesto" class="pres-mini sin">💼 Aún no definiste el presupuesto de este mes · <b>Definir →</b></a>`; return r; }

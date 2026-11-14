@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v17)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v18)
 
 | Ruta | Qué es |
 |---|---|
@@ -18,6 +18,7 @@
 | `/login` | Ingreso |
 
 ## Usuarios, roles y permisos
+**Roles editables (v18):** en Inicio → Roles puedes crear roles nuevos (nombre, ícono y permisos), cambiar los permisos de cualquier rol o borrarlo si nadie lo tiene. En la tabla "¿Qué puede hacer cada rol?" tocas una celda para dar o quitar un permiso al instante. Los cambios aplican de una a todos los usuarios de ese rol (menos a quien tenga permisos personalizados). El Administrador es fijo: siempre tiene todo y no se borra (solo se le cambia nombre o ícono). Los roles se guardan en la base de datos (clave `roles`) y se leen junto con los usuarios en una sola operación.
 - Los usuarios están en la base de datos (contraseñas cifradas). La primera vez se crean solos con Stiv, Angel, John y Fofi
   (o lo que diga la variable `USUARIOS`); después **se administran en Inicio → 👥 Usuarios** y esa variable ya no se usa.
 - Roles: 👑 Administrador (todo) · 💵 Cajero · 🧾 Vendedor · 🍧 Preparación. A cada persona se le pueden personalizar los permisos.
@@ -59,7 +60,7 @@ api/_lib/store.js   ← Upstash Redis
 - Ventas y Reportes solo los ven los administradores (variable `ADMINS`; si no existe, todos).
 
 ### Reporte mensual: ventas vs gastos (v17)
-En **Reportes → 📈 Mensual** (requiere permiso de reportes; datos de `/api/estadisticas?mes=AAAA-MM`):
+En **Reportes → 📈 Mensual** (requiere permiso de reportes; datos de `/api/ventas?r=estadisticas&mes=AAAA-MM`):
 - Ventas, gastos (compras + gastos fijos pagados + gastos del cierre), utilidad, margen, cantidad, ticket promedio, promedio por jornada y jornadas trabajadas.
 - Cada número se compara con el mes anterior. Si es el mes en curso, se compara **hasta el mismo día** del mes anterior.
 - Frases automáticas: comparación con el mes anterior y con el mismo mes del año pasado, proyección de cierre de mes, cuánto se llevan los gastos, mejor día de la semana, hora pico, producto estrella, mejor jornada, efectivo vs transferencia y domicilios.
@@ -129,3 +130,10 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 - Lo gastan, en orden de fecha: compras, pagos de gastos fijos y gastos de caja anotados en el cierre.
 - Cuando se agota, lo demás se marca como "pagado con las ventas del mes" y se muestra desde qué gasto/fecha pasó.
 - Compras, Gastos fijos e Inicio muestran cuánto queda; al registrar una compra que no alcanza, avisa cuánto sale de las ventas.
+
+## Límite de funciones de Vercel (plan Hobby: máximo 12)
+Cada archivo dentro de `api/` (menos `api/_lib/`) cuenta como una función. La app usa **10**:
+- `/api/compras?r=gastosfijos` y `/api/compras?r=presupuesto` (código en `api/_lib/gastosfijos.js` y `api/_lib/presupuesto.js`)
+- `/api/ventas?r=estadisticas` (código en `api/_lib/estadisticas.js`)
+- `/api/usuarios?r=roles` (roles)
+Si agregas más endpoints, mételos así para no pasar de 12.

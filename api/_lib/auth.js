@@ -3,12 +3,12 @@
 // La primera vez se crean solos a partir de la variable USUARIOS (o los de fábrica).
 import crypto from 'node:crypto';
 import { Redis } from '@upstash/redis';
-import { ROLES, TODOS_PERMISOS, permisosDe, slug } from '../../catalog.js';
+import { ROLES, TODOS_PERMISOS, permisosDe, normalizarRoles, slug } from '../../catalog.js';
 
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const redis = url && token ? new Redis({ url, token }) : null;
-const mem = globalThis.__granizadosAuth || (globalThis.__granizadosAuth = { usuarios: null });
+const mem = globalThis.__granizadosAuth || (globalThis.__granizadosAuth = { usuarios: null, roles: null });
 
 const POR_DEFECTO = 'Stiv:Stiv2026*,Angel:Angel2026*,John:John2026*,Fofi:Fofi2026*';
 const FUENTE = process.env.USUARIOS || POR_DEFECTO;
@@ -27,8 +27,9 @@ function claveOk(clave, guardada) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// ---------- Usuarios en la base de datos (con caché de 30 s para no gastar operaciones) ----------
-let cache = { lista: null, en: 0 };
+// ---------- Usuarios y roles en la base de datos (con caché de 30 s para no gastar operaciones) ----------
+// Se leen juntos en UNA sola operación (mget). Si no hay roles guardados se usan los de fábrica.
+let cache = { lista: null, roles: null, en: 0 };
 function sembrar() {
   // Primera vez: usuarios de la variable USUARIOS (o de fábrica). Si existe ADMINS, solo esos son administradores.
   const admins = (process.env.ADMINS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -44,25 +45,35 @@ function sembrar() {
     };
   }).filter(Boolean);
 }
-export async function leerUsuarios(forzar = false) {
-  if (!forzar && cache.lista && Date.now() - cache.en < 30000) return structuredClone(cache.lista);
-  let lista = redis ? await redis.get('usuarios') : mem.usuarios;
+async function leerTodo(forzar) {
+  if (!forzar && cache.lista && cache.roles && Date.now() - cache.en < 30000) return cache;
+  let lista, roles;
+  if (redis) [lista, roles] = await redis.mget('usuarios', 'roles');
+  else { lista = mem.usuarios; roles = mem.roles; }
   if (!lista) {
     lista = sembrar();
     if (redis) { const ok = await redis.set('usuarios', lista, { nx: true }); if (ok !== 'OK') lista = await redis.get('usuarios'); }
-    else mem.usuarios = lista;
+    else mem.usuarios = structuredClone(lista);
   }
-  cache = { lista, en: Date.now() };
-  return structuredClone(lista);
+  cache = { lista, roles: normalizarRoles(roles), en: Date.now() };
+  return cache;
 }
+export async function leerUsuarios(forzar = false) { return structuredClone((await leerTodo(forzar)).lista); }
+export async function leerRoles(forzar = false) { return structuredClone((await leerTodo(forzar)).roles); }
 export async function guardarUsuarios(lista) {
   if (redis) await redis.set('usuarios', lista); else mem.usuarios = structuredClone(lista);
-  cache = { lista: structuredClone(lista), en: Date.now() };
+  cache = { ...cache, lista: structuredClone(lista), en: cache.roles ? Date.now() : 0 };
   return lista;
 }
-export const publico = (u) => ({
+export async function guardarRoles(roles) {
+  const limpios = normalizarRoles(roles);
+  if (redis) await redis.set('roles', limpios); else mem.roles = structuredClone(limpios);
+  cache = { ...cache, roles: structuredClone(limpios), en: cache.lista ? Date.now() : 0 };
+  return limpios;
+}
+export const publico = (u, roles) => ({
   id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, permisos: u.permisos ?? null,
-  efectivos: permisosDe(u), activo: u.activo !== false, ultimoIngreso: u.ultimoIngreso || null, creado: u.creado || null,
+  efectivos: permisosDe(u, roles), activo: u.activo !== false, ultimoIngreso: u.ultimoIngreso || null, creado: u.creado || null,
 });
 
 // ---------- Sesión ----------
@@ -92,9 +103,10 @@ function leerCookie(req, nombre) {
 export async function sesion(req) {
   const d = leerToken(leerCookie(req, 'sesion'));
   if (!d?.i) return null;
-  const u = (await leerUsuarios()).find((x) => x.id === d.i);
+  const { lista, roles } = await leerTodo(false);
+  const u = lista.find((x) => x.id === d.i);
   if (!u || u.activo === false || (u.ver || 1) !== d.v) return null;
-  const permisos = permisosDe(u);
+  const permisos = permisosDe(u, roles);
   return { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, permisos, puede: (...ps) => ps.some((p) => permisos.includes(p)) };
 }
 
@@ -112,3 +124,4 @@ export async function validar(usuario, clave) {
 }
 
 export { ROLES, TODOS_PERMISOS };
+export { permisosDe };

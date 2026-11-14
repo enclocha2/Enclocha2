@@ -1,5 +1,7 @@
 // Administración de usuarios, roles y permisos (requiere el permiso "usuarios").
-import { sesion, leerUsuarios, guardarUsuarios, cifrar, publico, ROLES, TODOS_PERMISOS } from './_lib/auth.js';
+// /api/usuarios            → usuarios
+// /api/usuarios?r=roles    → roles (crear, editar permisos, borrar)
+import { sesion, leerUsuarios, guardarUsuarios, leerRoles, guardarRoles, cifrar, publico, TODOS_PERMISOS } from './_lib/auth.js';
 import { permisosDe, slug } from '../catalog.js';
 
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
@@ -7,7 +9,60 @@ const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const NOMBRE_USUARIO = /^[\p{L}\p{N}._-]{2,30}$/u;
 
 // Siempre debe quedar al menos un usuario activo que pueda administrar usuarios
-const quedaAdmin = (lista) => lista.some((u) => u.activo !== false && permisosDe(u).includes('usuarios'));
+const quedaAdmin = (lista, roles) => lista.some((u) => u.activo !== false && permisosDe(u, roles).includes('usuarios'));
+const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');
+const limpiarPermisos = (ps) => [...new Set((Array.isArray(ps) ? ps : []).filter((p) => TODOS_PERMISOS.includes(p)))];
+
+// ---------- Roles ----------
+async function manejarRoles(req, res, yo, lista, roles) {
+  const b = leer(req);
+  const usanRol = (id) => lista.filter((u) => u.rol === id);
+
+  if (req.method === 'POST') {
+    const nombre = txt(b.nombre, 30);
+    if (nombre.length < 2) return res.status(400).json({ error: 'Ponle un nombre al rol (mínimo 2 letras)' });
+    if (roles.some((r) => r.nombre.toLowerCase() === nombre.toLowerCase())) return res.status(400).json({ error: 'Ya existe un rol con ese nombre' });
+    let id = slug(nombre) || 'rol'; while (roles.some((r) => r.id === id)) id += '-2';
+    const nuevo = { id, nombre, icono: txt(b.icono, 8) || '🎭', permisos: limpiarPermisos(b.permisos) };
+    roles.push(nuevo);
+    const guardados = await guardarRoles(roles);
+    return res.status(201).json({ rol: nuevo, roles: guardados });
+  }
+
+  if (req.method === 'PUT') {
+    const rol = roles.find((r) => r.id === b.id);
+    if (!rol) return res.status(404).json({ error: 'Rol no encontrado' });
+    if (b.nombre !== undefined) {
+      const nombre = txt(b.nombre, 30);
+      if (nombre.length < 2) return res.status(400).json({ error: 'El nombre del rol debe tener mínimo 2 letras' });
+      if (roles.some((r) => r.id !== rol.id && r.nombre.toLowerCase() === nombre.toLowerCase())) return res.status(400).json({ error: 'Ya existe un rol con ese nombre' });
+      rol.nombre = nombre;
+    }
+    if (b.icono !== undefined) rol.icono = txt(b.icono, 8) || rol.icono;
+    if (b.permisos !== undefined) {
+      if (rol.fijo) return res.status(400).json({ error: 'El Administrador siempre tiene todos los permisos' });
+      rol.permisos = limpiarPermisos(b.permisos);
+    }
+    if (!permisosDe(lista.find((u) => u.id === yo.id), roles).includes('usuarios')) return res.status(400).json({ error: 'Con ese cambio perderías el permiso de administrar usuarios' });
+    if (!quedaAdmin(lista, roles)) return res.status(400).json({ error: 'Debe quedar al menos un usuario que pueda administrar usuarios' });
+    const guardados = await guardarRoles(roles);
+    return res.status(200).json({ rol: guardados.find((r) => r.id === rol.id), roles: guardados });
+  }
+
+  if (req.method === 'DELETE') {
+    const id = b.id || new URL(req.url, 'http://x').searchParams.get('id');
+    const rol = roles.find((r) => r.id === id);
+    if (!rol) return res.status(404).json({ error: 'Rol no encontrado' });
+    if (rol.fijo) return res.status(400).json({ error: 'El rol Administrador no se puede borrar' });
+    const lo = usanRol(id);
+    if (lo.length) return res.status(400).json({ error: `Lo tienen ${lo.map((u) => u.nombre).join(', ')}. Cámbiales el rol primero.` });
+    const guardados = await guardarRoles(roles.filter((r) => r.id !== id));
+    return res.status(200).json({ ok: true, roles: guardados });
+  }
+
+  res.setHeader('Allow', 'GET, POST, PUT, DELETE');
+  return res.status(405).json({ error: 'Método no permitido' });
+}
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -17,9 +72,13 @@ export default async function handler(req, res) {
 
   try {
     // Se trabaja sobre una copia: si algo no es válido, no queda nada a medio cambiar
-    const lista = structuredClone(await leerUsuarios(true));
+    const lista = await leerUsuarios(true);
+    const roles = await leerRoles();
+    const existeRol = (id) => roles.some((r) => r.id === id);
+    const rolPorDefecto = existeRol('vendedor') ? 'vendedor' : (roles.find((r) => !r.fijo) || roles[0]).id;
 
-    if (req.method === 'GET') return res.status(200).json({ usuarios: lista.map(publico), roles: ROLES, yo: yo.id });
+    if (req.method === 'GET') return res.status(200).json({ usuarios: lista.map((u) => publico(u, roles)), roles, yo: yo.id });
+    if (ruta(req) === 'roles') return manejarRoles(req, res, yo, lista, roles);
 
     const b = leer(req);
 
@@ -32,13 +91,13 @@ export default async function handler(req, res) {
       let id = slug(usuario); while (lista.some((u) => u.id === id)) id += '-2';
       const nuevo = {
         id, usuario, nombre: txt(b.nombre, 50) || usuario,
-        rol: ROLES.some((r) => r.id === b.rol) ? b.rol : 'vendedor',
+        rol: existeRol(b.rol) ? b.rol : rolPorDefecto,
         permisos: Array.isArray(b.permisos) ? b.permisos.filter((p) => TODOS_PERMISOS.includes(p)) : null,
         activo: true, hash: cifrar(b.clave), ver: 1, creado: Date.now(), creadoPor: yo.usuario,
       };
       lista.push(nuevo);
       await guardarUsuarios(lista);
-      return res.status(201).json({ usuario: publico(nuevo) });
+      return res.status(201).json({ usuario: publico(nuevo, roles) });
     }
 
     // Editar (nombre, rol, permisos, activo, clave)
@@ -46,7 +105,7 @@ export default async function handler(req, res) {
       const u = lista.find((x) => x.id === b.id);
       if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
       if (b.nombre !== undefined) u.nombre = txt(b.nombre, 50) || u.usuario;
-      if (b.rol !== undefined && ROLES.some((r) => r.id === b.rol)) u.rol = b.rol;
+      if (b.rol !== undefined && existeRol(b.rol)) u.rol = b.rol;
       if (b.permisos !== undefined) u.permisos = Array.isArray(b.permisos) ? b.permisos.filter((p) => TODOS_PERMISOS.includes(p)) : null;
       if (b.activo !== undefined) {
         if (!b.activo && u.id === yo.id) return res.status(400).json({ error: 'No puedes desactivarte a ti mismo' });
@@ -58,11 +117,11 @@ export default async function handler(req, res) {
         u.hash = cifrar(b.clave);
         if (u.id !== yo.id) u.ver = (u.ver || 1) + 1; // cierra sus sesiones abiertas
       }
-      if (u.id === yo.id && !permisosDe(u).includes('usuarios')) return res.status(400).json({ error: 'No puedes quitarte a ti mismo el permiso de administrar usuarios' });
-      if (!quedaAdmin(lista)) return res.status(400).json({ error: 'Debe quedar al menos un usuario que pueda administrar usuarios' });
+      if (u.id === yo.id && !permisosDe(u, roles).includes('usuarios')) return res.status(400).json({ error: 'No puedes quitarte a ti mismo el permiso de administrar usuarios' });
+      if (!quedaAdmin(lista, roles)) return res.status(400).json({ error: 'Debe quedar al menos un usuario que pueda administrar usuarios' });
       u.editado = Date.now(); u.editadoPor = yo.usuario;
       await guardarUsuarios(lista);
-      return res.status(200).json({ usuario: publico(u) });
+      return res.status(200).json({ usuario: publico(u, roles) });
     }
 
     // Borrar
@@ -71,7 +130,7 @@ export default async function handler(req, res) {
       if (id === yo.id) return res.status(400).json({ error: 'No puedes borrarte a ti mismo' });
       const nueva = lista.filter((u) => u.id !== id);
       if (nueva.length === lista.length) return res.status(404).json({ error: 'Usuario no encontrado' });
-      if (!quedaAdmin(nueva)) return res.status(400).json({ error: 'Debe quedar al menos un usuario que pueda administrar usuarios' });
+      if (!quedaAdmin(nueva, roles)) return res.status(400).json({ error: 'Debe quedar al menos un usuario que pueda administrar usuarios' });
       await guardarUsuarios(nueva);
       return res.status(200).json({ ok: true });
     }

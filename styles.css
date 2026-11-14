@@ -905,3 +905,22 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
 
 /* Asegura que [hidden] gane sobre display:grid/flex de las clases */
 [hidden] { display: none !important; }
+
+/* ---------- Roles (v18) ---------- */
+.rol-tag { background: rgba(144,133,233,.14); border-color: rgba(144,133,233,.5); color: #d3ccff; }
+.rol-admin { background: rgba(255,63,209,.14); border-color: rgba(255,63,209,.5); color: #ffb3ee; }
+.rol-cajero { background: rgba(34,211,138,.12); border-color: rgba(34,211,138,.45); color: #8ff5c6; }
+.rol-vendedor { background: rgba(51,225,255,.1); border-color: rgba(51,225,255,.45); color: #9ff0ff; }
+.rol-preparacion { background: rgba(255,176,32,.12); border-color: rgba(255,176,32,.45); color: #ffcf70; }
+.roles-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+.rol-card { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--ink); cursor: pointer; font: inherit; }
+.rol-card:hover { border-color: rgba(255,63,209,.6); }
+.rol-card .rol-ico { font-size: 1.7rem; line-height: 1; }
+.rol-card .rol-edit { margin-left: auto; opacity: .6; }
+.roles-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.iconos-sug { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 10px; }
+.iconos-sug .chip { padding: 4px 8px; font-size: 1.15rem; line-height: 1.2; }
+.celda-perm { background: none; border: 1px solid transparent; border-radius: 8px; color: var(--muted); font: inherit; min-width: 34px; min-height: 30px; cursor: pointer; }
+.celda-perm.si { color: inherit; }
+.celda-perm:hover:not(:disabled) { border-color: rgba(255,63,209,.6); background: rgba(255,63,209,.08); }
+.celda-perm:disabled { cursor: default; opacity: .8; }

@@ -58,7 +58,12 @@
         <button class="btn alt" id="uNuevo" style="width:auto;padding:10px 16px">+ Nuevo usuario</button>
       </div>
       <div class="card" style="margin-top:10px"><div class="tabla-wrap"><table class="tabla" id="uTabla"></table></div></div>
-      <details class="card plegable"><summary><b>🎭 ¿Qué puede hacer cada rol?</b></summary><div class="tabla-wrap"><table class="tabla roles-tabla" id="uRoles"></table></div></details>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:18px">
+        <h3 class="sub" style="margin:0">🎭 Roles</h3>
+        <button class="btn alt" id="rNuevo" style="width:auto;padding:10px 16px">+ Nuevo rol</button>
+      </div>
+      <div class="roles-lista" id="rLista"></div>
+      <details class="card plegable"><summary><b>📋 ¿Qué puede hacer cada rol? (toca un ✅ o · para cambiarlo)</b></summary><div class="tabla-wrap"><table class="tabla roles-tabla" id="uRoles"></table></div></details>
     </section>
   </main>
 
@@ -80,6 +85,30 @@
       <div class="row" style="gap:8px">
         <button class="btn ghost" id="uCancelar" style="flex:1">Cancelar</button>
         <button class="btn ghost peligro" id="uBorrar" style="flex:1">🗑 Borrar usuario</button>
+      </div>
+    </div>
+  </div>
+  <!-- Crear / editar rol -->
+  <div class="modal" id="rModal">
+    <div class="box" style="max-width:620px">
+      <h3 id="rTitulo">Nuevo rol</h3>
+      <div class="form-compra" style="grid-template-columns:96px 1fr">
+        <label class="campo"><span>Ícono</span><input class="field" id="rIcono" maxlength="8" style="text-align:center;font-size:1.4rem"></label>
+        <label class="campo"><span>Nombre del rol</span><input class="field" id="rNombre" maxlength="30" autocomplete="off" placeholder="ej: Mesero, Domiciliario, Supervisor"></label>
+      </div>
+      <div class="iconos-sug" id="rIconos"></div>
+      <label class="campo" id="rCopiarBox"><span>Empezar con los permisos de…</span><select class="field" id="rCopiar"></select></label>
+      <div class="row" style="justify-content:space-between;align-items:center;margin:6px 0">
+        <b id="rCuenta"></b>
+        <span class="row" style="gap:6px" id="rAtajos"><button type="button" class="mini" id="rTodos">✅ Todos</button><button type="button" class="mini" id="rNinguno">✖ Ninguno</button></span>
+      </div>
+      <div id="rPermisos" class="permisos-grid"></div>
+      <p class="hint" id="rNota" style="margin-top:8px"></p>
+      <div class="error" id="rError"></div>
+      <button class="btn" id="rGuardar">💾 Guardar rol</button>
+      <div class="row" style="gap:8px">
+        <button class="btn ghost" id="rCancelar" style="flex:1">Cancelar</button>
+        <button class="btn ghost peligro" id="rBorrar" style="flex:1">🗑 Borrar rol</button>
       </div>
     </div>
   </div>
@@ -176,7 +205,7 @@
           const e = document.querySelector('.acceso[data-href="/cierre"] small'); if (e) e.textContent = hoyC.cierre ? '✅ Cerrada hoy' : 'Cuadrar caja';
         }));
       if (puede('gastos')) tareas.push(
-        api(`/api/gastosfijos?mes=${hoy().slice(0, 7)}`).then(({ gastos, pagos }) => {
+        api(`/api/compras?r=gastosfijos&mes=${hoy().slice(0, 7)}`).then(({ gastos, pagos }) => {
           const veces = { mensual: 1, quincenal: 2, semanal: 4 };
           const p = gastos.filter((g) => g.activo && pagos.filter((x) => x.gastoId === g.id).reduce((s, x) => s + x.valor, 0) < g.valor * (veces[g.periodo] || 1));
           const venc = p.filter((g) => g.periodo === 'mensual' && `${hoy().slice(0, 7)}-${String(g.dia).padStart(2, '0')}` < hoy());
@@ -184,7 +213,7 @@
           alerta('gastos', venc.length ? item('/gastos', '🏦', `<b>${venc.length} gasto${venc.length === 1 ? '' : 's'} fijo${venc.length === 1 ? '' : 's'} vencido${venc.length === 1 ? '' : 's'}</b>: ${venc.map((g) => esc(g.nombre)).join(', ')}`, 'mal') : '');
         }));
       if (puede('presupuesto')) tareas.push(
-        api(`/api/presupuesto?mes=${hoy().slice(0, 7)}`).then(({ presupuesto: p, resumen: s }) => {
+        api(`/api/compras?r=presupuesto&mes=${hoy().slice(0, 7)}`).then(({ presupuesto: p, resumen: s }) => {
           const e = document.querySelector('.acceso[data-href="/presupuesto"] small');
           if (!p.monto) { if (e) e.textContent = 'Sin definir'; alerta('pres', item('/presupuesto', '💼', '<b>Define el presupuesto del mes</b> para compras y gastos', 'info')); return; }
           const pct = Math.round((s.delPresupuesto / p.monto) * 100);
@@ -205,13 +234,16 @@
     // USUARIOS, ROLES Y PERMISOS
     // =====================================================================
     let usuarios = [], yoId = null, editando = null, form = null;
-    const ROL = Object.fromEntries(ROLES.map((r) => [r.id, r]));
+    let roles = ROLES, ROL = {};
+    const fijarRoles = (lista) => { roles = lista; ROL = Object.fromEntries(roles.map((r) => [r.id, r])); };
+    fijarRoles(ROLES);
+    const rolDeU = (id) => ROL[id] || ROL.vendedor || { id: 'sin-rol', nombre: 'Sin rol', icono: '❔', permisos: [] };
     const NOMBRE_PERM = Object.fromEntries(PERMISOS.flatMap((g) => g.items));
 
     async function cargarUsuarios() {
       try {
         const r = await api('/api/usuarios');
-        usuarios = r.usuarios; yoId = r.yo;
+        usuarios = r.usuarios; yoId = r.yo; fijarRoles(r.roles);
         pintarUsuarios();
       } catch (e) { toast(e.message, true); }
     }
@@ -219,7 +251,7 @@
     function pintarUsuarios() {
       $('#uTabla').innerHTML = `<thead><tr><th>Usuario</th><th>Rol</th><th>Permisos</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody>` +
         usuarios.map((u) => {
-          const r = ROL[u.rol] || ROLES[2];
+          const r = rolDeU(u.rol);
           const personal = Array.isArray(u.permisos);
           return `<tr class="${u.activo ? '' : 'inactivo'}">
             <td><div class="u-cel"><span class="avatar">${esc(u.nombre.slice(0, 1).toUpperCase())}</span>
@@ -231,17 +263,101 @@
             <td><button class="mini" data-uedit="${u.id}">✏️ Editar</button></td></tr>`;
         }).join('') + '</tbody>';
 
-      // Tabla de roles: qué puede cada uno
-      $('#uRoles').innerHTML = `<thead><tr><th>Permiso</th>${ROLES.map((r) => `<th class="num">${r.icono} ${r.nombre}</th>`).join('')}</tr></thead><tbody>` +
-        PERMISOS.map((g) => `<tr class="grupo-fila"><td colspan="${ROLES.length + 1}">${g.grupo}</td></tr>` +
-          g.items.map(([id, n]) => `<tr><td>${n}</td>${ROLES.map((r) => `<td class="num">${r.permisos.includes(id) ? '✅' : '·'}</td>`).join('')}</tr>`).join('')).join('') + '</tbody>';
+      // Tarjetas de roles
+      $('#rLista').innerHTML = roles.map((r) => {
+        const n = usuarios.filter((u) => u.rol === r.id).length;
+        return `<button type="button" class="rol-card" data-redit="${r.id}">
+          <span class="rol-ico">${esc(r.icono)}</span>
+          <span><b>${esc(r.nombre)}</b>${r.fijo ? ' <span class="tag-yo">fijo</span>' : ''}<br>
+          <span class="hint">${r.permisos.length} de ${TODOS_PERMISOS.length} permisos · ${n} ${n === 1 ? 'usuario' : 'usuarios'}</span></span>
+          <span class="rol-edit">✏️</span></button>`;
+      }).join('');
+
+      // Tabla de roles: qué puede cada uno (se puede cambiar tocando la celda)
+      $('#uRoles').innerHTML = `<thead><tr><th>Permiso</th>${roles.map((r) => `<th class="num">${esc(r.icono)} ${esc(r.nombre)}</th>`).join('')}</tr></thead><tbody>` +
+        PERMISOS.map((g) => `<tr class="grupo-fila"><td colspan="${roles.length + 1}">${g.grupo}</td></tr>` +
+          g.items.map(([id, n]) => `<tr><td>${n}</td>${roles.map((r) => `<td class="num"><button type="button" class="celda-perm ${r.permisos.includes(id) ? 'si' : ''}" ${r.fijo ? 'disabled title="El Administrador siempre tiene todo"' : `data-rcel="${r.id}|${id}" title="${r.permisos.includes(id) ? 'Quitar' : 'Dar'} a ${esc(r.nombre)}"`}>${r.permisos.includes(id) ? '✅' : '·'}</button></td>`).join('')}</tr>`).join('')).join('') + '</tbody>';
     }
+
+    // ---------- Roles ----------
+    let rolEdit = null, rolForm = null;
+    const ICONOS = ['🎭', '🧾', '💵', '🍧', '🛵', '🍺', '🧹', '🧑‍🍳', '🕵️', '⭐', '🛡️', '📦', '🎧', '🙋'];
+    function abrirRol(r) {
+      rolEdit = r || null;
+      rolForm = { icono: r?.icono || '🎭', nombre: r?.nombre || '', permisos: [...(r?.permisos || ROL.vendedor?.permisos || [])] };
+      $('#rTitulo').textContent = r ? `${r.icono} Editar rol: ${r.nombre}` : '🎭 Nuevo rol';
+      $('#rIcono').value = rolForm.icono; $('#rNombre').value = rolForm.nombre;
+      $('#rIconos').innerHTML = ICONOS.map((i) => `<button type="button" class="chip" data-rico="${i}">${i}</button>`).join('');
+      $('#rCopiarBox').hidden = !!r;
+      $('#rCopiar').innerHTML = '<option value="">— Ninguno (empezar vacío) —</option>' + roles.map((x) => `<option value="${x.id}" ${x.id === 'vendedor' ? 'selected' : ''}>${esc(x.icono)} ${esc(x.nombre)}</option>`).join('');
+      const n = r ? usuarios.filter((u) => u.rol === r.id) : [];
+      $('#rNota').innerHTML = r?.fijo ? '👑 El Administrador siempre tiene todos los permisos. Solo puedes cambiarle el nombre o el ícono.'
+        : n.length ? `Los cambios aplican de una vez a: <b>${n.map((u) => esc(u.nombre)).join(', ')}</b> (menos a quien tenga permisos personalizados).` : '';
+      $('#rBorrar').hidden = !r || r.fijo;
+      $('#rAtajos').hidden = !!r?.fijo;
+      $('#rError').textContent = '';
+      pintarRolForm();
+      $('#rModal').classList.add('show');
+      if (!r) setTimeout(() => $('#rNombre').focus(), 50);
+    }
+    function pintarRolForm() {
+      const fijo = !!rolEdit?.fijo, act = fijo ? TODOS_PERMISOS : rolForm.permisos;
+      $('#rCuenta').textContent = `${act.length} de ${TODOS_PERMISOS.length} permisos`;
+      $('#rPermisos').innerHTML = PERMISOS.map((g) => `<div class="perm-grupo"><span>${g.grupo}</span>${g.items.map(([id, n]) => `
+        <label class="perm ${act.includes(id) ? 'on' : ''} ${fijo ? 'bloq' : ''}"><input type="checkbox" data-rperm="${id}" ${act.includes(id) ? 'checked' : ''} ${fijo ? 'disabled' : ''}> ${n}</label>`).join('')}</div>`).join('');
+    }
+    $('#rNuevo').addEventListener('click', () => abrirRol(null));
+    $('#rLista').addEventListener('click', (e) => { const b = e.target.closest('[data-redit]'); if (b) abrirRol(ROL[b.dataset.redit]); });
+    $('#rIconos').addEventListener('click', (e) => { const b = e.target.closest('[data-rico]'); if (b) $('#rIcono').value = b.dataset.rico; });
+    $('#rCopiar').addEventListener('change', (e) => { rolForm.permisos = [...(ROL[e.target.value]?.permisos || [])]; pintarRolForm(); });
+    $('#rTodos').addEventListener('click', () => { rolForm.permisos = [...TODOS_PERMISOS]; pintarRolForm(); });
+    $('#rNinguno').addEventListener('click', () => { rolForm.permisos = []; pintarRolForm(); });
+    $('#rPermisos').addEventListener('change', (e) => {
+      const id = e.target.dataset.rperm; if (!id) return;
+      rolForm.permisos = e.target.checked ? [...new Set([...rolForm.permisos, id])] : rolForm.permisos.filter((p) => p !== id);
+      e.target.closest('.perm').classList.toggle('on', e.target.checked);
+      $('#rCuenta').textContent = `${rolForm.permisos.length} de ${TODOS_PERMISOS.length} permisos`;
+    });
+    $('#rCancelar').addEventListener('click', () => $('#rModal').classList.remove('show'));
+    $('#rGuardar').addEventListener('click', async () => {
+      const datos = { nombre: $('#rNombre').value, icono: $('#rIcono').value };
+      if (!rolEdit?.fijo) datos.permisos = rolForm.permisos;
+      try {
+        const r = rolEdit
+          ? await api('/api/usuarios?r=roles', { method: 'PUT', body: JSON.stringify({ id: rolEdit.id, ...datos }) })
+          : await api('/api/usuarios?r=roles', { method: 'POST', body: JSON.stringify(datos) });
+        $('#rModal').classList.remove('show');
+        toast(rolEdit ? `✅ Rol ${r.rol.nombre} actualizado` : `✅ Rol ${r.rol.nombre} creado`);
+        cargarUsuarios();
+      } catch (err) { $('#rError').textContent = err.message; }
+    });
+    $('#rBorrar').addEventListener('click', async () => {
+      const b = $('#rBorrar');
+      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Seguro? Toca otra vez'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑 Borrar rol'; }, 3000); return; }
+      try {
+        await api(`/api/usuarios?r=roles&id=${encodeURIComponent(rolEdit.id)}`, { method: 'DELETE' });
+        $('#rModal').classList.remove('show'); toast('Rol borrado'); cargarUsuarios();
+      } catch (err) { $('#rError').textContent = err.message; }
+    });
+    // Cambio rápido desde la tabla
+    $('#uRoles').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-rcel]'); if (!b || b.disabled) return;
+      const [rid, perm] = b.dataset.rcel.split('|'), rol = ROL[rid];
+      const permisos = rol.permisos.includes(perm) ? rol.permisos.filter((p) => p !== perm) : [...rol.permisos, perm];
+      b.disabled = true;
+      try {
+        await api('/api/usuarios?r=roles', { method: 'PUT', body: JSON.stringify({ id: rid, permisos }) });
+        toast(`${rol.icono} ${rol.nombre}: ${permisos.includes(perm) ? 'ahora puede' : 'ya no puede'} ${NOMBRE_PERM[perm].replace(/^\S+\s/, '').toLowerCase()}`);
+        await cargarUsuarios();
+      } catch (err) { toast(err.message, true); b.disabled = false; }
+    });
 
     // ---------- Modal ----------
     function abrirUsuario(u) {
       editando = u || null;
       form = u ? { rol: u.rol, personal: Array.isArray(u.permisos), permisos: [...(u.permisos || u.efectivos)], activo: u.activo }
-               : { rol: 'vendedor', personal: false, permisos: [...ROL.vendedor.permisos], activo: true };
+               : { rol: ROL.vendedor ? 'vendedor' : roles[roles.length - 1].id, personal: false, permisos: [], activo: true };
+      if (!u) form.permisos = [...rolDeU(form.rol).permisos];
       $('#uTitulo').textContent = u ? `✏️ ${u.nombre}` : '👤 Nuevo usuario';
       $('#uUsuario').value = u?.usuario || ''; $('#uUsuario').disabled = !!u;
       $('#uNombre').value = u?.nombre || '';
@@ -254,19 +370,19 @@
       $('#uModal').classList.add('show');
     }
     function pintarForm() {
-      $('#uRolesSel').innerHTML = ROLES.map((r) => `<button type="button" class="opt ${form.rol === r.id ? 'on' : ''}" data-urol="${r.id}"><strong>${r.icono} ${r.nombre}</strong><span>${r.permisos.length} permisos</span></button>`).join('');
+      $('#uRolesSel').innerHTML = roles.map((r) => `<button type="button" class="opt ${form.rol === r.id ? 'on' : ''}" data-urol="${r.id}"><strong>${esc(r.icono)} ${esc(r.nombre)}</strong><span>${r.permisos.length} permisos</span></button>`).join('');
       $('#uPersonal').checked = form.personal;
-      const activos = form.personal ? form.permisos : ROL[form.rol].permisos;
+      const activos = form.personal ? form.permisos : rolDeU(form.rol).permisos;
       $('#uPermisos').innerHTML = PERMISOS.map((g) => `<div class="perm-grupo"><span>${g.grupo}</span>${g.items.map(([id, n]) => `
         <label class="perm ${activos.includes(id) ? 'on' : ''} ${form.personal ? '' : 'bloq'}"><input type="checkbox" data-uperm="${id}" ${activos.includes(id) ? 'checked' : ''} ${form.personal ? '' : 'disabled'}> ${n}</label>`).join('')}</div>`).join('');
     }
     $('#uRolesSel').addEventListener('click', (e) => {
       const b = e.target.closest('[data-urol]'); if (!b) return;
       form.rol = b.dataset.urol;
-      if (!form.personal) form.permisos = [...ROL[form.rol].permisos];
+      if (!form.personal) form.permisos = [...rolDeU(form.rol).permisos];
       pintarForm();
     });
-    $('#uPersonal').addEventListener('change', (e) => { form.personal = e.target.checked; if (form.personal && !form.permisos.length) form.permisos = [...ROL[form.rol].permisos]; if (!form.personal) form.permisos = [...ROL[form.rol].permisos]; pintarForm(); });
+    $('#uPersonal').addEventListener('change', (e) => { form.personal = e.target.checked; if (form.personal && !form.permisos.length) form.permisos = [...rolDeU(form.rol).permisos]; if (!form.personal) form.permisos = [...rolDeU(form.rol).permisos]; pintarForm(); });
     $('#uPermisos').addEventListener('change', (e) => {
       const id = e.target.dataset.uperm; if (!id) return;
       form.permisos = e.target.checked ? [...new Set([...form.permisos, id])] : form.permisos.filter((p) => p !== id);

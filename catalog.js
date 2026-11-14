@@ -408,12 +408,24 @@ export const PERMISOS = [
 ];
 export const TODOS_PERMISOS = PERMISOS.flatMap((g) => g.items.map(([id]) => id));
 
+// Roles de fábrica. Se pueden editar y crear más desde Inicio → Usuarios (se guardan en la base de datos).
+// El Administrador es fijo: siempre tiene todos los permisos y no se puede borrar.
 export const ROLES = [
-  { id: 'admin', nombre: 'Administrador', icono: '👑', permisos: TODOS_PERMISOS },
+  { id: 'admin', nombre: 'Administrador', icono: '👑', permisos: TODOS_PERMISOS, fijo: true },
   { id: 'cajero', nombre: 'Cajero', icono: '💵', permisos: ['tomar', 'pedidos', 'cobrar', 'cuentas', 'cierre', 'compras', 'inventario'] },
   { id: 'vendedor', nombre: 'Vendedor', icono: '🧾', permisos: ['tomar', 'pedidos', 'cobrar', 'cuentas'] },
   { id: 'preparacion', nombre: 'Preparación', icono: '🍧', permisos: ['pedidos'] },
 ];
-export const rolDe = (id) => ROLES.find((r) => r.id === id) || ROLES[2];
+// Limpia una lista de roles: quita permisos que no existen y garantiza el Administrador con todo
+export function normalizarRoles(lista) {
+  const roles = (Array.isArray(lista) && lista.length ? lista : ROLES)
+    .filter((r) => r && r.id)
+    .map((r) => ({ id: String(r.id), nombre: String(r.nombre || r.id), icono: String(r.icono || '🎭'),
+      permisos: [...new Set((r.permisos || []).filter((p) => TODOS_PERMISOS.includes(p)))], ...(r.fijo ? { fijo: true } : {}) }));
+  const adm = roles.find((r) => r.id === 'admin');
+  if (adm) { adm.permisos = [...TODOS_PERMISOS]; adm.fijo = true; } else roles.unshift({ ...ROLES[0], permisos: [...TODOS_PERMISOS] });
+  return roles;
+}
+export const rolDe = (id, roles = ROLES) => roles.find((r) => r.id === id) || roles.find((r) => r.id === 'vendedor') || { id: 'sin-rol', nombre: 'Sin rol', icono: '❔', permisos: [] };
 // Permisos efectivos: los propios del usuario (si los personalizaron) o los de su rol
-export const permisosDe = (u) => (Array.isArray(u?.permisos) ? u.permisos : rolDe(u?.rol).permisos).filter((p) => TODOS_PERMISOS.includes(p));
+export const permisosDe = (u, roles = ROLES) => (Array.isArray(u?.permisos) ? u.permisos : rolDe(u?.rol, roles).permisos).filter((p) => TODOS_PERMISOS.includes(p));

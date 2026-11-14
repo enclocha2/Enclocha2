@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sesion } from './_lib/auth.js';
+import gastosFijos from './_lib/gastosfijos.js';
+import presupuesto from './_lib/presupuesto.js';
 import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, moverStock } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '../catalog.js';
 
@@ -38,7 +40,13 @@ async function validarInventario(b) {
 }
 const entrada = (inv, signo, extra) => inv && moverStock({ [inv.id]: signo * inv.cantidad }, extra);
 
+// Vercel Hobby permite máximo 12 funciones: /api/compras?r=gastosfijos y ?r=presupuesto se atienden aquí
+const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');
+
 export default async function handler(req, res) {
+  const r = ruta(req);
+  if (r === 'gastosfijos') return gastosFijos(req, res);
+  if (r === 'presupuesto') return presupuesto(req, res);
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });

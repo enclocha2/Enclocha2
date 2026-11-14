@@ -172,8 +172,8 @@
         const { compras } = await api(`/api/compras?desde=${desde}&hasta=${hasta}`);
         const totalCompras = compras.reduce((s, c) => s + c.valor, 0);
         let fijos = 0;
-        if (modo === 'mes') { const { pagos } = await api(`/api/gastosfijos?mes=${desde.slice(0, 7)}`); fijos = pagos.reduce((s, p) => s + p.valor, 0); }
-        else { const { porMes } = await api(`/api/gastosfijos?anio=${desde.slice(0, 4)}`); fijos = Object.values(porMes).flat().reduce((s, p) => s + p.valor, 0); }
+        if (modo === 'mes') { const { pagos } = await api(`/api/compras?r=gastosfijos&mes=${desde.slice(0, 7)}`); fijos = pagos.reduce((s, p) => s + p.valor, 0); }
+        else { const { porMes } = await api(`/api/compras?r=gastosfijos&anio=${desde.slice(0, 4)}`); fijos = Object.values(porMes).flat().reduce((s, p) => s + p.valor, 0); }
         const util = ventas - totalCompras - fijos;
         const margen = ventas ? Math.round((util / ventas) * 100) : 0;
         $('#balanceHint').textContent = '(gastos fijos = los pagos registrados)';
@@ -302,7 +302,7 @@
     async function cargarMensual() {
       const mes = ancla.slice(0, 7);
       try {
-        const d = await api(`/api/estadisticas?mes=${mes}&meses=12`);
+        const d = await api(`/api/ventas?r=estadisticas&mes=${mes}&meses=12`);
         pintarMensual(d);
       } catch (e) { toast(e.message, true); }
     }

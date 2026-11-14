@@ -90,7 +90,7 @@
     async function cargar() {
       $('#lblMes').textContent = nombreDelMes(mes);
       $('#sig').disabled = mes >= hoy().slice(0, 7);
-      try { datos = await api(`/api/presupuesto?mes=${mes}`); pintar(); }
+      try { datos = await api(`/api/compras?r=presupuesto&mes=${mes}`); pintar(); }
       catch (e) { toast(e.message, true); }
     }
 
@@ -159,7 +159,7 @@
     $('#mCancelar').addEventListener('click', () => $('#modal').classList.remove('show'));
     $('#mGuardar').addEventListener('click', async () => {
       try {
-        await api('/api/presupuesto', { method: 'PUT', body: JSON.stringify({ mes, monto: $('#mMonto').value, nota: $('#mNota').value, repetir: $('#mRepetir').checked }) });
+        await api('/api/compras?r=presupuesto', { method: 'PUT', body: JSON.stringify({ mes, monto: $('#mMonto').value, nota: $('#mNota').value, repetir: $('#mRepetir').checked }) });
         $('#modal').classList.remove('show'); toast('✅ Presupuesto guardado'); cargar();
       } catch (e) { $('#mError').textContent = e.message; }
     });
