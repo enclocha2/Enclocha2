@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v12)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v13)
 
 | Ruta | Qué es |
 |---|---|
@@ -106,7 +106,9 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
   Sugeridos: aros/gusanos bolsa 100 · paleta sandía 50 · paleta chamoy 40 · bandera 520 · pitillos 250 · cervezas caja 30 / media 15 · Corona y Coronita caja 24 · sodas paca 24 / 48.
 
 ## Domicilios (clientes)
-- Actívalos en Productos → 🛵 Domicilios: valor del domicilio, pedido mínimo, solo en horario, WhatsApp y mensaje. Ahí está el link para compartir.
+- Actívalos en Productos → 🛵 Domicilios: ubicación del negocio, **valor por distancia** (ej. hasta 1 km $2.000, hasta 2 km $3.000…), barrios con precio fijo (opcional), pedido mínimo, solo en horario, WhatsApp y mensaje. Ahí está el link para compartir.
+- El cliente **primero comparte su ubicación**: la app calcula la distancia (en línea recta) y el valor del domicilio. Si está más lejos del último rango, sale "fuera de cobertura". Si no quiere compartirla, escoge su barrio de la lista. Sin una de las dos no puede pedir (el servidor también lo valida).
+- En Pedidos sale "🗺️ Cómo llegar" (Google Maps directo a la ubicación del cliente) y la distancia.
 - Los clientes solo ven `/domicilio`: arman sus granizados, ponen dirección y pagan en efectivo (con cuánto pagan) o transferencia (ven el QR).
 - El pedido llega a Pedidos con sonido y la etiqueta 🛵 DOMICILIO. Flujo: Preparar → 🛵 Salió → Entregado. El cliente ve el estado en su página.
 - Límite de 5 pedidos cada 30 min por conexión para evitar abusos.

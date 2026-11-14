@@ -204,6 +204,7 @@
       const domBox = esDom ? `<div class="dom-box">
           📞 <a href="tel:${esc(d.telefono)}">${esc(d.telefono)}</a> · <a href="https://wa.me/57${esc(d.telefono)}" target="_blank" rel="noopener">WhatsApp</a><br>
           📍 <b>${esc(d.direccion)}</b>${d.barrio ? ' · ' + esc(d.barrio) : ''}${d.referencia ? `<br>🏠 ${esc(d.referencia)}` : ''}
+          ${d.ubicacion ? `<br>🗺️ <a href="https://www.google.com/maps/dir/?api=1&destination=${d.ubicacion.lat},${d.ubicacion.lng}" target="_blank" rel="noopener">Cómo llegar</a> · <a href="https://www.google.com/maps?q=${d.ubicacion.lat},${d.ubicacion.lng}" target="_blank" rel="noopener">Ver en mapa</a>${d.km != null ? ` · ${String(d.km).replace('.', ',')} km` : ''}` : d.zona ? `<br>🗺️ Zona: ${esc(d.zona)}` : ''}
           ${d.nota ? `<br>📝 ${esc(d.nota)}` : ''}
           <br>${p.pago?.metodo === 'transferencia' ? '📲 Paga por transferencia' : `💵 Paga en efectivo${d.pagaCon ? ` con <b>${pesos(d.pagaCon)}</b> → llevar vueltas de <b>${pesos(d.pagaCon - p.total)}</b>` : ''}`}
         </div>` : '';

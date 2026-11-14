@@ -362,3 +362,18 @@ export function faltantes(deltas, stock, inventario) {
   return out;
 }
 export const textoFaltantes = (f) => f.map((x) => x.hay > 0 ? `${x.nombre} (solo quedan ${x.hay})` : `${x.nombre} (agotado)`).join(', ');
+
+// ---------- Domicilios: distancia y tarifa ----------
+// Distancia en línea recta (km) entre dos puntos {lat, lng}
+export function distanciaKm(a, b) {
+  const R = 6371, rad = (x) => (x * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+// tarifas = [{ hastaKm, valor }] ordenadas. Devuelve el valor o null si está fuera de cobertura.
+export function tarifaPorKm(km, tarifas) {
+  const t = [...(tarifas || [])].sort((x, y) => x.hastaKm - y.hastaKm).find((x) => km <= x.hastaKm);
+  return t ? t.valor : null;
+}
+export const coordValida = (p) => p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180 && !(+p.lat === 0 && +p.lng === 0);

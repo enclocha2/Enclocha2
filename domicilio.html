@@ -33,6 +33,18 @@
     <section class="card seguimiento" id="seguimiento" hidden></section>
 
     <div id="formulario" hidden>
+      <!-- Ubicación primero -->
+      <section class="card ubi-card" id="ubiCard">
+        <h2>📍 Primero, ¿dónde estás?</h2>
+        <p class="hint" style="margin-top:-4px">Con tu ubicación calculamos el valor del domicilio y el domiciliario llega más fácil.</p>
+        <button class="btn alt" id="btnUbi" type="button">📍 Usar mi ubicación</button>
+        <div id="ubiRes"></div>
+        <div id="zonasBox" class="campo" hidden style="margin-top:12px">
+          <span id="zonasLbl">¿Prefieres no compartirla? Escoge tu barrio:</span>
+          <select class="field" id="selZona"><option value="">— Escoge tu barrio —</option></select>
+        </div>
+      </section>
+
       <!-- Armar -->
       <section class="card">
         <h2>🍧 Arma tu granizado <span class="para" id="numG">#1</span></h2>
@@ -108,6 +120,7 @@
     const leerLS = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
 
     let info, cfg, item, carrito = [], metodo = null;
+    let envio = null; // { valor, km, zona, ubicacion }
     const nuevo = () => ({ tipo: 'granizado', tamano: null, sabores: [], incluidos: Object.fromEntries(GRUPOS.map((g) => [g.id, null])), adicionales: {}, cantidad: 1, nota: '' });
     const armar = (d) => { try { return armarItem(d, cfg); } catch { return null; } };
     const subtotalCarrito = () => carrito.reduce((s, d) => s + (armar(d)?.subtotal || 0), 0);
@@ -120,15 +133,56 @@
       cfg = { tamanos: info.menu.tamanos, sabores: info.menu.sabores, toppings: info.menu.toppings, productos: [], categorias: [] };
       $('#estadoTienda').className = 'estado-tienda ' + (info.abierto ? 'abierta' : 'cerrada');
       $('#estadoTienda').innerHTML = info.abierto
-        ? `🟢 Estamos recibiendo pedidos${info.horario ? ` · hoy ${info.horario}` : ''}${info.domicilio.costo ? ` · domicilio ${pesos(info.domicilio.costo)}` : ''}`
+        ? `🟢 Estamos recibiendo pedidos${info.horario ? ` · hoy ${info.horario}` : ''}${info.domicilio.maxKm ? ` · llevamos hasta ${info.domicilio.maxKm.toLocaleString('es-CO')} km` : ''}`
         : `🔴 ${esc(info.motivo)}`;
       if (info.domicilio.mensaje && info.abierto) $('#estadoTienda').innerHTML += `<br><span class="hint">${esc(info.domicilio.mensaje)}</span>`;
       $('#formulario').hidden = !info.abierto;
       const yo = leerLS('dom-cliente');
       if (yo) for (const k of ['cliente', 'telefono', 'barrio', 'direccion', 'referencia']) $('#' + k).value = yo[k] || '';
+      // Ubicación / barrios
+      const d = info.domicilio;
+      $('#btnUbi').hidden = !d.porUbicacion;
+      if (d.zonas?.length) {
+        $('#zonasBox').hidden = false;
+        if (!d.porUbicacion) $('#zonasLbl').textContent = 'Escoge tu barrio:';
+        $('#selZona').innerHTML += d.zonas.map((z) => `<option value="${esc(z.nombre)}">${esc(z.nombre)} · ${pesos(z.valor)}</option>`).join('');
+      }
       item = nuevo();
       render();
     }
+
+    // ---------- Ubicación → valor del domicilio ----------
+    function pintarUbi(html, tipo = '') { $('#ubiRes').innerHTML = html ? `<div class="ubi-res ${tipo}">${html}</div>` : ''; }
+    $('#btnUbi').addEventListener('click', () => {
+      if (!navigator.geolocation) return pintarUbi('Tu celular no permite compartir la ubicación. Escoge tu barrio.', 'mal');
+      const btn = $('#btnUbi'); btn.disabled = true; btn.textContent = '📍 Buscando tu ubicación...';
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const u = { lat: pos.coords.latitude, lng: pos.coords.longitude, precision: pos.coords.accuracy };
+        try {
+          const r = await fetch(`/api/publico?lat=${u.lat}&lng=${u.lng}`, { cache: 'no-store' });
+          const c = await r.json();
+          if (!r.ok) { envio = null; pintarUbi(esc(c.error), 'mal'); }
+          else {
+            envio = { valor: c.valor, km: c.km, ubicacion: u };
+            $('#selZona').value = '';
+            pintarUbi(`✅ Estás a <b>${c.km.toLocaleString('es-CO')} km</b> · domicilio <b>${pesos(c.valor)}</b>${u.precision > 300 ? '<br><span class="hint">La ubicación salió aproximada; revisa bien tu dirección abajo.</span>' : ''}`, 'ok');
+          }
+        } catch { pintarUbi('No pudimos calcular el domicilio. Intenta de nuevo.', 'mal'); }
+        btn.disabled = false; btn.textContent = envio ? '📍 Volver a tomar mi ubicación' : '📍 Usar mi ubicación';
+        renderCarrito();
+      }, (err) => {
+        btn.disabled = false; btn.textContent = '📍 Usar mi ubicación';
+        const msg = err.code === 1 ? 'No diste permiso para ver tu ubicación. Actívalo en tu navegador' : 'No pudimos obtener tu ubicación';
+        pintarUbi(`${msg}${info.domicilio.zonas?.length ? ' o escoge tu barrio abajo.' : '.'}`, 'mal');
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    });
+    $('#selZona').addEventListener('change', (e) => {
+      const z = info.domicilio.zonas.find((x) => x.nombre === e.target.value);
+      envio = z ? { valor: z.valor, zona: z.nombre } : null;
+      if (z) { pintarUbi(`✅ Barrio <b>${esc(z.nombre)}</b> · domicilio <b>${pesos(z.valor)}</b>`, 'ok'); if (!$('#barrio').value) $('#barrio').value = z.nombre; }
+      else pintarUbi('');
+      renderCarrito();
+    });
 
     // ---------- Armar granizado ----------
     const AG = () => info.agotados || { tamanos: [], toppings: [] };
@@ -173,16 +227,16 @@
           ${a.adicionales.length ? '<br>Adicionales: ' + a.adicionales.map((x) => `${x.cantidad}× ${esc(x.nombre)}`).join(', ') : ''}
           ${a.nota ? '<br>📝 ' + esc(a.nota) : ''}</div><button class="x" data-del="${i}">✕</button></div>`;
       }).join('') : '<div class="empty">Aún no has agregado granizados</div>';
-      const sub = subtotalCarrito(), costo = info.domicilio.costo, total = sub + (carrito.length ? costo : 0);
+      const sub = subtotalCarrito(), costo = envio?.valor ?? 0, total = sub + (carrito.length && envio ? costo : 0);
       const falta = info.domicilio.minimo && sub < info.domicilio.minimo ? info.domicilio.minimo - sub : 0;
       $('#totales').innerHTML = carrito.length ? `
         <div class="fila"><span>Granizados</span><b>${pesos(sub)}</b></div>
-        <div class="fila"><span>🛵 Domicilio</span><b>${costo ? pesos(costo) : 'Gratis'}</b></div>
+        <div class="fila"><span>🛵 Domicilio${envio?.km != null ? ` (${envio.km.toLocaleString('es-CO')} km)` : envio?.zona ? ` (${esc(envio.zona)})` : ''}</span><b>${envio ? pesos(costo) : '<a href="#ubiCard" class="falta-ubi">📍 Falta tu ubicación</a>'}</b></div>
         <div class="total"><span>Total</span><span>${pesos(total)}</span></div>
         ${falta ? `<div class="warnbar">El pedido mínimo es ${pesos(info.domicilio.minimo)}. Te faltan ${pesos(falta)}.</div>` : ''}` : '';
       renderPago(total);
-      $('#pedir').disabled = !carrito.length || !!falta || !metodo;
-      $('#pedir').textContent = !carrito.length ? '🛵 Agrega al menos un granizado' : !metodo ? '🛵 Escoge cómo vas a pagar' : `🛵 Pedir domicilio · ${pesos(total)}`;
+      $('#pedir').disabled = !carrito.length || !!falta || !metodo || !envio;
+      $('#pedir').textContent = !envio ? '📍 Primero comparte tu ubicación (arriba)' : !carrito.length ? '🛵 Agrega al menos un granizado' : !metodo ? '🛵 Escoge cómo vas a pagar' : `🛵 Pedir domicilio · ${pesos(total)}`;
     }
 
     function renderPago(total) {
@@ -232,13 +286,14 @@
         const r = await fetch('/api/publico', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...datos, nota: $('#notaPedido').value, items: carrito, web: $('#web').value,
+            ubicacion: envio?.ubicacion || null, zona: envio?.zona || null,
             pago: { metodo, pagaCon: Number($('#pagaCon')?.value) || 0 } }),
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'No se pudo enviar el pedido');
         guardarLS('dom-cliente', datos);
         guardarLS('dom-pedido', { id: d.id, t: d.token, numero: d.numero, total: d.total });
-        carrito = []; item = nuevo(); render();
+        carrito = []; item = nuevo(); envio = null; pintarUbi(''); $('#selZona').value = ''; $('#btnUbi').textContent = '📍 Usar mi ubicación'; render();
         window.scrollTo({ top: 0, behavior: 'smooth' });
         seguir();
       } catch (err) { $('#error').textContent = err.message; renderCarrito(); }

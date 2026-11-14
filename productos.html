@@ -108,12 +108,28 @@
       <div class="form-compra" style="margin-top:14px">
         <label class="campo ancho row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="domActivo"><span></span></span><b>Recibir pedidos a domicilio</b></label>
         <label class="campo ancho row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="domHorario"><span></span></span>Solo en horario de atención (fuera de horario la página dice "cerrado")</label>
-        <label class="campo"><span>Valor del domicilio</span><div class="precio"><span>$</span><input class="field" id="domCosto" type="number" min="0" step="500" inputmode="numeric"></div></label>
         <label class="campo"><span>Pedido mínimo (granizados)</span><div class="precio"><span>$</span><input class="field" id="domMinimo" type="number" min="0" step="1000" inputmode="numeric"></div></label>
         <label class="campo"><span>WhatsApp del negocio (para comprobantes)</span><input class="field" id="domWhatsapp" inputmode="tel" placeholder="3001234567"></label>
         <label class="campo ancho"><span>Mensaje para los clientes (opcional)</span><input class="field" id="domMensaje" maxlength="200" placeholder="Ej: Domicilios solo en el barrio X y alrededores · tiempo aprox. 30 min"></label>
       </div>
-      <button class="btn" id="domGuardar" style="margin-top:12px">💾 Guardar ajustes de domicilio</button>
+      <h3 class="sub">📍 Ubicación del negocio</h3>
+      <p class="hint" style="margin-top:-4px">Desde aquí se mide la distancia a cada cliente. Lo más fácil: estando en el local, toca "Usar mi ubicación actual". O en Google Maps mantén presionado el local, copia los números (ej: 6.2442, -75.5812) y pégalos.</p>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn alt" id="domUbiActual" type="button" style="width:auto">📍 Usar mi ubicación actual</button>
+        <input class="field" id="domCoords" placeholder="lat, lng  (ej: 6.2442, -75.5812)" style="flex:1;min-width:220px">
+        <a class="mini" id="domVerMapa" target="_blank" rel="noopener" hidden>🗺️ Ver en mapa</a>
+      </div>
+
+      <h3 class="sub">🛵 Valor del domicilio según la distancia</h3>
+      <p class="hint" style="margin-top:-4px">La distancia es en línea recta (por calles suele ser un poco más). Más allá de la última distancia, la página dice "fuera de cobertura".</p>
+      <div id="domTarifas"></div>
+      <button class="mini" id="domAddTarifa" type="button">+ Agregar rango</button>
+
+      <h3 class="sub">🏘️ Barrios con precio fijo <span class="hint">(opcional · para clientes que no compartan su ubicación)</span></h3>
+      <div id="domZonas"></div>
+      <button class="mini" id="domAddZona" type="button">+ Agregar barrio</button>
+
+      <button class="btn" id="domGuardar" style="margin-top:16px">💾 Guardar ajustes de domicilio</button>
     </section>
 
     <!-- QR -->
@@ -364,7 +380,11 @@
       qr = await api('/api/ajustes');
       const d = qr.domicilio || {};
       $('#domActivo').checked = !!d.activo; $('#domHorario').checked = d.soloEnHorario !== false;
-      $('#domCosto').value = d.costo || ''; $('#domMinimo').value = d.minimo || '';
+      $('#domMinimo').value = d.minimo || '';
+      dom.local = d.local || null;
+      dom.tarifas = d.tarifas?.length ? d.tarifas.map((t) => ({ ...t })) : [{ hastaKm: 1, valor: 2000 }, { hastaKm: 2, valor: 3000 }, { hastaKm: 3, valor: 4000 }, { hastaKm: 5, valor: 6000 }];
+      dom.zonas = (d.zonas || []).map((z) => ({ ...z }));
+      pintarDom();
       $('#domWhatsapp').value = d.whatsapp || ''; $('#domMensaje').value = d.mensaje || '';
       $('#qrTexto').value = qr.qrTexto || '';
       qrNuevo = undefined; pintarQR();
@@ -412,6 +432,52 @@
     });
 
     // ---------- Domicilios ----------
+    var dom = { local: null, tarifas: [], zonas: [] };
+    function pintarDom() {
+      $('#domCoords').value = dom.local ? `${dom.local.lat}, ${dom.local.lng}` : '';
+      $('#domVerMapa').hidden = !dom.local;
+      if (dom.local) $('#domVerMapa').href = `https://www.google.com/maps?q=${dom.local.lat},${dom.local.lng}`;
+      let desde = 0;
+      $('#domTarifas').innerHTML = dom.tarifas.map((t, k) => { const fila = `<div class="fila">
+          <span class="hint" style="min-width:90px">De ${String(desde).replace('.', ',')} a</span>
+          <input class="field dia" style="max-width:90px" type="number" min="0" step="0.5" data-tk="${k}" data-tc="hastaKm" value="${t.hastaKm}"><span class="hint">km</span>
+          <span class="hint">→</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="500" data-tk="${k}" data-tc="valor" value="${t.valor}"></div>
+          <button class="del" data-tdel="${k}" type="button">🗑</button></div>`; desde = t.hastaKm; return fila; }).join('') || '<p class="hint">Sin rangos: solo se podrá pedir escogiendo barrio.</p>';
+      $('#domZonas').innerHTML = dom.zonas.map((z, k) => `<div class="fila">
+          <input class="field" data-zk="${k}" data-zc="nombre" value="${esc(z.nombre)}" maxlength="50" placeholder="Barrio" style="flex:1">
+          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="500" data-zk="${k}" data-zc="valor" value="${z.valor}"></div>
+          <button class="del" data-zdel="${k}" type="button">🗑</button></div>`).join('') || '<p class="hint">Sin barrios.</p>';
+    }
+    $('#t-domicilios').addEventListener('input', (e) => {
+      const el = e.target;
+      if (el.dataset.tk !== undefined) dom.tarifas[el.dataset.tk][el.dataset.tc] = Number(el.value) || 0;
+      if (el.dataset.zk !== undefined) dom.zonas[el.dataset.zk][el.dataset.zc] = el.dataset.zc === 'valor' ? Number(el.value) || 0 : el.value;
+      if (el.id === 'domCoords') {
+        const m = el.value.match(/(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)/);
+        dom.local = m ? { lat: Number(m[1]), lng: Number(m[2]) } : null;
+        $('#domVerMapa').hidden = !dom.local;
+        if (dom.local) $('#domVerMapa').href = `https://www.google.com/maps?q=${dom.local.lat},${dom.local.lng}`;
+      }
+    });
+    $('#t-domicilios').addEventListener('change', (e) => { if (e.target.dataset.tc === 'hastaKm') { dom.tarifas.sort((a, b) => a.hastaKm - b.hastaKm); pintarDom(); } });
+    $('#t-domicilios').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.tdel !== undefined) { dom.tarifas.splice(Number(b.dataset.tdel), 1); pintarDom(); }
+      if (b.dataset.zdel !== undefined) { dom.zonas.splice(Number(b.dataset.zdel), 1); pintarDom(); }
+    });
+    $('#domAddTarifa').addEventListener('click', () => { const u = dom.tarifas.at(-1); dom.tarifas.push({ hastaKm: (u?.hastaKm || 0) + 1, valor: (u?.valor || 2000) + 1000 }); pintarDom(); });
+    $('#domAddZona').addEventListener('click', () => { dom.zonas.push({ nombre: '', valor: 3000 }); pintarDom(); $('#domZonas .fila:last-child input').focus(); });
+    $('#domUbiActual').addEventListener('click', () => {
+      if (!navigator.geolocation) return toast('Este equipo no permite tomar la ubicación', true);
+      const b = $('#domUbiActual'); b.disabled = true; b.textContent = '📍 Buscando...';
+      navigator.geolocation.getCurrentPosition((p) => {
+        dom.local = { lat: Math.round(p.coords.latitude * 1e6) / 1e6, lng: Math.round(p.coords.longitude * 1e6) / 1e6 };
+        pintarDom(); b.disabled = false; b.textContent = '📍 Usar mi ubicación actual';
+        toast(`📍 Ubicación tomada (precisión ~${Math.round(p.coords.accuracy)} m). Revísala en el mapa y guarda.`);
+      }, () => { b.disabled = false; b.textContent = '📍 Usar mi ubicación actual'; toast('No se pudo tomar la ubicación. Pega las coordenadas de Google Maps.', true); },
+      { enableHighAccuracy: true, timeout: 15000 });
+    });
+
     const link = `${location.origin}/domicilio`;
     $('#linkDom').textContent = link; $('#abrirLink').href = link;
     $('#copiarLink').addEventListener('click', async () => {
@@ -421,9 +487,12 @@
     $('#domGuardar').addEventListener('click', async () => {
       try {
         await api('/api/ajustes', { method: 'PUT', body: JSON.stringify({ domicilio: {
-          activo: $('#domActivo').checked, soloEnHorario: $('#domHorario').checked, costo: $('#domCosto').value,
-          minimo: $('#domMinimo').value, whatsapp: $('#domWhatsapp').value, mensaje: $('#domMensaje').value } }) });
-        toast('✅ Ajustes de domicilio guardados');
+          activo: $('#domActivo').checked, soloEnHorario: $('#domHorario').checked,
+          minimo: $('#domMinimo').value, whatsapp: $('#domWhatsapp').value, mensaje: $('#domMensaje').value,
+          local: dom.local, tarifas: dom.tarifas, zonas: dom.zonas.filter((z) => z.nombre.trim()) } }) });
+        if ($('#domActivo').checked && !dom.local && !dom.zonas.some((z) => z.nombre.trim())) toast('⚠️ Guardado, pero falta la ubicación del negocio (o barrios): los clientes no podrán pedir', true);
+        else toast('✅ Ajustes de domicilio guardados');
+        cargarQR();
       } catch (err) { toast(err.message, true); }
     });
 

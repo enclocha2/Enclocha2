@@ -1,7 +1,7 @@
 import { usuarioDe, esAdmin } from './_lib/auth.js';
 import { leerAjustes, guardarAjustes } from './_lib/store.js';
 
-export const DOM_DEFECTO = { activo: false, soloEnHorario: true, costo: 0, minimo: 0, mensaje: '', whatsapp: '' };
+export const DOM_DEFECTO = { activo: false, soloEnHorario: true, minimo: 0, mensaje: '', whatsapp: '', local: null, tarifas: [], zonas: [] };
 const MAX_QR = 900 * 1024; // ~900 KB (la imagen se reduce en el navegador antes de subirla)
 
 export default async function handler(req, res) {
@@ -34,13 +34,20 @@ export default async function handler(req, res) {
       if ('qrTexto' in body) nuevo.qrTexto = String(body.qrTexto || '').slice(0, 160).trim();
       if (body.domicilio && typeof body.domicilio === 'object') {
         const d = body.domicilio;
+        const lat = Number(d.local?.lat), lng = Number(d.local?.lng);
         nuevo.domicilio = {
           activo: !!d.activo,
           soloEnHorario: d.soloEnHorario !== false,
-          costo: Math.max(0, Math.round(Number(d.costo) || 0)),
           minimo: Math.max(0, Math.round(Number(d.minimo) || 0)),
           mensaje: String(d.mensaje || '').slice(0, 200).trim(),
           whatsapp: String(d.whatsapp || '').replace(/[^0-9]/g, '').slice(0, 15),
+          local: Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat || lng) ? { lat, lng } : null,
+          tarifas: (Array.isArray(d.tarifas) ? d.tarifas : []).slice(0, 12)
+            .map((t) => ({ hastaKm: Math.round(Math.max(0, Number(t.hastaKm) || 0) * 10) / 10, valor: Math.max(0, Math.round(Number(t.valor) || 0)) }))
+            .filter((t) => t.hastaKm > 0).sort((a, b) => a.hastaKm - b.hastaKm),
+          zonas: (Array.isArray(d.zonas) ? d.zonas : []).slice(0, 100)
+            .map((z) => ({ nombre: String(z.nombre || '').trim().slice(0, 50), valor: Math.max(0, Math.round(Number(z.valor) || 0)) }))
+            .filter((z) => z.nombre),
         };
       }
 
