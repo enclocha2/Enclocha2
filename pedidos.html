@@ -40,14 +40,8 @@
     </div>
   </main>
 
-  <div class="overlay" id="overlay">
-    <div class="box">
-      <div style="font-size:3rem">🔔</div>
-      <h2>Activar sonido</h2>
-      <p>El navegador exige un toque para poder sonar cuando llegue un pedido.</p>
-      <button class="btn" id="activar">Activar y abrir pedidos</button>
-    </div>
-  </div>
+  <!-- Aviso pequeño (no bloquea): solo sale si llega un pedido y el navegador aún no deja sonar -->
+  <button class="aviso-sonido" id="avisoSonido" hidden>🔇 Toca aquí para activar el sonido</button>
 
   <!-- Cobro por transferencia: primero el QR -->
   <div class="modal" id="modalQR">
@@ -99,17 +93,32 @@
       o.start(ctx.currentTime + inicio); o.stop(ctx.currentTime + inicio + dur + 0.05);
     }
     function sonar() {
-      if (!sonidoOn || !ctx) return;
-      if (ctx.state === 'suspended') ctx.resume();
+      if (!sonidoOn) return;
+      if (!ctx || ctx.state === 'suspended') { $('#avisoSonido').hidden = false; navigator.vibrate?.([200, 100, 200]); return; }
       [0, 0.9].forEach((t) => { tono(1046, t, 0.45); tono(784, t + 0.25, 0.6); });
       navigator.vibrate?.([200, 100, 200]);
     }
-    $('#activar').addEventListener('click', () => {
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
-      tono(880, 0, 0.2, 0.2);
-      $('#overlay').remove();
-      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-    });
+    // El navegador solo deja sonar después de un toque: se activa en silencio con el primer
+    // toque/clic/tecla en la página, sin ventanas que estorben.
+    function desbloquearSonido() {
+      try {
+        if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
+      } catch {}
+      if (ctx && ctx.state !== 'suspended') {
+        ['pointerdown', 'keydown'].forEach((ev) => document.removeEventListener(ev, desbloquearSonido, true));
+        $('#avisoSonido').hidden = true;
+      }
+      // Permiso de notificaciones: se pide UNA sola vez en este dispositivo (nunca más, acepte o no)
+      try {
+        if ('Notification' in window && Notification.permission === 'default' && !localStorage.getItem('notifPreguntado')) {
+          localStorage.setItem('notifPreguntado', '1');
+          Notification.requestPermission();
+        }
+      } catch {}
+    }
+    ['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, desbloquearSonido, true));
+    $('#avisoSonido').addEventListener('click', () => { desbloquearSonido(); if (ctx) tono(880, 0, 0.2, 0.2); });
     const pintarSonido = () => ($('#btnSonido').textContent = sonidoOn ? '🔔 ON' : '🔕 OFF');
     $('#btnSonido').addEventListener('click', () => {
       sonidoOn = !sonidoOn;
