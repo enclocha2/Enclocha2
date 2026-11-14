@@ -860,3 +860,33 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
 .pres-mini.alerta .pres-barra i { background: linear-gradient(90deg, #ffb020, #ff8a3d); }
 .pres-mini.agotado .pres-barra i { background: linear-gradient(90deg, #ff4d6d, #ff3fd1); }
 .periodo button.mini { width: auto; padding: 0 12px; }
+
+.sin-mover .inv-acts [data-mov], .sin-mover #btnConteo { display: none; }
+.sin-permiso { text-align: center; padding: 30px 20px; }
+
+/* ---------- Usuarios y permisos ---------- */
+.u-cel { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-title); font-weight: 800; background: var(--grad); color: #fff; flex: 0 0 38px; }
+.tabla tr.inactivo td { opacity: .5; }
+.tag-yo { background: var(--cyan); color: #120726; border-radius: 6px; padding: 0 6px; font-size: .72rem; font-weight: 900; }
+.tag-personal { background: rgba(255,176,32,.16); color: #ffcf70; border-radius: 6px; padding: 1px 6px; font-size: .72rem; font-weight: 800; }
+.rol-tag { display: inline-block; border-radius: 999px; padding: 4px 10px; font-weight: 800; font-size: .82rem; white-space: nowrap; border: 1px solid; }
+.rol-admin { background: rgba(255,63,209,.14); border-color: rgba(255,63,209,.5); color: #ffb3ee; }
+.rol-cajero { background: rgba(34,211,138,.12); border-color: rgba(34,211,138,.45); color: #8ff5c6; }
+.rol-vendedor { background: rgba(51,225,255,.1); border-color: rgba(51,225,255,.45); color: #9ff0ff; }
+.rol-preparacion { background: rgba(255,176,32,.12); border-color: rgba(255,176,32,.45); color: #ffcf70; }
+.roles-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+@media (max-width: 560px) { .roles-grid { grid-template-columns: 1fr 1fr; } }
+.roles-grid .opt { padding: 10px 6px; }
+.roles-grid .opt strong { font-size: .92rem; }
+.permisos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 640px) { .permisos-grid { grid-template-columns: 1fr; } }
+.perm-grupo { display: grid; gap: 4px; align-content: start; }
+.perm-grupo > span { font-size: .72rem; text-transform: uppercase; letter-spacing: .6px; color: #9ff0ff; font-weight: 800; margin-bottom: 2px; }
+.perm { display: flex; align-items: center; gap: 8px; font-size: .85rem; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.03); cursor: pointer; }
+.perm.on { border-color: rgba(34,211,138,.5); background: rgba(34,211,138,.08); }
+.perm.bloq { cursor: default; opacity: .75; }
+.perm input { accent-color: #22d38a; }
+.btn.peligro { color: #ff8fa3; border-color: rgba(255,77,109,.45); }
+.btn.peligro.confirmar { background: var(--danger); color: #fff; }
+.roles-tabla .grupo-fila td { color: #9ff0ff; font-weight: 800; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; background: rgba(255,255,255,.03); }

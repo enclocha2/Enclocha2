@@ -50,15 +50,51 @@
 
     <!-- Accesos -->
     <section id="accesos"></section>
+
+    <!-- Usuarios (solo con permiso "usuarios") -->
+    <section id="usuarios" class="usuarios-sec" hidden>
+      <div class="row" style="justify-content:space-between;align-items:center;margin-top:22px">
+        <h3 class="sub" style="margin:0">👥 Usuarios, roles y permisos</h3>
+        <button class="btn alt" id="uNuevo" style="width:auto;padding:10px 16px">+ Nuevo usuario</button>
+      </div>
+      <div class="card" style="margin-top:10px"><div class="tabla-wrap"><table class="tabla" id="uTabla"></table></div></div>
+      <details class="card plegable"><summary><b>🎭 ¿Qué puede hacer cada rol?</b></summary><div class="tabla-wrap"><table class="tabla roles-tabla" id="uRoles"></table></div></details>
+    </section>
   </main>
 
+  <!-- Crear / editar usuario -->
+  <div class="modal" id="uModal">
+    <div class="box" style="max-width:620px">
+      <h3 id="uTitulo">Nuevo usuario</h3>
+      <div class="form-compra" style="grid-template-columns:1fr 1fr">
+        <label class="campo"><span>Usuario (para entrar)</span><input class="field" id="uUsuario" maxlength="30" autocomplete="off" placeholder="ej: Laura"></label>
+        <label class="campo"><span>Nombre</span><input class="field" id="uNombre" maxlength="50" placeholder="Nombre para mostrar"></label>
+        <label class="campo ancho"><span id="uClaveLbl">Contraseña</span><input class="field" id="uClave" type="text" autocomplete="new-password" maxlength="60" placeholder="Mínimo 4 caracteres"></label>
+      </div>
+      <div class="campo"><span>Rol</span><div class="roles-grid" id="uRolesSel"></div></div>
+      <label class="campo row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="uPersonal"><span></span></span>Personalizar permisos de esta persona</label>
+      <div id="uPermisos" class="permisos-grid"></div>
+      <label class="campo row" id="uActivoBox" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="uActivo"><span></span></span>Usuario activo (puede entrar)</label>
+      <div class="error" id="uError"></div>
+      <button class="btn" id="uGuardar">💾 Guardar</button>
+      <div class="row" style="gap:8px">
+        <button class="btn ghost" id="uCancelar" style="flex:1">Cancelar</button>
+        <button class="btn ghost peligro" id="uBorrar" style="flex:1">🗑 Borrar usuario</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
   <script type="module">
-    import { pesos, agruparCuentas, estadoStock } from '/catalog.js';
-    import { requerirSesion, avisoHorario, api, esc, traerPedidos, cadaTanto, SECCIONES_NAV } from '/sesion.js';
-    import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo } from '/fechas.js';
+    import { pesos, agruparCuentas, estadoStock, PERMISOS, ROLES, TODOS_PERMISOS } from '/catalog.js';
+    import { requerirSesion, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, SECCIONES_NAV, puede, permitido } from '/sesion.js';
+    import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo, fechaHora } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    const { usuario, admin } = await requerirSesion();
+    const { usuario } = await requerirSesion();
+    if (!puede('tomar')) document.querySelector('.a-tomar').remove();
+    if (!puede('pedidos', 'cobrar')) document.querySelector('.a-pedidos').remove();
+    if (!puede('ventas', 'cierre', 'reportes')) $('#numeros').remove();
 
     // ---------- Saludo y jornada ----------
     const h = new Date().getHours();
@@ -75,7 +111,7 @@
       '/productos#productos': 'Precios', '/productos#sabores': 'Disponibles', '/productos#domicilios': 'Link y ajustes', '/productos#qr': 'Transferencias',
     };
     $('#accesos').innerHTML = SECCIONES_NAV.map((g) => {
-      const items = g.items.filter((i) => i.href !== '/' && (admin || !i.admin));
+      const items = g.items.filter((i) => i.href !== '/' && i.href !== '/#usuarios' && permitido(i));
       return items.length ? `<h3 class="sub">${g.grupo}</h3><div class="accesos-grid">${items.map((i) => `
         <a href="${i.href}" class="acceso" data-href="${i.href}"><span class="ai">${i.ico}</span><b>${i.txt}</b><small>${DESC[i.href] || ''}</small><em class="cnt" hidden></em></a>`).join('')}</div>` : '';
     }).join('');
@@ -99,9 +135,9 @@
         const nuevos = ps.filter((p) => p.estado === 'nuevo').length;
         const prep = ps.filter((p) => p.estado === 'preparando' || p.estado === 'encamino').length;
         const suma = (f) => delDia.filter(f).reduce((s, p) => s + p.total, 0);
-        $('#cntPedidos').hidden = !nuevos; $('#cntPedidos').textContent = nuevos;
-        $('#sPedidos').textContent = nuevos || prep ? `${nuevos} nuevo${nuevos === 1 ? '' : 's'} · ${prep} en preparación` : 'Todo despachado ✨';
-        $('#numeros').innerHTML = `
+        if ($('#cntPedidos')) { $('#cntPedidos').hidden = !nuevos; $('#cntPedidos').textContent = nuevos; }
+        if ($('#sPedidos')) $('#sPedidos').textContent = nuevos || prep ? `${nuevos} nuevo${nuevos === 1 ? '' : 's'} · ${prep} en preparación` : 'Todo despachado ✨';
+        if ($('#numeros')) $('#numeros').innerHTML = `
           <div class="num-card"><span>Vendido</span><b>${pesos(suma(() => true))}</b><small>${delDia.length} pedido${delDia.length === 1 ? '' : 's'}</small></div>
           <div class="num-card"><span><i class="dot ef"></i>Efectivo</span><b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'efectivo'))}</b></div>
           <div class="num-card"><span><i class="dot tr"></i>Transferencia</span><b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'transferencia'))}</b></div>
@@ -109,42 +145,45 @@
         const abiertas = agruparCuentas(ps).filter((c) => c.abierta);
         badge('/cuentas', abiertas.length, 'var(--warn)');
         badge('/pedidos', nuevos);
-        alerta('cuentas', abiertas.length ? item('/cuentas', '💳', `<b>${abiertas.length} cuenta${abiertas.length === 1 ? '' : 's'} abierta${abiertas.length === 1 ? '' : 's'}</b> · ${pesos(abiertas.reduce((s, c) => s + c.pendiente, 0))} por cobrar`) : '');
+        if (puede('cuentas')) alerta('cuentas', abiertas.length ? item('/cuentas', '💳', `<b>${abiertas.length} cuenta${abiertas.length === 1 ? '' : 's'} abierta${abiertas.length === 1 ? '' : 's'}</b> · ${pesos(abiertas.reduce((s, c) => s + c.pendiente, 0))} por cobrar`) : '');
         const doms = ps.filter((p) => p.tipo === 'domicilio' && ['nuevo', 'preparando', 'encamino'].includes(p.estado)).length;
         alerta('dom', doms ? item('/pedidos', '🛵', `<b>${doms} domicilio${doms === 1 ? '' : 's'}</b> en curso`, 'info') : '');
       } catch {}
     }
 
     async function cargarResto() {
-      const tareas = [
-        api('/api/inventario').then(({ items, stock }) => {
+      const tareas = [];
+      if (puede('inventario', 'inventario_config')) tareas.push(
+        api('/api/inventario?lite=1').then(({ items, stock }) => {
           const malos = items.filter((i) => i.activo !== false && estadoStock(i, stock[i.id] || 0).clase !== 'ok');
           const agot = malos.filter((i) => (stock[i.id] || 0) <= 0).length;
           badge('/inventario', malos.length, agot ? 'var(--danger)' : 'var(--warn)');
           alerta('inv', malos.length ? item('/inventario', '📦', `<b>${malos.length} ítem${malos.length === 1 ? '' : 's'} de inventario</b> bajos o agotados: ${malos.slice(0, 4).map((i) => esc(i.nombre)).join(', ')}${malos.length > 4 ? '…' : ''}`, agot ? 'mal' : 'warn') : '');
-        }),
-      ];
-      if (admin) tareas.push(
+        }));
+      if (puede('productos')) tareas.push(
         api('/api/catalogo').then(({ config }) => {
           const sin = config.productos.filter((p) => p.activo && !p.precio).length + config.tamanos.filter((t) => t.activo && !t.precio).length;
           badge('/productos#productos', sin, 'var(--danger)');
           alerta('precios', sin ? item('/productos#productos', '🏷️', `<b>${sin} producto${sin === 1 ? '' : 's'} sin precio</b> (no se pueden vender)`) : '');
           const sab = config.sabores.filter((s) => s.activo).length;
           const e = document.querySelector('.acceso[data-href="/productos#sabores"] small'); if (e) e.textContent = `${sab} de ${config.sabores.length} activos`;
-        }),
+        }));
+      if (puede('cierre')) tareas.push(
         Promise.all([api(`/api/cierre?jornada=${sumarDias(hoy(), -1)}`), api(`/api/cierre?jornada=${hoy()}`)]).then(([ayer, hoyC]) => {
           const falta = ayer.sistema.n && !ayer.cierre;
           badge('/cierre', falta ? '!' : 0, 'var(--danger)');
           alerta('cierre', falta ? item(`/cierre?jornada=${sumarDias(hoy(), -1)}`, '🔒', `<b>Falta cerrar la caja</b> de la jornada de ayer`, 'mal') : '');
           const e = document.querySelector('.acceso[data-href="/cierre"] small'); if (e) e.textContent = hoyC.cierre ? '✅ Cerrada hoy' : 'Cuadrar caja';
-        }),
+        }));
+      if (puede('gastos')) tareas.push(
         api(`/api/gastosfijos?mes=${hoy().slice(0, 7)}`).then(({ gastos, pagos }) => {
           const veces = { mensual: 1, quincenal: 2, semanal: 4 };
           const p = gastos.filter((g) => g.activo && pagos.filter((x) => x.gastoId === g.id).reduce((s, x) => s + x.valor, 0) < g.valor * (veces[g.periodo] || 1));
           const venc = p.filter((g) => g.periodo === 'mensual' && `${hoy().slice(0, 7)}-${String(g.dia).padStart(2, '0')}` < hoy());
           badge('/gastos', p.length, venc.length ? 'var(--danger)' : 'var(--warn)');
           alerta('gastos', venc.length ? item('/gastos', '🏦', `<b>${venc.length} gasto${venc.length === 1 ? '' : 's'} fijo${venc.length === 1 ? '' : 's'} vencido${venc.length === 1 ? '' : 's'}</b>: ${venc.map((g) => esc(g.nombre)).join(', ')}`, 'mal') : '');
-        }),
+        }));
+      if (puede('presupuesto')) tareas.push(
         api(`/api/presupuesto?mes=${hoy().slice(0, 7)}`).then(({ presupuesto: p, resumen: s }) => {
           const e = document.querySelector('.acceso[data-href="/presupuesto"] small');
           if (!p.monto) { if (e) e.textContent = 'Sin definir'; alerta('pres', item('/presupuesto', '💼', '<b>Define el presupuesto del mes</b> para compras y gastos', 'info')); return; }
@@ -153,13 +192,114 @@
           badge('/presupuesto', s.deVentas > 0 ? '!' : pct >= 80 ? pct + '%' : 0, s.deVentas > 0 ? 'var(--danger)' : 'var(--warn)');
           alerta('pres', s.deVentas > 0 ? item('/presupuesto', '💼', `<b>Presupuesto del mes agotado</b> · ya van ${pesos(s.deVentas)} pagados con las ventas`, 'mal')
             : pct >= 80 ? item('/presupuesto', '💼', `<b>Queda poco presupuesto</b>: ${pesos(s.queda)} (${100 - pct}%)`) : '');
-        }),
+        }));
+      if (puede('configuracion')) tareas.push(
         api('/api/ajustes').then(({ domicilio }) => {
           const e = document.querySelector('.acceso[data-href="/productos#domicilios"] small');
           if (e) e.textContent = domicilio?.activo ? '🟢 Recibiendo' : '⚪ Apagados';
-        }),
-      );
+        }));
       await Promise.allSettled(tareas);
+    }
+
+    // =====================================================================
+    // USUARIOS, ROLES Y PERMISOS
+    // =====================================================================
+    let usuarios = [], yoId = null, editando = null, form = null;
+    const ROL = Object.fromEntries(ROLES.map((r) => [r.id, r]));
+    const NOMBRE_PERM = Object.fromEntries(PERMISOS.flatMap((g) => g.items));
+
+    async function cargarUsuarios() {
+      try {
+        const r = await api('/api/usuarios');
+        usuarios = r.usuarios; yoId = r.yo;
+        pintarUsuarios();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    function pintarUsuarios() {
+      $('#uTabla').innerHTML = `<thead><tr><th>Usuario</th><th>Rol</th><th>Permisos</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody>` +
+        usuarios.map((u) => {
+          const r = ROL[u.rol] || ROLES[2];
+          const personal = Array.isArray(u.permisos);
+          return `<tr class="${u.activo ? '' : 'inactivo'}">
+            <td><div class="u-cel"><span class="avatar">${esc(u.nombre.slice(0, 1).toUpperCase())}</span>
+              <span><b>${esc(u.nombre)}</b>${u.id === yoId ? ' <span class="tag-yo">tú</span>' : ''}<br><span class="hint">@${esc(u.usuario)}</span></span></div></td>
+            <td><span class="rol-tag rol-${r.id}">${r.icono} ${r.nombre}</span></td>
+            <td><span title="${esc(u.efectivos.map((p) => NOMBRE_PERM[p]).join('\n'))}">${u.efectivos.length} de ${TODOS_PERMISOS.length}</span>${personal ? ' <span class="tag-personal">personalizados</span>' : ''}</td>
+            <td>${u.activo ? '<span class="estado-pago ok">🟢 Activo</span>' : '<span class="estado-pago pend">⚪ Inactivo</span>'}</td>
+            <td class="hint">${u.ultimoIngreso ? fechaHora(u.ultimoIngreso) : 'Nunca'}</td>
+            <td><button class="mini" data-uedit="${u.id}">✏️ Editar</button></td></tr>`;
+        }).join('') + '</tbody>';
+
+      // Tabla de roles: qué puede cada uno
+      $('#uRoles').innerHTML = `<thead><tr><th>Permiso</th>${ROLES.map((r) => `<th class="num">${r.icono} ${r.nombre}</th>`).join('')}</tr></thead><tbody>` +
+        PERMISOS.map((g) => `<tr class="grupo-fila"><td colspan="${ROLES.length + 1}">${g.grupo}</td></tr>` +
+          g.items.map(([id, n]) => `<tr><td>${n}</td>${ROLES.map((r) => `<td class="num">${r.permisos.includes(id) ? '✅' : '·'}</td>`).join('')}</tr>`).join('')).join('') + '</tbody>';
+    }
+
+    // ---------- Modal ----------
+    function abrirUsuario(u) {
+      editando = u || null;
+      form = u ? { rol: u.rol, personal: Array.isArray(u.permisos), permisos: [...(u.permisos || u.efectivos)], activo: u.activo }
+               : { rol: 'vendedor', personal: false, permisos: [...ROL.vendedor.permisos], activo: true };
+      $('#uTitulo').textContent = u ? `✏️ ${u.nombre}` : '👤 Nuevo usuario';
+      $('#uUsuario').value = u?.usuario || ''; $('#uUsuario').disabled = !!u;
+      $('#uNombre').value = u?.nombre || '';
+      $('#uClave').value = '';
+      $('#uClaveLbl').textContent = u ? 'Nueva contraseña (déjala vacía para no cambiarla)' : 'Contraseña';
+      $('#uActivoBox').hidden = !u; $('#uBorrar').hidden = !u || u.id === yoId;
+      $('#uActivo').checked = form.activo;
+      $('#uError').textContent = '';
+      pintarForm();
+      $('#uModal').classList.add('show');
+    }
+    function pintarForm() {
+      $('#uRolesSel').innerHTML = ROLES.map((r) => `<button type="button" class="opt ${form.rol === r.id ? 'on' : ''}" data-urol="${r.id}"><strong>${r.icono} ${r.nombre}</strong><span>${r.permisos.length} permisos</span></button>`).join('');
+      $('#uPersonal').checked = form.personal;
+      const activos = form.personal ? form.permisos : ROL[form.rol].permisos;
+      $('#uPermisos').innerHTML = PERMISOS.map((g) => `<div class="perm-grupo"><span>${g.grupo}</span>${g.items.map(([id, n]) => `
+        <label class="perm ${activos.includes(id) ? 'on' : ''} ${form.personal ? '' : 'bloq'}"><input type="checkbox" data-uperm="${id}" ${activos.includes(id) ? 'checked' : ''} ${form.personal ? '' : 'disabled'}> ${n}</label>`).join('')}</div>`).join('');
+    }
+    $('#uRolesSel').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-urol]'); if (!b) return;
+      form.rol = b.dataset.urol;
+      if (!form.personal) form.permisos = [...ROL[form.rol].permisos];
+      pintarForm();
+    });
+    $('#uPersonal').addEventListener('change', (e) => { form.personal = e.target.checked; if (form.personal && !form.permisos.length) form.permisos = [...ROL[form.rol].permisos]; if (!form.personal) form.permisos = [...ROL[form.rol].permisos]; pintarForm(); });
+    $('#uPermisos').addEventListener('change', (e) => {
+      const id = e.target.dataset.uperm; if (!id) return;
+      form.permisos = e.target.checked ? [...new Set([...form.permisos, id])] : form.permisos.filter((p) => p !== id);
+      e.target.closest('.perm').classList.toggle('on', e.target.checked);
+    });
+    $('#uNuevo').addEventListener('click', () => abrirUsuario(null));
+    $('#uTabla').addEventListener('click', (e) => { const b = e.target.closest('[data-uedit]'); if (b) abrirUsuario(usuarios.find((u) => u.id === b.dataset.uedit)); });
+    $('#uCancelar').addEventListener('click', () => $('#uModal').classList.remove('show'));
+    $('#uGuardar').addEventListener('click', async () => {
+      const datos = { nombre: $('#uNombre').value, rol: form.rol, permisos: form.personal ? form.permisos : null };
+      if ($('#uClave').value) datos.clave = $('#uClave').value;
+      try {
+        if (editando) await api('/api/usuarios', { method: 'PUT', body: JSON.stringify({ id: editando.id, ...datos, activo: $('#uActivo').checked }) });
+        else await api('/api/usuarios', { method: 'POST', body: JSON.stringify({ ...datos, usuario: $('#uUsuario').value }) });
+        $('#uModal').classList.remove('show');
+        toast(editando ? '✅ Usuario actualizado' : `✅ Usuario ${$('#uUsuario').value} creado`);
+        cargarUsuarios();
+      } catch (err) { $('#uError').textContent = err.message; }
+    });
+    $('#uBorrar').addEventListener('click', async () => {
+      const b = $('#uBorrar');
+      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Seguro? Toca otra vez'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑 Borrar usuario'; }, 3000); return; }
+      try {
+        await api(`/api/usuarios?id=${encodeURIComponent(editando.id)}`, { method: 'DELETE' });
+        $('#uModal').classList.remove('show'); toast('Usuario borrado'); cargarUsuarios();
+      } catch (err) { $('#uError').textContent = err.message; }
+    });
+
+    if (puede('usuarios')) {
+      $('#usuarios').hidden = false;
+      cargarUsuarios();
+      if (location.hash === '#usuarios') setTimeout(() => $('#usuarios').scrollIntoView({ behavior: 'smooth' }), 400);
+      window.addEventListener('hashchange', () => { if (location.hash === '#usuarios') $('#usuarios').scrollIntoView({ behavior: 'smooth' }); });
     }
 
     cargarPedidos(); cargarResto();

@@ -146,7 +146,7 @@
     import { requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
-    await requerirSesion();
+    await requerirSesion('tomar');
 
     let cfg;
     try { ({ config: cfg } = await api('/api/catalogo')); }

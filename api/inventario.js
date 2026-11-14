@@ -1,4 +1,4 @@
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez } from './_lib/store.js';
 import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos } from '../catalog.js';
 
@@ -9,8 +9,9 @@ const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado'];
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
 
   try {
     // GET → ítems con su stock + últimos movimientos
@@ -24,12 +25,12 @@ export default async function handler(req, res) {
         if (cambio) await guardarInventario(items);
       }
       const [stock, movs] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300)]);
-      return res.status(200).json({ items, stock, movs, admin: esAdmin(usuario) });
+      return res.status(200).json({ items, stock, movs, admin: yo.puede('inventario_config') });
     }
 
     // PUT { items } → guardar definiciones (solo administradores)
     if (req.method === 'PUT') {
-      if (!esAdmin(usuario)) return res.status(403).json({ error: 'Solo un administrador puede editar el inventario' });
+      if (!yo.puede('inventario_config')) return res.status(403).json({ error: 'No tienes permiso para configurar el inventario' });
       const b = leer(req);
       if (!Array.isArray(b.items) || b.items.length > 300) return res.status(400).json({ error: 'Lista inválida' });
       const ids = new Set();
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
 
     // POST { id, tipo: entrada|salida|merma|conteo, cantidad, nota } → movimiento manual
     if (req.method === 'POST') {
+      if (!yo.puede('inventario', 'inventario_config')) return res.status(403).json({ error: 'No tienes permiso para mover el inventario' });
       const b = leer(req);
       const items = await leerInventario();
       const it = items.find((x) => x.id === b.id);

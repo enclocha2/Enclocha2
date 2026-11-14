@@ -69,8 +69,7 @@
       nombreMes, nombreDia, fechaLarga, fechaCorta, horarioDe, textoHorario, textoHora, esFestivo } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
-    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver los reportes.</div>'; throw 0; }
+    await requerirSesion('reportes');
 
     const COLOR = { efectivo: '#3987e5', transferencia: '#d95926' }; // validados contra el fondo oscuro
     let modo = 'dia', ancla = hoy(), resumenCache = null;

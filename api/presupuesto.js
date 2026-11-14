@@ -2,7 +2,7 @@
 // Cada mes arranca con un presupuesto; las compras, los pagos de gastos fijos y los
 // gastos de caja (anotados en el cierre) lo van gastando en orden de fecha. Cuando se
 // agota, lo demás sale de las ventas del mismo mes.
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 import { leerPresupuesto, guardarPresupuesto, leerPresupuestoBase, guardarPresupuestoBase,
   comprasEntre, leerPagosFijos, listarCierres, leerResumen } from './_lib/store.js';
 import { finMes } from '../fechas.js';
@@ -20,9 +20,10 @@ async function presupuestoDe(mes) {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
-  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tienes permiso para ver el presupuesto' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
+  if (!yo.puede('presupuesto')) return res.status(403).json({ error: 'No tienes permiso para ver el presupuesto' });
   const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
 
   try {

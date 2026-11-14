@@ -95,12 +95,15 @@
 
   <script type="module">
     import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, bannerPresupuesto } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
-    if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
+    await requerirSesion('compras', 'compras_editar', 'presupuesto');
+    const admin = puede('compras_editar');
+    if (!puede('gastos')) document.querySelector('a[href="/gastos"]')?.remove();
+    if (!puede('presupuesto')) $('#presBanner').remove();
+    if (!puede('compras')) $('#formCard').hidden = true;
 
     const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
     const PAGO = Object.fromEntries(PAGOS_COMPRA.map((p) => [p.id, p]));
@@ -184,7 +187,7 @@
         else await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) });
         toast(editando ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
         limpiarForm(); cargar(); cargarRecientes();
-        if (admin) {
+        if (puede('presupuesto')) {
           presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
           const extra = presu && antes !== null ? presu.resumen.deVentas - antes : 0;
           if (extra > 0) toast(`⚠️ El presupuesto del mes no alcanzó: ${pesos(extra)} de esta compra salen de las ventas`, true);
@@ -300,7 +303,7 @@
     });
 
     let presu = null;
-    if (admin) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
+    if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
     limpiarForm();
     const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);
     $('#desde').value = d0; $('#hasta').value = h0;

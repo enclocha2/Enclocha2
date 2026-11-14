@@ -1,4 +1,4 @@
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas, comprasEntre } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
 
@@ -27,9 +27,10 @@ async function sistema(jornada) {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
-  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tienes permiso para el cierre de caja' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
+  if (!yo.puede('cierre')) return res.status(403).json({ error: 'No tienes permiso para el cierre de caja' });
 
   try {
     const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);

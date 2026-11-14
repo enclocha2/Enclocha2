@@ -121,12 +121,14 @@
 
   <script type="module">
     import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques } from '/catalog.js';
-    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, puede } from '/sesion.js';
     import { fechaHora } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
+    await requerirSesion('inventario', 'inventario_config');
+    const admin = puede('inventario_config');
     if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
+    if (!puede('inventario')) document.body.classList.add('sin-mover');
 
     const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
     const TIPOS_MOV = {

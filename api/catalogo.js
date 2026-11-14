@@ -1,21 +1,22 @@
 import { normalizarConfig } from '../catalog.js';
 import { configActual, guardarConfig } from './_lib/store.js';
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
 
   try {
     const actual = await configActual();
 
     if (req.method === 'GET') {
-      return res.status(200).json({ config: actual, admin: esAdmin(usuario) });
+      return res.status(200).json({ config: actual, admin: yo.puede('productos') });
     }
 
     if (req.method === 'PUT') {
-      if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tienes permiso para cambiar productos' });
+      if (!yo.puede('productos')) return res.status(403).json({ error: 'No tienes permiso para cambiar productos' });
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       if (body.version !== actual.version) {
         return res.status(409).json({ error: 'Alguien más cambió los productos mientras editabas. Recarga la página.' });

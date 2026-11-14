@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock } from './_lib/store.js';
-import { usuarioDe } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 
 class ErrorUsuario extends Error {}
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
@@ -10,8 +10,10 @@ const metodoValido = (m) => METODOS_PAGO.some((x) => x.id === m);
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
+  const prohibido = (msg) => res.status(403).json({ error: msg });
 
   try {
     // Listar pedidos
@@ -27,6 +29,7 @@ export default async function handler(req, res) {
 
     // Crear pedido
     if (req.method === 'POST') {
+      if (!yo.puede('tomar')) return prohibido('No tienes permiso para tomar pedidos');
       const body = leer(req);
 
       // ¿Se agrega a una cuenta abierta?
@@ -91,6 +94,7 @@ export default async function handler(req, res) {
       const body = leer(req);
 
       // Cobrar una cuenta completa (todos sus pedidos sin pagar)
+      if (body.cobrarCuenta && !yo.puede('cobrar')) return prohibido('No tienes permiso para cobrar');
       if (body.cobrarCuenta) {
         if (!metodoValido(body.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
         const todos = await listar(300);
@@ -113,6 +117,9 @@ export default async function handler(req, res) {
       const t = Date.now();
       pedido.historial ||= [];
 
+      if (body.estado === 'cancelado' && !yo.puede('cancelar')) return prohibido('No tienes permiso para cancelar pedidos');
+      if (body.estado !== undefined && body.estado !== 'cancelado' && !yo.puede('pedidos')) return prohibido('No tienes permiso para despachar pedidos');
+      if (body.pago !== undefined && !yo.puede('cobrar')) return prohibido('No tienes permiso para cobrar');
       if (body.estado !== undefined) {
         if (!ESTADOS.includes(body.estado)) throw new ErrorUsuario('Estado inválido');
         pedido.estado = body.estado;
@@ -148,6 +155,7 @@ export default async function handler(req, res) {
 
     // Borrar pedido
     if (req.method === 'DELETE') {
+      if (!yo.puede('cancelar')) return prohibido('No tienes permiso para borrar pedidos');
       const id = req.query?.id || new URL(req.url, 'http://x').searchParams.get('id');
       if (!id) throw new ErrorUsuario('Falta id');
       await borrar(id);

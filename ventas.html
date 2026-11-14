@@ -58,8 +58,7 @@
     import { normalizar } from '/catalog.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
-    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver las ventas.</div>'; throw 0; }
+    await requerirSesion('ventas');
 
     const H = hoy();
     const PERIODOS = [

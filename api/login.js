@@ -1,29 +1,35 @@
-import { validar, firmar, usuarioDe, cookieSesion, esAdmin } from './_lib/auth.js';
+import { validar, firmar, sesion, cookieSesion, leerUsuarios, guardarUsuarios } from './_lib/auth.js';
+import { limitar } from './_lib/store.js';
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+const ip = (req) => String(req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || 'x').split(',')[0].trim();
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
 
-  // ¿Quién está conectado?
   if (req.method === 'GET') {
-    const usuario = usuarioDe(req);
-    return usuario ? res.status(200).json({ usuario, admin: esAdmin(usuario) }) : res.status(401).json({ error: 'Sin sesión' });
+    // Botones del login: solo los nombres de usuario activos
+    if (q.lista) return res.status(200).json({ usuarios: (await leerUsuarios()).filter((u) => u.activo !== false).map((u) => u.usuario) });
+    const yo = await sesion(req);
+    return yo
+      ? res.status(200).json({ usuario: yo.usuario, nombre: yo.nombre, rol: yo.rol, permisos: yo.permisos, admin: yo.rol === 'admin' })
+      : res.status(401).json({ error: 'Sin sesión' });
   }
 
-  // Iniciar sesión
   if (req.method === 'POST') {
+    if (!(await limitar(`login:${ip(req)}`, 15, 600))) return res.status(429).json({ error: 'Demasiados intentos. Espera unos minutos.' });
     const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
-    const usuario = validar(body.usuario, body.clave);
-    if (!usuario) {
-      await esperar(700); // frena intentos a lo loco
-      return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-    }
-    res.setHeader('Set-Cookie', cookieSesion(req, firmar(usuario)));
-    return res.status(200).json({ usuario, admin: esAdmin(usuario) });
+    const u = await validar(body.usuario, body.clave);
+    if (!u) { await esperar(700); return res.status(401).json({ error: 'Usuario o contraseña incorrectos' }); }
+    // registrar último ingreso
+    const lista = structuredClone(await leerUsuarios(true));
+    const x = lista.find((y) => y.id === u.id);
+    if (x) { x.ultimoIngreso = Date.now(); await guardarUsuarios(lista); }
+    res.setHeader('Set-Cookie', cookieSesion(req, firmar(u)));
+    return res.status(200).json({ usuario: u.usuario });
   }
 
-  // Cerrar sesión
   if (req.method === 'DELETE') {
     res.setHeader('Set-Cookie', cookieSesion(req, ''));
     return res.status(200).json({ ok: true });

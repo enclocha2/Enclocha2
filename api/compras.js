@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, moverStock } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '../catalog.js';
 
@@ -40,18 +40,21 @@ const entrada = (inv, signo, extra) => inv && moverStock({ [inv.id]: signo * inv
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
+  if (!yo.puede('compras', 'compras_editar', 'presupuesto')) return res.status(403).json({ error: 'No tienes permiso para ver compras' });
   const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
 
   try {
     if (req.method === 'GET') {
       if (!FECHA.test(q.desde || '') || !FECHA.test(q.hasta || '')) return res.status(400).json({ error: 'Fechas inválidas' });
       const compras = (await comprasEntre(q.desde, q.hasta)).sort((a, b) => (b.fecha + b.creado).localeCompare(a.fecha + a.creado));
-      return res.status(200).json({ compras, admin: esAdmin(usuario) });
+      return res.status(200).json({ compras, admin: yo.puede('compras_editar') });
     }
 
     if (req.method === 'POST') {
+      if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso para registrar compras' });
       let datos;
       try { datos = validar(leer(req)); datos.inventario = await validarInventario(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
       const compra = { id: randomUUID(), ...datos, registradoPor: usuario, creado: Date.now() };
@@ -61,7 +64,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT' || req.method === 'DELETE') {
-      if (!esAdmin(usuario)) return res.status(403).json({ error: 'Solo un administrador puede editar o borrar compras' });
+      if (!yo.puede('compras_editar')) return res.status(403).json({ error: 'No tienes permiso para editar o borrar compras' });
       const id = req.method === 'DELETE' ? q.id : leer(req).id;
       const actual = id && (await leerCompra(String(id)));
       if (!actual) return res.status(404).json({ error: 'Compra no encontrada' });

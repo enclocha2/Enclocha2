@@ -1,4 +1,4 @@
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 import { ventasEntre, leerResumen, migrarVentas, recalcularResumenJornadas } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
 
@@ -9,9 +9,9 @@ const DIA_MS = 86400000;
 // GET /api/ventas?resumen=1                          → totales por día (todo el historial)
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
-  if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tienes permiso para ver las ventas' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  if (!yo.puede('ventas', 'reportes', 'presupuesto')) return res.status(403).json({ error: 'No tienes permiso para ver las ventas' });
   if (req.method !== 'GET') return res.status(405).json({ error: 'Método no permitido' });
 
   try {

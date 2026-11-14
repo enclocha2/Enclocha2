@@ -1,4 +1,4 @@
-import { usuarioDe, esAdmin } from './_lib/auth.js';
+import { sesion } from './_lib/auth.js';
 import { leerAjustes, guardarAjustes } from './_lib/store.js';
 
 export const DOM_DEFECTO = { activo: false, soloEnHorario: true, minimo: 0, mensaje: '', whatsapp: '', local: null, tarifas: [], zonas: [] };
@@ -6,8 +6,9 @@ const MAX_QR = 900 * 1024; // ~900 KB (la imagen se reduce en el navegador antes
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  const usuario = usuarioDe(req);
-  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
+  const yo = await sesion(req);
+  if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  const usuario = yo.usuario;
 
   try {
     if (req.method === 'GET') {
@@ -16,7 +17,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT') {
-      if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tienes permiso' });
+      if (!yo.puede('configuracion')) return res.status(403).json({ error: 'No tienes permiso para cambiar domicilios ni el QR' });
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       const actual = await leerAjustes();
       const nuevo = { ...actual };

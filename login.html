@@ -22,12 +22,7 @@
     <img src="/img/logo.png" alt="Enclocha 2 Granizados" class="logo-login" />
     <p class="hint" style="text-align:center;margin-top:-6px">¿Quién está atendiendo?</p>
 
-    <div class="users" id="users">
-      <button type="button" class="opt" data-u="Stiv"><strong>Stiv</strong></button>
-      <button type="button" class="opt" data-u="Angel"><strong>Angel</strong></button>
-      <button type="button" class="opt" data-u="John"><strong>John</strong></button>
-      <button type="button" class="opt" data-u="Fofi"><strong>Fofi</strong></button>
-    </div>
+    <div class="users" id="users"></div>
 
     <input class="field" id="usuario" name="username" placeholder="Usuario" autocomplete="username" required />
     <input class="field" id="clave" name="password" type="password" placeholder="Contraseña" autocomplete="current-password" required />
@@ -42,6 +37,12 @@
 
     // Si ya hay sesión, pasar directo
     fetch('/api/login', { cache: 'no-store' }).then((r) => { if (r.ok) location.replace(destino); });
+
+    // Usuarios activos (de la base de datos)
+    fetch('/api/login?lista=1', { cache: 'no-store' }).then((r) => r.json()).then(({ usuarios }) => {
+      const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      $('#users').innerHTML = (usuarios || []).map((u) => `<button type="button" class="opt" data-u="${esc(u)}"><strong>${esc(u)}</strong></button>`).join('');
+    }).catch(() => {});
 
     $('#users').addEventListener('click', (e) => {
       const b = e.target.closest('[data-u]');

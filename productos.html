@@ -167,11 +167,13 @@
 
   <script type="module">
     import { GRUPOS, SECCIONES, pesos, slug } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, htmlQR } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, htmlQR, puede } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
-    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para editar productos.</div>'; throw 0; }
+    await requerirSesion('productos', 'configuracion');
+    // Pestañas según permisos: productos/sabores/etc. con "productos"; QR y domicilios con "configuracion"
+    const PERM_TAB = { sabores: 'productos', productos: 'productos', granizado: 'productos', categorias: 'productos', qr: 'configuracion', domicilios: 'configuracion' };
+    document.querySelectorAll('#tabs [data-tab]').forEach((b) => { if (!puede(PERM_TAB[b.dataset.tab])) b.remove(); });
 
     let original, cfg, sucio = false, filtroCat = 'todas';
 
@@ -203,7 +205,8 @@
     // ---------- Pestañas (#sabores, #productos, ...) ----------
     const TABS = ['sabores', 'productos', 'granizado', 'categorias', 'qr', 'domicilios'];
     function mostrarTab() {
-      const t = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'sabores';
+      const permitidas = TABS.filter((x) => puede(PERM_TAB[x]));
+      const t = permitidas.includes(location.hash.slice(1)) ? location.hash.slice(1) : permitidas[0];
       TABS.forEach((x) => { $('#t-' + x).hidden = x !== t; });
       document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
     }
@@ -496,8 +499,8 @@
       } catch (err) { toast(err.message, true); }
     });
 
-    await cargar();
-    cargarQR();
+    if (puede('productos')) await cargar(); else mostrarTab();
+    if (puede('configuracion')) cargarQR();
   </script>
 </body>
 </html>

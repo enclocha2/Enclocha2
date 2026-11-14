@@ -80,8 +80,7 @@
     import { hoy, sumarMeses, nombreMes, fechaCorta } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
-    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver el presupuesto.</div>'; throw 0; }
+    await requerirSesion('presupuesto');
 
     const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
     const TIPO = { compra: ['🛒', 'Compras de insumos'], fijo: ['🏦', 'Gastos fijos'], caja: ['🔒', 'Gastos de caja (cierres)'] };

@@ -51,10 +51,10 @@
 
   <script type="module">
     import { pesos, vistaItem, agruparCuentas, normalizar } from '/catalog.js';
-    import { requerirSesion, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
+    import { requerirSesion, puede, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
-    await requerirSesion();
+    await requerirSesion('cuentas');
 
     let cuentas = [];
     let aCobrar = null;
@@ -98,8 +98,8 @@
               <b>${pesos(p.total)}</b>
             </div>`).join('')}
           <div class="acts-cuenta">
-            <a class="btn alt" href="/tomar?cuenta=${c.id}">➕ Agregar algo más</a>
-            <button class="btn" data-cobrar="${c.id}">💰 Cobrar ${pesos(c.pendiente)}</button>
+            ${puede('tomar') ? `<a class="btn alt" href="/tomar?cuenta=${c.id}">➕ Agregar algo más</a>` : ''}
+            ${puede('cobrar') ? `<button class="btn" data-cobrar="${c.id}">💰 Cobrar ${pesos(c.pendiente)}</button>` : ''}
           </div>
         </div>`).join('') || `<div class="card empty">${q ? 'No hay cuentas abiertas con ese nombre' : '🎉 No hay cuentas pendientes por cobrar'}</div>`;
     }

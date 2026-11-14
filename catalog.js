@@ -377,3 +377,43 @@ export function tarifaPorKm(km, tarifas) {
   return t ? t.valor : null;
 }
 export const coordValida = (p) => p && Number.isFinite(+p.lat) && Number.isFinite(+p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180 && !(+p.lat === 0 && +p.lng === 0);
+
+// =====================================================================
+// ROLES Y PERMISOS
+// =====================================================================
+export const PERMISOS = [
+  { grupo: 'Pedidos', items: [
+    ['tomar', '🧾 Tomar pedidos'],
+    ['pedidos', '📋 Ver y despachar pedidos'],
+    ['cobrar', '💵 Cobrar (marcar pagado)'],
+    ['cancelar', '❌ Cancelar pedidos'],
+    ['cuentas', '💳 Cuentas abiertas'],
+  ] },
+  { grupo: 'Caja y dinero', items: [
+    ['cierre', '🔒 Cierre de caja'],
+    ['ventas', '💰 Ver ventas'],
+    ['reportes', '📊 Ver reportes'],
+    ['presupuesto', '💼 Presupuesto del mes'],
+    ['compras', '🛒 Registrar compras'],
+    ['compras_editar', '✏️ Editar / borrar compras'],
+    ['gastos', '🏦 Gastos fijos'],
+  ] },
+  { grupo: 'Negocio', items: [
+    ['inventario', '📦 Inventario (ver, entradas, conteos)'],
+    ['inventario_config', '⚙️ Configurar inventario'],
+    ['productos', '🛠️ Productos, precios y sabores'],
+    ['configuracion', '🛵 Domicilios y QR de pago'],
+    ['usuarios', '👥 Usuarios, roles y permisos'],
+  ] },
+];
+export const TODOS_PERMISOS = PERMISOS.flatMap((g) => g.items.map(([id]) => id));
+
+export const ROLES = [
+  { id: 'admin', nombre: 'Administrador', icono: '👑', permisos: TODOS_PERMISOS },
+  { id: 'cajero', nombre: 'Cajero', icono: '💵', permisos: ['tomar', 'pedidos', 'cobrar', 'cuentas', 'cierre', 'compras', 'inventario'] },
+  { id: 'vendedor', nombre: 'Vendedor', icono: '🧾', permisos: ['tomar', 'pedidos', 'cobrar', 'cuentas'] },
+  { id: 'preparacion', nombre: 'Preparación', icono: '🍧', permisos: ['pedidos'] },
+];
+export const rolDe = (id) => ROLES.find((r) => r.id === id) || ROLES[2];
+// Permisos efectivos: los propios del usuario (si los personalizaron) o los de su rol
+export const permisosDe = (u) => (Array.isArray(u?.permisos) ? u.permisos : rolDe(u?.rol).permisos).filter((p) => TODOS_PERMISOS.includes(p));

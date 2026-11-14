@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v15)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v16)
 
 | Ruta | Qué es |
 |---|---|
@@ -17,13 +17,12 @@
 | `/productos` | Sabores disponibles, productos, precios, tamaños, toppings y categorías |
 | `/login` | Ingreso |
 
-## Usuarios
-Stiv / `Stiv2026*` · Angel / `Angel2026*` · John / `John2026*` · Fofi / `Fofi2026*`
-
-Cambiar claves: variable `USUARIOS` en Vercel → `Stiv:clave1,Angel:clave2,John:clave3,Fofi:clave4` y Redeploy.
-
-**¿Quién puede editar productos y precios?** Por defecto todos. Para limitarlo, crea la variable
-`ADMINS` con los nombres, ej: `Stiv` o `Stiv,John`, y haz Redeploy.
+## Usuarios, roles y permisos
+- Los usuarios están en la base de datos (contraseñas cifradas). La primera vez se crean solos con Stiv, Angel, John y Fofi
+  (o lo que diga la variable `USUARIOS`); después **se administran en Inicio → 👥 Usuarios** y esa variable ya no se usa.
+- Roles: 👑 Administrador (todo) · 💵 Cajero · 🧾 Vendedor · 🍧 Preparación. A cada persona se le pueden personalizar los permisos.
+- La app respeta los permisos en el menú, los botones y el servidor (si no tiene permiso, el servidor lo rechaza).
+- Desactivar a alguien o cambiarle la clave cierra sus sesiones abiertas. Siempre debe quedar al menos un usuario que administre usuarios.
 
 ## Productos
 - Granizados: además de 8/12/16/20 oz hay Promociones, Recargas, Jueves, Pecera y Nevera

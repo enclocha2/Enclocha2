@@ -5,12 +5,26 @@ const irALogin = () => {
   location.replace(`/login?next=${next}`);
 };
 
-// Revisa la sesión; si no hay, manda al login. Devuelve { usuario, admin }.
-export async function requerirSesion() {
+// Permisos del usuario conectado
+let yoActual = { permisos: [] };
+export const puede = (...ps) => ps.some((p) => (yoActual.permisos || []).includes(p));
+
+// Revisa la sesión; si no hay, manda al login. Si se pasan permisos y no tiene ninguno, bloquea la página.
+// Devuelve { usuario, nombre, rol, permisos, admin }.
+export async function requerirSesion(...permisosPagina) {
   try {
     const r = await fetch('/api/login', { cache: 'no-store' });
     if (r.status === 401) { irALogin(); return new Promise(() => {}); }
     const data = await r.json();
+    yoActual = data;
+    if (permisosPagina.length && !puede(...permisosPagina)) {
+      document.body.style.visibility = 'visible';
+      montarNav(data);
+      const m = document.querySelector('main');
+      if (m) m.innerHTML = `<div class="card sin-permiso"><div style="font-size:3rem">🔒</div><h2>No tienes permiso para esta sección</h2>
+        <p class="hint">Pídele a un administrador que te lo asigne en Inicio → Usuarios.</p><a class="btn" href="/" style="width:auto;display:inline-block;text-decoration:none">Volver al inicio</a></div>`;
+      return new Promise(() => {});
+    }
     document.body.style.visibility = 'visible';
     const yo = document.querySelector('#yo');
     if (yo) yo.textContent = data.usuario;
@@ -19,7 +33,7 @@ export async function requerirSesion() {
     return data;
   } catch {
     document.body.style.visibility = 'visible';
-    return { usuario: '', admin: false };
+    return { usuario: '', admin: false, permisos: [] };
   }
 }
 
@@ -137,37 +151,39 @@ document.addEventListener('click', (e) => {
 export const SECCIONES_NAV = [
   { grupo: 'Operación', items: [
     { href: '/', ico: '🏠', txt: 'Inicio', principal: true },
-    { href: '/tomar', ico: '🧾', txt: 'Tomar pedido', corto: 'Tomar', principal: true },
-    { href: '/pedidos', ico: '📋', txt: 'Pedidos', principal: true },
-    { href: '/cuentas', ico: '💳', txt: 'Cuentas abiertas', corto: 'Cuentas', principal: true },
+    { href: '/tomar', ico: '🧾', txt: 'Tomar pedido', corto: 'Tomar', principal: true, perm: ['tomar'] },
+    { href: '/pedidos', ico: '📋', txt: 'Pedidos', principal: true, perm: ['pedidos', 'cobrar'] },
+    { href: '/cuentas', ico: '💳', txt: 'Cuentas abiertas', corto: 'Cuentas', principal: true, perm: ['cuentas'] },
   ] },
   { grupo: 'Caja y dinero', items: [
-    { href: '/cierre', ico: '🔒', txt: 'Cierre de caja', admin: true },
-    { href: '/ventas', ico: '💰', txt: 'Ventas', admin: true },
-    { href: '/reportes', ico: '📊', txt: 'Reportes', admin: true },
-    { href: '/presupuesto', ico: '💼', txt: 'Presupuesto del mes', admin: true },
-    { href: '/compras', ico: '🛒', txt: 'Compras' },
-    { href: '/gastos', ico: '🏦', txt: 'Gastos fijos', admin: true },
+    { href: '/cierre', ico: '🔒', txt: 'Cierre de caja', perm: ['cierre'] },
+    { href: '/ventas', ico: '💰', txt: 'Ventas', perm: ['ventas'] },
+    { href: '/reportes', ico: '📊', txt: 'Reportes', perm: ['reportes'] },
+    { href: '/presupuesto', ico: '💼', txt: 'Presupuesto del mes', perm: ['presupuesto'] },
+    { href: '/compras', ico: '🛒', txt: 'Compras', perm: ['compras', 'compras_editar'] },
+    { href: '/gastos', ico: '🏦', txt: 'Gastos fijos', perm: ['gastos'] },
   ] },
   { grupo: 'Negocio', items: [
-    { href: '/inventario', ico: '📦', txt: 'Inventario' },
-    { href: '/productos#productos', ico: '🛠️', txt: 'Productos y precios', admin: true },
-    { href: '/productos#sabores', ico: '🍧', txt: 'Sabores', admin: true },
-    { href: '/productos#domicilios', ico: '🛵', txt: 'Domicilios', admin: true },
-    { href: '/productos#qr', ico: '📲', txt: 'QR de pago', admin: true },
+    { href: '/inventario', ico: '📦', txt: 'Inventario', perm: ['inventario', 'inventario_config'] },
+    { href: '/productos#productos', ico: '🛠️', txt: 'Productos y precios', perm: ['productos'] },
+    { href: '/productos#sabores', ico: '🍧', txt: 'Sabores', perm: ['productos'] },
+    { href: '/productos#domicilios', ico: '🛵', txt: 'Domicilios', perm: ['configuracion'] },
+    { href: '/productos#qr', ico: '📲', txt: 'QR de pago', perm: ['configuracion'] },
+    { href: '/#usuarios', ico: '👥', txt: 'Usuarios y permisos', perm: ['usuarios'] },
   ] },
 ];
 
-function montarNav({ usuario, admin }) {
+export const permitido = (i) => !i.perm || puede(...i.perm);
+function montarNav({ usuario }) {
   if (document.querySelector('.nav-lateral')) return;
   const ruta = location.pathname.replace(/\.html$/, '') || '/';
   const activo = (href) => {
     const [h, hash] = href.split('#');
-    if (h === '/') return ruta === '/' || ruta === '/index';
+    if (h === '/') return (ruta === '/' || ruta === '/index') && (hash ? location.hash.slice(1) === hash : location.hash !== '#usuarios');
     if (hash) return ruta === h && (location.hash.slice(1) || 'sabores') === hash;
     return ruta === h;
   };
-  const secciones = SECCIONES_NAV.map((g) => ({ ...g, items: g.items.filter((i) => admin || !i.admin) })).filter((g) => g.items.length);
+  const secciones = SECCIONES_NAV.map((g) => ({ ...g, items: g.items.filter(permitido) })).filter((g) => g.items.length);
   const link = (i, cls = '') => `<a href="${i.href}" class="${cls} ${activo(i.href) ? 'activo' : ''}"><span class="ni">${i.ico}</span><span class="nt">${i.txt}</span></a>`;
 
   // Lateral (computador)
@@ -180,8 +196,9 @@ function montarNav({ usuario, admin }) {
   // Inferior (celular): 4 principales + "Más"
   const inferior = document.createElement('nav');
   inferior.className = 'nav-inferior';
-  const principales = SECCIONES_NAV[0].items;
+  const principales = SECCIONES_NAV[0].items.filter(permitido);
   const enMas = !principales.some((i) => activo(i.href));
+  inferior.style.gridTemplateColumns = `repeat(${principales.length + 1}, 1fr)`;
   inferior.innerHTML = principales.map((i) => `<a href="${i.href}" class="${activo(i.href) ? 'activo' : ''}"><span class="ni">${i.ico}</span><span class="nt">${i.corto || i.txt}</span></a>`).join('') +
     `<button type="button" class="ni-mas ${enMas ? 'activo' : ''}"><span class="ni">☰</span><span class="nt">Más</span></button>`;
 

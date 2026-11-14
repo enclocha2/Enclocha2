@@ -1,75 +1,114 @@
-// Usuarios y sesiones.
-// Las claves se pueden cambiar SIN tocar código con la variable de entorno
-// USUARIOS en Vercel, con este formato:  Stiv:clave1,Angel:clave2,John:clave3,Fofi:clave4
+// Usuarios, sesiones, roles y permisos.
+// Los usuarios viven en la base de datos (clave "usuarios"), con la contraseña cifrada (scrypt).
+// La primera vez se crean solos a partir de la variable USUARIOS (o los de fábrica).
 import crypto from 'node:crypto';
+import { Redis } from '@upstash/redis';
+import { ROLES, TODOS_PERMISOS, permisosDe, slug } from '../../catalog.js';
+
+const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+const redis = url && token ? new Redis({ url, token }) : null;
+const mem = globalThis.__granizadosAuth || (globalThis.__granizadosAuth = { usuarios: null });
 
 const POR_DEFECTO = 'Stiv:Stiv2026*,Angel:Angel2026*,John:John2026*,Fofi:Fofi2026*';
 const FUENTE = process.env.USUARIOS || POR_DEFECTO;
 const SECRETO = process.env.AUTH_SECRET || crypto.createHash('sha256').update('granizados|' + FUENTE).digest('hex');
 const DURACION = 60 * 60 * 14; // 14 horas (un turno)
 
-export function usuarios() {
-  const lista = {};
-  for (const par of FUENTE.split(',')) {
+// ---------- Contraseñas ----------
+export function cifrar(clave) {
+  const sal = crypto.randomBytes(16).toString('hex');
+  return `${sal}:${crypto.scryptSync(String(clave), sal, 32).toString('hex')}`;
+}
+function claveOk(clave, guardada) {
+  const [sal, h] = String(guardada || '').split(':');
+  if (!sal || !h) return false;
+  const a = crypto.scryptSync(String(clave || ''), sal, 32), b = Buffer.from(h, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// ---------- Usuarios en la base de datos (con caché de 30 s para no gastar operaciones) ----------
+let cache = { lista: null, en: 0 };
+function sembrar() {
+  // Primera vez: usuarios de la variable USUARIOS (o de fábrica). Si existe ADMINS, solo esos son administradores.
+  const admins = (process.env.ADMINS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return FUENTE.split(',').map((par) => {
     const i = par.indexOf(':');
-    if (i < 1) continue;
-    const u = par.slice(0, i).trim();
-    const c = par.slice(i + 1).trim();
-    if (u && c) lista[u] = c;
+    if (i < 1) return null;
+    const usuario = par.slice(0, i).trim(), clave = par.slice(i + 1).trim();
+    if (!usuario || !clave) return null;
+    return {
+      id: slug(usuario), usuario, nombre: usuario,
+      rol: !admins.length || admins.includes(usuario.toLowerCase()) ? 'admin' : 'cajero',
+      permisos: null, activo: true, hash: cifrar(clave), ver: 1, creado: Date.now(),
+    };
+  }).filter(Boolean);
+}
+export async function leerUsuarios(forzar = false) {
+  if (!forzar && cache.lista && Date.now() - cache.en < 30000) return structuredClone(cache.lista);
+  let lista = redis ? await redis.get('usuarios') : mem.usuarios;
+  if (!lista) {
+    lista = sembrar();
+    if (redis) { const ok = await redis.set('usuarios', lista, { nx: true }); if (ok !== 'OK') lista = await redis.get('usuarios'); }
+    else mem.usuarios = lista;
   }
+  cache = { lista, en: Date.now() };
+  return structuredClone(lista);
+}
+export async function guardarUsuarios(lista) {
+  if (redis) await redis.set('usuarios', lista); else mem.usuarios = structuredClone(lista);
+  cache = { lista: structuredClone(lista), en: Date.now() };
   return lista;
 }
+export const publico = (u) => ({
+  id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, permisos: u.permisos ?? null,
+  efectivos: permisosDe(u), activo: u.activo !== false, ultimoIngreso: u.ultimoIngreso || null, creado: u.creado || null,
+});
 
+// ---------- Sesión ----------
 const b64 = (s) => Buffer.from(s).toString('base64url');
 const hmac = (s) => crypto.createHmac('sha256', SECRETO).update(s).digest('base64url');
-
-export function firmar(usuario) {
-  const datos = b64(JSON.stringify({ u: usuario, exp: Date.now() + DURACION * 1000 }));
+export function firmar(u) {
+  const datos = b64(JSON.stringify({ i: u.id, v: u.ver || 1, exp: Date.now() + DURACION * 1000 }));
   return `${datos}.${hmac(datos)}`;
 }
-
-function verificar(token) {
-  if (!token || !token.includes('.')) return null;
-  const [datos, firma] = token.split('.');
+function leerToken(tok) {
+  if (!tok || !tok.includes('.')) return null;
+  const [datos, firma] = tok.split('.');
   const esperada = hmac(datos);
   if (firma.length !== esperada.length || !crypto.timingSafeEqual(Buffer.from(firma), Buffer.from(esperada))) return null;
-  try {
-    const { u, exp } = JSON.parse(Buffer.from(datos, 'base64url').toString());
-    if (Date.now() > exp || !(u in usuarios())) return null; // si cambian la clave/usuario, se invalida
-    return u;
-  } catch { return null; }
+  try { const d = JSON.parse(Buffer.from(datos, 'base64url').toString()); return Date.now() > d.exp ? null : d; } catch { return null; }
 }
-
 function leerCookie(req, nombre) {
-  const raw = req.headers?.cookie || '';
-  for (const parte of raw.split(';')) {
+  for (const parte of (req.headers?.cookie || '').split(';')) {
     const [k, ...v] = parte.trim().split('=');
     if (k === nombre) return decodeURIComponent(v.join('='));
   }
   return null;
 }
 
-export const usuarioDe = (req) => verificar(leerCookie(req, 'sesion'));
+// Quién está conectado: { usuario, nombre, rol, permisos, puede(p) } o null.
+// Si al usuario lo desactivan o le cambian la clave, su sesión deja de servir.
+export async function sesion(req) {
+  const d = leerToken(leerCookie(req, 'sesion'));
+  if (!d?.i) return null;
+  const u = (await leerUsuarios()).find((x) => x.id === d.i);
+  if (!u || u.activo === false || (u.ver || 1) !== d.v) return null;
+  const permisos = permisosDe(u);
+  return { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, permisos, puede: (...ps) => ps.some((p) => permisos.includes(p)) };
+}
 
-export function cookieSesion(req, token) {
+export function cookieSesion(req, tok) {
   const local = /^localhost|^127\./.test(req.headers?.host || '');
-  const base = `sesion=${token}; Path=/; HttpOnly; SameSite=Lax${local ? '' : '; Secure'}`;
-  return token ? `${base}; Max-Age=${DURACION}` : `${base}; Max-Age=0`;
+  const base = `sesion=${tok}; Path=/; HttpOnly; SameSite=Lax${local ? '' : '; Secure'}`;
+  return tok ? `${base}; Max-Age=${DURACION}` : `${base}; Max-Age=0`;
 }
 
-// Compara usuario (sin importar mayúsculas) y clave. Devuelve el nombre oficial o null.
-export function validar(usuario, clave) {
-  const lista = usuarios();
-  const nombre = Object.keys(lista).find((u) => u.toLowerCase() === String(usuario || '').trim().toLowerCase());
-  if (!nombre) return null;
-  const a = Buffer.from(String(clave || ''));
-  const b = Buffer.from(lista[nombre]);
-  return a.length === b.length && crypto.timingSafeEqual(a, b) ? nombre : null;
+// Valida usuario + clave. Devuelve el usuario o null.
+export async function validar(usuario, clave) {
+  const u = (await leerUsuarios(true)).find((x) => x.usuario.toLowerCase() === String(usuario || '').trim().toLowerCase());
+  if (!u || u.activo === false || !claveOk(clave, u.hash)) return null;
+  return u;
 }
 
-// Quién puede editar productos/precios. Variable ADMINS en Vercel, ej: "Stiv,John".
-// Si no existe, todos los usuarios pueden editar.
-export function esAdmin(usuario) {
-  const admins = (process.env.ADMINS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
-  return !!usuario && (!admins.length || admins.includes(usuario.toLowerCase()));
-}
+export { ROLES, TODOS_PERMISOS };

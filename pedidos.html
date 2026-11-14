@@ -73,7 +73,7 @@
 
   <script type="module">
     import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe } from '/catalog.js';
-    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario } from '/sesion.js';
+    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario, puede } from '/sesion.js';
     import { hoy, inicioJornada } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -86,7 +86,7 @@
     let ctx = null;
     let pendientes = 0;
 
-    await requerirSesion();
+    await requerirSesion('pedidos', 'cobrar');
 
     // ---------- Sonido ----------
     function tono(freq, inicio, dur, vol = 0.35) {
@@ -180,9 +180,9 @@
       if (pg.pagado) {
         const m = metodo(pg.metodo);
         return lineaCuenta + `<div class="pago ok"><span>✅ Pagado · ${m?.icono} ${m?.nombre} · cobró ${esc(pg.cobradoPor)}</span>
-          <button class="undo" data-id="${p.id}" data-despagar="1">deshacer</button></div>`;
+          ${puede('cobrar') ? `<button class="undo" data-id="${p.id}" data-despagar="1">deshacer</button>` : ''}</div>`;
       }
-      const botones = METODOS_PAGO.map((m) =>
+      const botones = !puede('cobrar') ? '' : METODOS_PAGO.map((m) =>
         `<button class="${pg.metodo === m.id ? 'sug' : ''}" data-id="${p.id}" data-cobrar="${m.id}" title="${enCuenta ? 'Cobra toda la cuenta' : ''}">Cobrado${enCuenta ? ' todo' : ''} ${m.icono}</button>`).join('');
       return lineaCuenta + (pg.ahora
         ? `<div class="pago barra"><span>💰 Paga en barra · ${metodo(pg.metodo)?.icono} ${metodo(pg.metodo)?.nombre}</span><div class="cobrar">${botones}</div></div>`
@@ -222,6 +222,9 @@
         .map((h) => `${ACCIONES[h.accion] || h.accion} ${esc(h.usuario)} ${hora(h.en)}`).join(' · ');
 
       const n = p.items.reduce((s, i) => s + i.cantidad, 0);
+      // Botones según permisos
+      if (!puede('pedidos')) acts = acts.replace(/<button[^>]*data-e="(?!cancelado)[^"]*"[^>]*>.*?<\/button>/g, '');
+      if (!puede('cancelar')) acts = acts.replace(/<button[^>]*data-cancelar[^>]*>.*?<\/button>/g, '');
       return `<div class="ped ${flash ? 'flash' : ''} ${p.estado === 'encamino' ? 'encamino' : ''}">
         <div class="head"><span class="num">#${p.numero}</span><span class="hora">${hora(p.creado)}</span></div>
         <div class="cli">👤 ${esc(p.cliente)}${esDom ? '<span class="dom-tag">🛵 DOMICILIO</span>' : ''} <span class="hint">· ${n} producto${n === 1 ? '' : 's'}</span>${p.estado === 'encamino' ? ' <span class="dom-tag">EN CAMINO</span>' : ''}</div>

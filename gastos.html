@@ -87,8 +87,7 @@
     import { hoy, sumarMeses, nombreMes, finMes, fechaCorta } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    const { admin } = await requerirSesion();
-    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver los gastos fijos.</div>'; throw 0; }
+    await requerirSesion('gastos');
 
     const CAT = Object.fromEntries(CATEGORIAS_FIJO.map((c) => [c.id, c]));
     const PER = Object.fromEntries(PERIODOS_FIJO.map((p) => [p.id, p]));
