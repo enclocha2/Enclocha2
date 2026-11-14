@@ -1,5 +1,5 @@
 import { usuarioDe, esAdmin } from './_lib/auth.js';
-import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas } from './_lib/store.js';
+import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas, comprasEntre } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -19,6 +19,8 @@ async function sistema(jornada) {
     u[v.m] += v.t; u.n++;
   }
   const pendientes = (await listar(300)).filter((p) => p.creado >= ini && p.creado <= fin && p.estado !== 'cancelado' && !p.pago?.pagado);
+  const compras = (await comprasEntre(jornada, jornada)).filter((c) => c.pago === 'caja');
+  r.comprasCaja = { n: compras.length, total: compras.reduce((s, c) => s + c.valor, 0), lista: compras.map((c) => ({ insumo: c.insumo, valor: c.valor, por: c.registradoPor })) };
   r.pendientes = { n: pendientes.length, total: pendientes.reduce((s, p) => s + p.total, 0), clientes: [...new Set(pendientes.map((p) => p.cliente))].slice(0, 20) };
   return r;
 }
@@ -39,7 +41,7 @@ export default async function handler(req, res) {
       const [cierre, actual, historial] = await Promise.all([leerCierre(q.jornada), sistema(q.jornada), listarCierres(10)]);
       const anterior = historial.find((c) => c.jornada < q.jornada) || null;
       // ¿Cambiaron las ventas después de cerrar?
-      const cambios = cierre && (cierre.sistema.total !== actual.total || cierre.sistema.efectivo !== actual.efectivo || cierre.sistema.n !== actual.n);
+      const cambios = cierre && (cierre.sistema.total !== actual.total || cierre.sistema.efectivo !== actual.efectivo || cierre.sistema.n !== actual.n || (cierre.sistema.comprasCaja?.total || 0) !== actual.comprasCaja.total);
       return res.status(200).json({ cierre, sistema: actual, baseSugerida: anterior?.baseSiguiente ?? null, cambiosDespues: !!cambios });
     }
 
@@ -55,7 +57,7 @@ export default async function handler(req, res) {
         .map((g) => ({ concepto: txt(g.concepto, 80) || 'Gasto', valor: entero(g.valor) })).filter((g) => g.valor > 0);
       const totalGastos = gastos.reduce((t, g) => t + g.valor, 0);
       const base = entero(b.base);
-      const esperadoEfectivo = base + s.efectivo - totalGastos;
+      const esperadoEfectivo = base + s.efectivo - totalGastos - s.comprasCaja.total;
       const transferenciasVerificadas = entero(b.transferenciasVerificadas);
       const baseSiguiente = entero(b.baseSiguiente);
 

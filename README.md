@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v9)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v10)
 
 | Ruta | Qué es |
 |---|---|
@@ -6,6 +6,8 @@
 | `/tomar` | Tomar pedido: granizados (varios diferentes), cervezas, licor y demás categorías |
 | `/cuentas` | Cuentas abiertas: pedidos sin pagar por persona, agregar algo más y cobrar todo junto |
 | `/cierre` | Cierre de caja por jornada: conteo de billetes, gastos, transferencias, cuadre e historial |
+| `/compras` | Compras de insumos (las pagadas con plata de la caja se descuentan solas en el cierre) |
+| `/gastos` | Gastos fijos: arriendo, servicios, sueldos… y control de pagos por mes |
 | `/ventas` | Historial de ventas (todo lo cobrado), filtros y descarga para Excel |
 | `/reportes` | Ventas por día, semana, mes y año · efectivo vs transferencia · lo más vendido |
 | `/pedidos` | Hoja de pedidos en tiempo real con sonido, cobros y resumen |
@@ -83,3 +85,8 @@ Las pantallas solo descargan pedidos cuando hay cambios. La hoja de Pedidos revi
    También el efectivo para retirar = contado − base que se deja.
 - Los pedidos sin cobrar no entran al cierre (se avisa). Si algo se cobra después de cerrar, avisa que hay que volver a guardar.
 - Se puede imprimir / guardar en PDF. El conteo se guarda como borrador en el navegador mientras no se guarde el cierre.
+
+## Compras y gastos fijos
+- **Compras**: cualquier usuario registra; solo administradores editan/borran. "Plata de la caja" → se descuenta en el cierre de esa jornada.
+- **Gastos fijos** (solo administradores): define cada gasto (valor por pago, periodicidad, día de pago) y registra los pagos de cada mes.
+- **Reportes → Mes / Año** muestra el balance: ventas − compras − gastos fijos pagados = utilidad.

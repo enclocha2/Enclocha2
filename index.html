@@ -57,6 +57,17 @@
         <span id="tCierre">Cuadrar el efectivo y las transferencias</span>
         <em class="cnt" id="cntCierre" hidden>!</em>
       </a>
+      <a class="tile t-compras" href="/compras">
+        <span class="ico">🛒</span>
+        <strong>Compras</strong>
+        <span id="tCompras">Insumos: hielo, vasos, pulpas, licor…</span>
+      </a>
+      <a class="tile t-gastos solo-admin" href="/gastos">
+        <span class="ico">🏠</span>
+        <strong>Gastos fijos</strong>
+        <span id="tGastos">Arriendo, servicios, sueldos…</span>
+        <em class="cnt" id="cntGastos" hidden></em>
+      </a>
       <a class="tile t-ventas solo-admin" href="/ventas">
         <span class="ico">🧾</span>
         <strong>Ventas</strong>
@@ -106,6 +117,21 @@
         : `🕓 ${fechaLarga(j)} · hoy no hay jornada programada`;
     };
     pintarJornada();
+    // Compras del mes y gastos fijos pendientes
+    (async () => {
+      try {
+        const H = hoy(), mes = H.slice(0, 7);
+        const { compras } = await api(`/api/compras?desde=${mes}-01&hasta=${H}`);
+        $('#tCompras').textContent = compras.length ? `Este mes: ${pesos(compras.reduce((s, c) => s + c.valor, 0))} en ${compras.length} compra${compras.length === 1 ? '' : 's'}` : 'Insumos: hielo, vasos, pulpas, licor…';
+        if (!admin) return;
+        const { gastos, pagos } = await api(`/api/gastosfijos?mes=${mes}`);
+        const veces = { mensual: 1, quincenal: 2, semanal: 4 };
+        const pend = gastos.filter((g) => g.activo && pagos.filter((p) => p.gastoId === g.id).reduce((s, p) => s + p.valor, 0) < g.valor * (veces[g.periodo] || 1));
+        $('#cntGastos').hidden = !pend.length; $('#cntGastos').textContent = pend.length;
+        if (gastos.length) $('#tGastos').textContent = pend.length ? `${pend.length} por pagar este mes` : '✅ Todo pagado este mes';
+      } catch {}
+    })();
+
     // Estado del cierre de la jornada anterior / actual
     if (admin) (async () => {
       try {

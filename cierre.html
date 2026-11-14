@@ -182,10 +182,14 @@
     }
 
     function pintarGastos() {
-      $('#gastos').innerHTML = f.gastos.length ? f.gastos.map((g, i) => `
+      const cc = sis.comprasCaja || { n: 0, total: 0, lista: [] };
+      const compras = cc.n ? `<h3 class="sub">🛒 Compras pagadas con plata de la caja <span class="hint">(se descuentan solas · se registran en Compras)</span></h3>` +
+        cc.lista.map((c) => `<div class="fila"><span style="flex:1">${esc(c.insumo)} <span class="hint">· ${esc(c.por)}</span></span><b>${pesos(c.valor)}</b><span style="width:42px"></span></div>`).join('') +
+        `<div class="fila"><span style="flex:1"><b>Total compras de caja</b></span><b>${pesos(cc.total)}</b><span style="width:42px"></span></div><h3 class="sub">Otros gastos de caja</h3>` : '';
+      $('#gastos').innerHTML = compras + (f.gastos.length ? f.gastos.map((g, i) => `
         <div class="fila"><span style="flex:1">${esc(g.concepto)}</span><b>${pesos(g.valor)}</b><button class="del" data-delg="${i}">🗑</button></div>`).join('') +
         `<div class="fila"><span style="flex:1"><b>Total gastos</b></span><b>${pesos(totalGastos())}</b><span style="width:42px"></span></div>`
-        : '<p class="hint">No hay gastos registrados.</p>';
+        : '<p class="hint">No hay otros gastos registrados.</p>');
     }
 
     const contado = () => DENOMS.reduce((t, d) => t + d * (f.conteo[d] || 0), 0);
@@ -197,8 +201,8 @@
     }
 
     function pintarCuadre() {
-      const c = contado(), g = totalGastos();
-      const esperado = f.base + sis.efectivo - g;
+      const c = contado(), g = totalGastos(), cc = sis.comprasCaja?.total || 0;
+      const esperado = f.base + sis.efectivo - g - cc;
       const dif = c - esperado, difT = f.transf - sis.transferencia;
       $('#contado').textContent = pesos(c);
       $('#cuadre').innerHTML = `
@@ -208,7 +212,8 @@
             <table class="tabla"><tbody>
               <tr><td>Base inicial</td><td class="num">${pesos(f.base)}</td></tr>
               <tr><td>+ Ventas en efectivo</td><td class="num">${pesos(sis.efectivo)}</td></tr>
-              <tr><td>− Gastos de caja</td><td class="num">${pesos(g)}</td></tr>
+              ${cc ? `<tr><td>− Compras pagadas con caja</td><td class="num">${pesos(cc)}</td></tr>` : ''}
+              <tr><td>− Otros gastos de caja</td><td class="num">${pesos(g)}</td></tr>
               <tr class="t"><td>= Debería haber</td><td class="num">${pesos(esperado)}</td></tr>
               <tr class="t"><td>Contado</td><td class="num">${pesos(c)}</td></tr>
             </tbody></table>

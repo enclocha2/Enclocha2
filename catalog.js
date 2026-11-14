@@ -249,3 +249,37 @@ export function agruparCuentas(pedidos) {
   }
   return [...m.values()];
 }
+
+// ---------- Compras de insumos ----------
+export const CATEGORIAS_COMPRA = [
+  { id: 'hielo', nombre: 'Hielo', icono: '🧊' },
+  { id: 'sabores', nombre: 'Pulpas, jarabes y sabores', icono: '🍓' },
+  { id: 'licor-prep', nombre: 'Licor para preparar', icono: '🍸' },
+  { id: 'toppings', nombre: 'Toppings y dulces', icono: '🍬' },
+  { id: 'desechables', nombre: 'Vasos y desechables', icono: '🥤' },
+  { id: 'reventa', nombre: 'Cerveza y licor para vender', icono: '🍺' },
+  { id: 'limpieza', nombre: 'Aseo y limpieza', icono: '🧽' },
+  { id: 'otros', nombre: 'Otros', icono: '📦' },
+];
+export const UNIDADES = ['und', 'bolsa', 'paca', 'caja', 'kg', 'lb', 'litro', 'botella', 'paquete'];
+export const PAGOS_COMPRA = [
+  { id: 'caja', nombre: 'Plata de la caja', icono: '💵' },
+  { id: 'transferencia', nombre: 'Transferencia', icono: '📲' },
+  { id: 'otro', nombre: 'Otro (bolsillo propio)', icono: '👛' },
+];
+
+// ---------- Gastos fijos ----------
+export const CATEGORIAS_FIJO = [
+  { id: 'arriendo', nombre: 'Arriendo', icono: '🏠' },
+  { id: 'servicios', nombre: 'Servicios (luz, agua, gas)', icono: '💡' },
+  { id: 'internet', nombre: 'Internet y celular', icono: '📶' },
+  { id: 'nomina', nombre: 'Sueldos y pagos a personal', icono: '👥' },
+  { id: 'impuestos', nombre: 'Impuestos y permisos', icono: '🧾' },
+  { id: 'software', nombre: 'Apps y suscripciones', icono: '💻' },
+  { id: 'otros', nombre: 'Otros', icono: '📌' },
+];
+export const PERIODOS_FIJO = [
+  { id: 'mensual', nombre: 'Mensual', veces: 1 },
+  { id: 'quincenal', nombre: 'Quincenal', veces: 2 },
+  { id: 'semanal', nombre: 'Semanal', veces: 4 },
+];

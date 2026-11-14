@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <title>Enclocha 2 · Gastos fijos</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>🏠 Gastos fijos</h1></div>
+    <div class="row"><a href="/compras">🛒 Compras</a></div>
+  </header>
+
+  <main class="admin">
+    <div class="periodo">
+      <button id="ant" title="Mes anterior">‹</button>
+      <span class="lbl" id="lblMes"></span>
+      <button id="sig" title="Mes siguiente">›</button>
+      <button class="mini" id="irHoy">Este mes</button>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <section class="card">
+      <h2>📅 Pagos del mes</h2>
+      <div id="lista"></div>
+    </section>
+
+    <section class="card">
+      <h2>🧾 Pagos registrados este mes</h2>
+      <div class="tabla-wrap"><table class="tabla" id="pagos"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>⚙️ Mis gastos fijos</h2>
+      <p class="hint">Lo que se paga siempre: arriendo, servicios, sueldos, internet… El valor es lo que se paga <b>cada vez</b> (si es quincenal, el valor de una quincena).</p>
+      <div id="adm"></div>
+      <form class="add" id="fNuevo">
+        <input class="field" name="nombre" placeholder="Nuevo gasto, ej: Arriendo local" maxlength="60" required>
+        <select class="field" name="categoria" id="selCatNuevo" style="max-width:220px"></select>
+        <input class="field" name="valor" type="number" min="0" step="1000" placeholder="Valor" inputmode="numeric" style="max-width:140px" required>
+        <button class="btn alt">+ Agregar</button>
+      </form>
+    </section>
+  </main>
+
+  <div class="savebar" id="savebar">
+    <span>Tienes cambios sin guardar en tus gastos fijos</span>
+    <div class="row">
+      <button class="btn ghost" id="descartar">Descartar</button>
+      <button class="btn" id="guardar">💾 Guardar cambios</button>
+    </div>
+  </div>
+
+  <!-- Registrar pago -->
+  <div class="modal" id="modalPago">
+    <div class="box">
+      <h3>💸 Registrar pago: <span id="mpNombre"></span></h3>
+      <label class="campo"><span>Valor pagado</span><div class="precio" style="flex:1"><span>$</span><input class="field" id="mpValor" type="number" min="0" step="100" inputmode="numeric"></div></label>
+      <label class="campo"><span>Fecha del pago</span><input class="field" id="mpFecha" type="date"></label>
+      <div class="campo"><span>¿Con qué se pagó?</span><div class="g3" id="mpMetodos"></div></div>
+      <label class="campo"><span>Nota (opcional)</span><input class="field" id="mpNota" maxlength="120" placeholder="Ej: recibo #123, quincena 1"></label>
+      <div class="error" id="mpError"></div>
+      <button class="btn" id="mpGuardar">✅ Registrar pago</button>
+      <button class="btn ghost" id="mpCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos, slug, CATEGORIAS_FIJO, PERIODOS_FIJO, PAGOS_COMPRA } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { hoy, sumarMeses, nombreMes, finMes, fechaCorta } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver los gastos fijos.</div>'; throw 0; }
+
+    const CAT = Object.fromEntries(CATEGORIAS_FIJO.map((c) => [c.id, c]));
+    const PER = Object.fromEntries(PERIODOS_FIJO.map((p) => [p.id, p]));
+    const METODOS = PAGOS_COMPRA;
+    let mes = hoy().slice(0, 7);
+    let gastos = [], original = [], pagos = [], sucio = false, aPagar = null, metodoSel = 'transferencia';
+
+    const marcar = (v = true) => { sucio = v; $('#savebar').classList.toggle('show', v); document.body.classList.toggle('con-barra', v); };
+    window.addEventListener('beforeunload', (e) => { if (sucio) { e.preventDefault(); e.returnValue = ''; } });
+
+    async function cargar() {
+      $('#lblMes').textContent = `${nombreMes(mes + '-01')} ${mes.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
+      try {
+        const r = await api(`/api/gastosfijos?mes=${mes}`);
+        pagos = r.pagos;
+        if (!sucio) { original = r.gastos; gastos = structuredClone(r.gastos); }
+        pintar();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // Cuánto se espera pagar en el mes y cuánto se ha pagado, por gasto
+    function estado(g) {
+      const veces = PER[g.periodo]?.veces || 1;
+      const esperado = g.valor * veces;
+      const pagado = pagos.filter((p) => p.gastoId === g.id).reduce((s, p) => s + p.valor, 0);
+      const diaVence = Math.min(g.dia, Number(finMes(mes + '-01').slice(8)));
+      const vence = `${mes}-${String(diaVence).padStart(2, '0')}`;
+      let clase = 'pend', txt = `⏳ Vence ${fechaCorta(vence)}`;
+      if (pagado >= esperado && esperado > 0) { clase = 'ok'; txt = '✅ Pagado'; }
+      else if (pagado > 0) { clase = 'parcial'; txt = `Abonado ${pesos(pagado)}`; }
+      else if (vence < hoy() && g.periodo === 'mensual') { clase = 'venc'; txt = `🔴 Vencido ${fechaCorta(vence)}`; }
+      return { esperado, pagado, falta: Math.max(0, esperado - pagado), clase, txt };
+    }
+
+    function pintar() {
+      const activos = gastos.filter((g) => g.activo);
+      const est = activos.map((g) => [g, estado(g)]);
+      const esperado = est.reduce((s, [, e]) => s + e.esperado, 0);
+      const pagado = pagos.reduce((s, p) => s + p.valor, 0);
+      const falta = est.reduce((s, [, e]) => s + e.falta, 0);
+      $('#kpis').innerHTML = `
+        <div class="kpi"><span>Total fijo del mes</span><b>${pesos(esperado)}</b><small>${activos.length} gasto${activos.length === 1 ? '' : 's'}</small></div>
+        <div class="kpi"><span>✅ Pagado</span><b>${pesos(pagado)}</b></div>
+        <div class="kpi"><span>⏳ Falta por pagar</span><b>${pesos(falta)}</b></div>`;
+
+      $('#lista').innerHTML = est.length ? est.sort((a, b) => a[0].dia - b[0].dia).map(([g, e]) => `
+        <div class="fijo">
+          <div><b>${CAT[g.categoria]?.icono || ''} ${esc(g.nombre)}</b><br>
+            <span class="hint">${PER[g.periodo]?.nombre} · día ${g.dia} · ${pesos(g.valor)}${g.periodo !== 'mensual' ? ` × ${PER[g.periodo].veces} = ${pesos(e.esperado)}` : ''}</span></div>
+          <span class="estado-pago ${e.clase}">${e.txt}</span>
+          ${e.falta ? `<button class="btn" data-pagar="${g.id}">💸 Pagar</button>` : `<button class="mini" data-pagar="${g.id}">+ pago</button>`}
+        </div>`).join('') : '<p class="hint">Todavía no tienes gastos fijos. Agrégalos abajo en "Mis gastos fijos".</p>';
+
+      $('#pagos').innerHTML = pagos.length ? `
+        <thead><tr><th>Fecha</th><th>Gasto</th><th>Pagó con</th><th>Nota</th><th class="num">Valor</th><th></th></tr></thead>
+        <tbody>${[...pagos].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((p) => `<tr>
+          <td>${fechaCorta(p.fecha)}<br><span class="hint">${esc(p.registradoPor)}</span></td>
+          <td><b>${esc(p.nombre)}</b></td>
+          <td>${METODOS.find((m) => m.id === p.metodo)?.icono || ''} ${esc(METODOS.find((m) => m.id === p.metodo)?.nombre || '')}</td>
+          <td class="hint">${esc(p.nota || '')}</td>
+          <td class="num"><b>${pesos(p.valor)}</b></td>
+          <td><button class="del" data-delpago="${p.id}">🗑</button></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="4"><b>Total pagado</b></td><td class="num"><b>${pesos(pagado)}</b></td><td></td></tr></tfoot>`
+        : '<tr><td class="empty">No hay pagos registrados este mes.</td></tr>';
+
+      const opcCat = (sel) => CATEGORIAS_FIJO.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.icono} ${c.nombre}</option>`).join('');
+      const opcPer = (sel) => PERIODOS_FIJO.map((p) => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${p.nombre}</option>`).join('');
+      $('#selCatNuevo').innerHTML = opcCat('arriendo');
+      $('#adm').innerHTML = gastos.map((g) => `
+        <div class="fila fijo-adm ${g.activo ? '' : 'apagado'}">
+          <label class="switch" title="Activo"><input type="checkbox" data-id="${g.id}" data-k="activo" ${g.activo ? 'checked' : ''}><span></span></label>
+          <input class="field" data-id="${g.id}" data-k="nombre" value="${esc(g.nombre)}" maxlength="60" style="flex:1;min-width:160px">
+          <select class="field" data-id="${g.id}" data-k="categoria">${opcCat(g.categoria)}</select>
+          <select class="field" data-id="${g.id}" data-k="periodo" style="max-width:130px">${opcPer(g.periodo)}</select>
+          <span class="hint">día</span><input class="field dia" type="number" min="1" max="31" data-id="${g.id}" data-k="dia" value="${g.dia}">
+          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1000" data-id="${g.id}" data-k="valor" value="${g.valor}"></div>
+          <button class="del" data-delg="${g.id}">🗑</button>
+        </div>`).join('') || '<p class="hint">Sin gastos fijos.</p>';
+    }
+
+    // ---------- Editar lista ----------
+    $('#adm').addEventListener('input', (e) => {
+      const el = e.target, g = gastos.find((x) => x.id === el.dataset.id);
+      if (!g) return;
+      const k = el.dataset.k;
+      g[k] = el.type === 'checkbox' ? el.checked : ['valor', 'dia'].includes(k) ? Math.max(0, Math.round(Number(el.value) || 0)) : el.value;
+      if (k === 'activo') el.closest('.fila').classList.toggle('apagado', !el.checked);
+      marcar();
+    });
+    $('#fNuevo').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = e.target, nombre = f.nombre.value.trim();
+      let id = slug(nombre); while (gastos.some((g) => g.id === id)) id += '-2';
+      gastos.push({ id, nombre, categoria: f.categoria.value, valor: Math.round(Number(f.valor.value) || 0), periodo: 'mensual', dia: 1, activo: true });
+      f.reset(); marcar(); pintar();
+      toast(`"${nombre}" agregado — ajusta el día de pago y guarda`);
+    });
+    $('#descartar').addEventListener('click', () => { gastos = structuredClone(original); marcar(false); pintar(); });
+    $('#guardar').addEventListener('click', async () => {
+      try {
+        const r = await api('/api/gastosfijos', { method: 'PUT', body: JSON.stringify({ gastos }) });
+        original = r.gastos; gastos = structuredClone(r.gastos); marcar(false); pintar(); toast('✅ Gastos fijos guardados');
+      } catch (err) { toast(err.message, true); }
+    });
+
+    // ---------- Pagos ----------
+    const pintarMetodos = () => { $('#mpMetodos').innerHTML = METODOS.map((m) => `<button type="button" class="opt ${metodoSel === m.id ? 'on' : ''}" data-m="${m.id}">${m.icono} ${m.nombre}</button>`).join(''); };
+    $('#mpMetodos').addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (b) { metodoSel = b.dataset.m; pintarMetodos(); } });
+
+    document.querySelector('main').addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.pagar) {
+        if (sucio) return toast('Primero guarda los cambios de tus gastos fijos', true);
+        aPagar = gastos.find((g) => g.id === b.dataset.pagar);
+        const e2 = estado(aPagar);
+        $('#mpNombre').textContent = aPagar.nombre;
+        $('#mpValor').value = Math.min(aPagar.valor, e2.falta) || aPagar.valor;
+        const h = hoy(); $('#mpFecha').value = h.startsWith(mes) ? h : `${mes}-01`;
+        $('#mpNota').value = ''; $('#mpError').textContent = '';
+        metodoSel = 'transferencia'; pintarMetodos();
+        $('#modalPago').classList.add('show');
+      }
+      if (b.dataset.delpago) {
+        if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
+        try { await api(`/api/gastosfijos?mes=${mes}&id=${b.dataset.delpago}`, { method: 'DELETE' }); toast('Pago borrado'); cargar(); } catch (err) { toast(err.message, true); }
+      }
+      if (b.dataset.delg) {
+        if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
+        gastos = gastos.filter((g) => g.id !== b.dataset.delg); marcar(); pintar();
+      }
+    });
+    $('#mpCancelar').addEventListener('click', () => $('#modalPago').classList.remove('show'));
+    $('#mpGuardar').addEventListener('click', async () => {
+      try {
+        await api('/api/gastosfijos', { method: 'POST', body: JSON.stringify({ mes, pago: {
+          gastoId: aPagar.id, valor: $('#mpValor').value, fecha: $('#mpFecha').value, metodo: metodoSel, nota: $('#mpNota').value } }) });
+        $('#modalPago').classList.remove('show'); toast(`✅ Pago de ${aPagar.nombre} registrado`); cargar();
+      } catch (err) { $('#mpError').textContent = err.message; }
+    });
+
+    $('#ant').addEventListener('click', () => { mes = sumarMeses(mes + '-01', -1).slice(0, 7); cargar(); });
+    $('#sig').addEventListener('click', () => { mes = sumarMeses(mes + '-01', 1).slice(0, 7); cargar(); });
+    $('#irHoy').addEventListener('click', () => { mes = hoy().slice(0, 7); cargar(); });
+    cargar();
+  </script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <title>Enclocha 2 · Compras</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>🛒 Compras</h1></div>
+    <div class="row"><a href="/gastos" class="solo-admin">🏠 Gastos fijos</a></div>
+  </header>
+
+  <main class="admin" style="max-width:1100px">
+    <!-- Registrar -->
+    <section class="card" id="formCard">
+      <h2 id="formTitulo">➕ Registrar compra</h2>
+      <div class="chips recientes" id="recientes"></div>
+      <form id="fCompra" class="form-compra">
+        <label class="campo ancho"><span>¿Qué se compró?</span>
+          <input class="field" name="insumo" maxlength="80" placeholder="Ej: Hielo en bolsa, vasos 16 oz, pulpa de mango" required list="dlInsumos"></label>
+        <datalist id="dlInsumos"></datalist>
+        <label class="campo"><span>Categoría</span><select class="field" name="categoria" id="selCat"></select></label>
+        <label class="campo"><span>Fecha (jornada)</span><input class="field" type="date" name="fecha" required></label>
+        <div class="campo"><span>Cantidad</span>
+          <div class="row" style="gap:6px;flex-wrap:nowrap">
+            <input class="field" name="cantidad" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" style="max-width:110px">
+            <select class="field" name="unidad" id="selUnidad"></select>
+          </div></div>
+        <label class="campo"><span>Valor total</span>
+          <div class="precio" style="flex:1"><span>$</span><input class="field" name="valor" type="number" min="0" step="100" inputmode="numeric" placeholder="0" required></div></label>
+        <div class="campo ancho"><span>¿Con qué se pagó?</span><div class="g3" id="pagos"></div></div>
+        <label class="campo"><span>Proveedor (opcional)</span><input class="field" name="proveedor" maxlength="60" list="dlProveedores" placeholder="Ej: D1, Makro, Don Pedro"></label>
+        <datalist id="dlProveedores"></datalist>
+        <label class="campo"><span>Nota (opcional)</span><input class="field" name="nota" maxlength="200"></label>
+        <div class="campo ancho row acciones-form">
+          <button class="btn" id="btnGuardar">💾 Guardar compra</button>
+          <button class="btn ghost" type="button" id="btnCancelarEdicion" hidden>Cancelar edición</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Lista -->
+    <section class="card">
+      <div class="chips" id="periodos" style="margin-bottom:10px"></div>
+      <div class="filtro-fechas">
+        <span class="hint">Desde</span><input class="field" type="date" id="desde">
+        <span class="hint">hasta</span><input class="field" type="date" id="hasta">
+        <button class="mini" id="aplicar">Ver</button>
+        <input class="field" id="buscar" placeholder="🔍 Buscar insumo o proveedor..." style="flex:1;min-width:200px">
+      </div>
+      <div class="chips" id="filtroCat"></div>
+    </section>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="dos-col">
+      <section class="card"><h2>📊 Por categoría</h2><div id="porCat"></div></section>
+      <section class="card"><h2>🏪 Por proveedor</h2><div id="porProv"></div></section>
+    </div>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h2 style="margin:0">🧾 Compras</h2>
+        <button class="mini" id="descargar">⬇️ Descargar para Excel</button>
+      </div>
+      <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
+
+    const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
+    const PAGO = Object.fromEntries(PAGOS_COMPRA.map((p) => [p.id, p]));
+    const H = hoy();
+    const PERIODOS = [
+      ['hoy', 'Hoy', H, H], ['semana', 'Esta semana', inicioSemana(H), H], ['mes', 'Este mes', inicioMes(H), H],
+      ['mespasado', 'Mes pasado', sumarMeses(H, -1), finMes(sumarMeses(H, -1))],
+      ['3m', 'Últimos 3 meses', sumarMeses(H, -2), H],
+    ];
+    let periodo = 'mes', filtroCat = 'todas', compras = [], editando = null, pagoSel = 'caja', recientes = [];
+
+    // ---------- Formulario ----------
+    const form = $('#fCompra');
+    $('#selCat').innerHTML = CATEGORIAS_COMPRA.map((c) => `<option value="${c.id}">${c.icono} ${c.nombre}</option>`).join('');
+    $('#selUnidad').innerHTML = UNIDADES.map((u) => `<option>${u}</option>`).join('');
+    const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="opt ${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.nombre}</button>`).join(''); };
+    $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
+
+    function limpiarForm() {
+      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null;
+      $('#formTitulo').textContent = '➕ Registrar compra';
+      $('#btnGuardar').textContent = '💾 Guardar compra';
+      $('#btnCancelarEdicion').hidden = true;
+      pintarPagos();
+    }
+    function llenarForm(c, conFecha = true) {
+      form.insumo.value = c.insumo; form.categoria.value = c.categoria; form.unidad.value = c.unidad || 'und';
+      form.proveedor.value = c.proveedor || '';
+      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; }
+      pintarPagos();
+    }
+    $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const datos = {
+        insumo: form.insumo.value, categoria: form.categoria.value, fecha: form.fecha.value,
+        cantidad: form.cantidad.value, unidad: form.unidad.value, valor: form.valor.value,
+        pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
+      };
+      const btn = $('#btnGuardar'); btn.disabled = true;
+      try {
+        if (editando) await api('/api/compras', { method: 'PUT', body: JSON.stringify({ id: editando, ...datos }) });
+        else await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) });
+        toast(editando ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
+        limpiarForm(); cargar(); cargarRecientes();
+      } catch (err) { toast(err.message, true); }
+      finally { btn.disabled = false; }
+    });
+
+    // Compras frecuentes (últimos 60 días) para llenar rápido
+    async function cargarRecientes() {
+      try {
+        const { compras: cs } = await api(`/api/compras?desde=${sumarDias(H, -60)}&hasta=${H}`);
+        const vistos = new Map();
+        for (const c of cs) { const k = normalizar(c.insumo); const v = vistos.get(k) || { ...c, veces: 0 }; v.veces++; vistos.set(k, v); }
+        recientes = [...vistos.values()].sort((a, b) => b.veces - a.veces).slice(0, 10);
+        $('#recientes').innerHTML = recientes.length ? '<span class="hint">Frecuentes:</span> ' + recientes.map((c, i) => `<button type="button" class="chip" data-rec="${i}">${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}</button>`).join('') : '';
+        $('#dlInsumos').innerHTML = [...vistos.values()].map((c) => `<option value="${esc(c.insumo)}">`).join('');
+        $('#dlProveedores').innerHTML = [...new Set(cs.map((c) => c.proveedor).filter(Boolean))].map((p) => `<option value="${esc(p)}">`).join('');
+      } catch {}
+    }
+    $('#recientes').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rec]');
+      if (!b) return;
+      llenarForm(recientes[b.dataset.rec], false);
+      form.cantidad.focus();
+    });
+
+    // ---------- Lista ----------
+    function pintarFiltros() {
+      $('#periodos').innerHTML = PERIODOS.map(([id, n]) => `<button class="chip ${periodo === id ? 'on' : ''}" data-p="${id}">${n}</button>`).join('');
+      $('#filtroCat').innerHTML = [['todas', 'Todas', ''], ...CATEGORIAS_COMPRA.map((c) => [c.id, c.nombre, c.icono])]
+        .map(([id, n, ic]) => `<button class="chip ${filtroCat === id ? 'on' : ''}" data-fc="${id}">${ic} ${n}</button>`).join('');
+    }
+
+    async function cargar() {
+      try {
+        ({ compras } = await api(`/api/compras?desde=${$('#desde').value}&hasta=${$('#hasta').value}`));
+        render();
+      } catch (e) { toast(e.message, true); }
+    }
+
+    const filtradas = () => {
+      const q = normalizar($('#buscar').value);
+      return compras.filter((c) => (filtroCat === 'todas' || c.categoria === filtroCat) && (!q || normalizar(`${c.insumo} ${c.proveedor} ${c.nota}`).includes(q)));
+    };
+
+    function barras(filas) {
+      if (!filas.length) return '<p class="hint">Sin compras en este periodo.</p>';
+      const max = Math.max(...filas.map((f) => f[1]));
+      return filas.map(([lbl, v]) => `<div class="barra-h"><span>${lbl}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('');
+    }
+
+    function render() {
+      const lista = filtradas();
+      const total = lista.reduce((s, c) => s + c.valor, 0);
+      const por = (fn) => { const m = new Map(); for (const c of lista) m.set(fn(c), (m.get(fn(c)) || 0) + c.valor); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
+      const porPago = Object.fromEntries(por((c) => c.pago));
+      $('#kpis').innerHTML = `
+        <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${lista.length} registro${lista.length === 1 ? '' : 's'}</small></div>
+        ${PAGOS_COMPRA.map((p) => `<div class="kpi"><span>${p.icono} ${p.nombre}</span><b>${pesos(porPago[p.id] || 0)}</b></div>`).join('')}`;
+      $('#porCat').innerHTML = barras(por((c) => c.categoria).map(([k, v]) => [`${CAT[k]?.icono || ''} ${esc(CAT[k]?.nombre || k)}`, v]));
+      $('#porProv').innerHTML = barras(por((c) => c.proveedor || 'Sin proveedor').slice(0, 8).map(([k, v]) => [esc(k), v]));
+
+      $('#tabla').innerHTML = lista.length ? `
+        <thead><tr><th>Fecha</th><th>Insumo</th><th>Categoría</th><th class="num">Cantidad</th><th>Pagó con</th><th>Proveedor</th><th class="num">Valor</th>${admin ? '<th></th>' : ''}</tr></thead>
+        <tbody>${lista.map((c) => `<tr>
+          <td style="white-space:nowrap">${fechaCorta(c.fecha)}<br><span class="hint">${esc(c.registradoPor)}</span></td>
+          <td><b>${esc(c.insumo)}</b>${c.nota ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}</td>
+          <td>${CAT[c.categoria]?.icono || ''} ${esc(CAT[c.categoria]?.nombre || '')}</td>
+          <td class="num">${c.cantidad ? `${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)}` : '—'}${c.cantidad > 0 ? `<br><span class="hint">${pesos(Math.round(c.valor / c.cantidad))}/${esc(c.unidad)}</span>` : ''}</td>
+          <td style="white-space:nowrap">${PAGO[c.pago]?.icono || ''} ${esc(PAGO[c.pago]?.nombre || '')}</td>
+          <td>${esc(c.proveedor || '—')}</td>
+          <td class="num"><b>${pesos(c.valor)}</b></td>
+          ${admin ? `<td style="white-space:nowrap"><button class="mini" data-edit="${c.id}">✏️</button> <button class="del" data-del="${c.id}">🗑</button></td>` : ''}
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="6"><b>Total</b></td><td class="num"><b>${pesos(total)}</b></td>${admin ? '<td></td>' : ''}</tr></tfoot>`
+        : '<tr><td class="empty">No hay compras en este periodo.</td></tr>';
+    }
+
+    document.querySelector('main').addEventListener('click', async (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.p) {
+        periodo = b.dataset.p; const [, , d, h] = PERIODOS.find((x) => x[0] === periodo);
+        $('#desde').value = d; $('#hasta').value = h; pintarFiltros(); cargar();
+      }
+      if (b.dataset.fc) { filtroCat = b.dataset.fc; pintarFiltros(); render(); }
+      if (b.dataset.edit) {
+        const c = compras.find((x) => x.id === b.dataset.edit);
+        editando = c.id; llenarForm(c);
+        $('#formTitulo').textContent = `✏️ Editando: ${c.insumo}`;
+        $('#btnGuardar').textContent = '💾 Guardar cambios';
+        $('#btnCancelarEdicion').hidden = false;
+        $('#formCard').scrollIntoView({ behavior: 'smooth' });
+      }
+      if (b.dataset.del) {
+        if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
+        try { await api(`/api/compras?id=${b.dataset.del}`, { method: 'DELETE' }); toast('Compra borrada'); cargar(); } catch (err) { toast(err.message, true); }
+      }
+    });
+    $('#aplicar').addEventListener('click', () => { periodo = ''; pintarFiltros(); cargar(); });
+    $('#buscar').addEventListener('input', render);
+
+    $('#descargar').addEventListener('click', () => {
+      const lista = filtradas();
+      if (!lista.length) return toast('No hay compras para descargar', true);
+      const c = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
+      const filas = [['Fecha', 'Insumo', 'Categoría', 'Cantidad', 'Unidad', 'Valor', 'Pagó con', 'Proveedor', 'Nota', 'Registró']]
+        .concat(lista.map((x) => [x.fecha, x.insumo, CAT[x.categoria]?.nombre, x.cantidad ?? '', x.unidad, x.valor, PAGO[x.pago]?.nombre, x.proveedor, x.nota, x.registradoPor]));
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob(['﻿' + filas.map((f) => f.map(c).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+      a.download = `compras_${$('#desde').value}_a_${$('#hasta').value}.csv`; a.click();
+    });
+
+    limpiarForm();
+    const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);
+    $('#desde').value = d0; $('#hasta').value = h0;
+    pintarFiltros(); cargar(); cargarRecientes();
+  </script>
+</body>
+</html>

@@ -602,3 +602,33 @@ textarea.field { resize: vertical; font: inherit; }
 @media (max-width: 560px) { .denom-grid { grid-template-columns: 1fr; } }
 .solo-print { display: none; }
 @media print { .solo-print { display: block !important; margin-bottom: 10px; } }
+
+/* ---------- Compras / Gastos fijos ---------- */
+.form-compra { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 800px) { .form-compra { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .form-compra { grid-template-columns: 1fr; } }
+.campo { display: grid; gap: 4px; align-content: start; }
+.campo > span { font-size: .82rem; color: var(--muted); font-weight: 700; }
+.campo.ancho { grid-column: 1 / -1; }
+.g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (max-width: 520px) { .g3 { grid-template-columns: 1fr; } }
+.g3 .opt { padding: 10px; font-weight: 700; }
+.acciones-form { gap: 10px; }
+.acciones-form .btn { width: auto; flex: 1; }
+.recientes { margin-bottom: 12px; align-items: center; }
+.recientes .chip { padding: 6px 12px; font-size: .85rem; }
+.estado-pago { display: inline-block; border-radius: 999px; padding: 3px 10px; font-weight: 800; font-size: .8rem; white-space: nowrap; }
+.estado-pago.ok { background: rgba(34,211,138,.15); color: #6ff2b9; }
+.estado-pago.parcial { background: rgba(51,225,255,.13); color: #9ff0ff; }
+.estado-pago.pend { background: rgba(255,176,32,.15); color: #ffcf70; }
+.estado-pago.venc { background: rgba(255,77,109,.16); color: #ff8fa3; }
+.fijo { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+.fijo:last-child { border-bottom: 0; }
+.fijo .btn { width: auto; padding: 9px 14px; font-size: .9rem; }
+.fijo-adm { flex-wrap: wrap; }
+.fijo-adm select.field { max-width: 170px; }
+.fijo-adm .dia { max-width: 74px; }
+.balance .kpi.utilidad b { color: #6ff2b9; }
+.balance .kpi.perdida b { color: #ff8fa3; }
+.t-gastos .cnt { background: var(--warn); }
+.mini { white-space: nowrap; }

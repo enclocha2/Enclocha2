@@ -39,6 +39,10 @@
     </div>
 
     <div class="kpis" id="kpis"></div>
+    <section class="card" id="balanceCard" hidden>
+      <h2>💼 Balance <span class="hint" id="balanceHint"></span></h2>
+      <div class="kpis balance" id="balance" style="margin:0"></div>
+    </section>
 
     <div class="card">
       <h2 id="tituloGrafica">Ventas</h2>
@@ -132,7 +136,30 @@
           }
         }
         pintar(buckets, ventas);
+        balance(desde, hasta, buckets);
       } catch (e) { toast(e.message, true); }
+    }
+
+    // Ventas − compras − gastos fijos (solo vistas de Mes y Año)
+    async function balance(desde, hasta, buckets) {
+      if (modo !== 'mes' && modo !== 'anio') { $('#balanceCard').hidden = true; return; }
+      try {
+        const ventas = buckets.reduce((s, b) => s + b.efectivo + b.transferencia, 0);
+        const { compras } = await api(`/api/compras?desde=${desde}&hasta=${hasta}`);
+        const totalCompras = compras.reduce((s, c) => s + c.valor, 0);
+        let fijos = 0;
+        if (modo === 'mes') { const { pagos } = await api(`/api/gastosfijos?mes=${desde.slice(0, 7)}`); fijos = pagos.reduce((s, p) => s + p.valor, 0); }
+        else { const { porMes } = await api(`/api/gastosfijos?anio=${desde.slice(0, 4)}`); fijos = Object.values(porMes).flat().reduce((s, p) => s + p.valor, 0); }
+        const util = ventas - totalCompras - fijos;
+        const margen = ventas ? Math.round((util / ventas) * 100) : 0;
+        $('#balanceHint').textContent = '(gastos fijos = los pagos registrados)';
+        $('#balance').innerHTML = `
+          <div class="kpi"><span>Ventas</span><b>${pesos(ventas)}</b></div>
+          <div class="kpi"><span>🛒 Compras</span><b>− ${pesos(totalCompras)}</b><small>${compras.length} registros</small></div>
+          <div class="kpi"><span>🏠 Gastos fijos pagados</span><b>− ${pesos(fijos)}</b></div>
+          <div class="kpi ${util >= 0 ? 'utilidad' : 'perdida'}"><span>${util >= 0 ? '📈 Utilidad' : '📉 Pérdida'}</span><b>${pesos(Math.abs(util))}</b><small>${margen}% de las ventas</small></div>`;
+        $('#balanceCard').hidden = false;
+      } catch { $('#balanceCard').hidden = true; }
     }
 
     // ---------- KPIs + gráfica + tablas ----------

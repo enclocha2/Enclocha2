@@ -239,3 +239,57 @@ export async function listarCierres(limite = 60) {
   }
   return Object.values(mem.cierres || {}).sort((a, b) => (a.jornada < b.jornada ? 1 : -1)).slice(0, limite);
 }
+
+// ---------- Compras ----------
+const scoreFecha = (f) => Date.parse(f + 'T12:00:00-05:00');
+export async function guardarCompra(c) {
+  if (redis) {
+    await redis.set(`compra:${c.id}`, c);
+    await redis.zadd('compras', { score: scoreFecha(c.fecha), member: c.id });
+  } else (mem.compras ||= new Map()).set(c.id, c);
+  return c;
+}
+export async function leerCompra(id) {
+  if (redis) return (await redis.get(`compra:${id}`)) || null;
+  return (mem.compras ||= new Map()).get(id) || null;
+}
+export async function borrarCompra(id) {
+  if (redis) { await redis.del(`compra:${id}`); await redis.zrem('compras', id); }
+  else (mem.compras ||= new Map()).delete(id);
+}
+export async function comprasEntre(desde, hasta) {
+  const ini = scoreFecha(desde), fin = scoreFecha(hasta);
+  if (redis) {
+    const ids = await redis.zrange('compras', ini, fin, { byScore: true });
+    const out = [];
+    for (let i = 0; i < ids.length; i += 200) out.push(...(await redis.mget(...ids.slice(i, i + 200).map((x) => `compra:${x}`))));
+    return out.filter(Boolean);
+  }
+  return [...(mem.compras ||= new Map()).values()].filter((c) => c.fecha >= desde && c.fecha <= hasta);
+}
+
+// ---------- Gastos fijos ----------
+export async function leerGastosFijos() {
+  if (redis) return (await redis.get('gastosfijos')) || [];
+  return mem.gastosFijos || [];
+}
+export async function guardarGastosFijos(lista) {
+  if (redis) await redis.set('gastosfijos', lista); else mem.gastosFijos = lista;
+  return lista;
+}
+export async function leerPagosFijos(mes) {
+  if (redis) return (await redis.get(`pagosfijos:${mes}`)) || [];
+  return (mem.pagosFijos ||= {})[mes] || [];
+}
+export async function guardarPagosFijos(mes, pagos) {
+  if (redis) await redis.set(`pagosfijos:${mes}`, pagos); else (mem.pagosFijos ||= {})[mes] = pagos;
+  return pagos;
+}
+export async function pagosFijosAnio(anio) {
+  const meses = Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, '0')}`);
+  if (redis) {
+    const r = await redis.mget(...meses.map((m) => `pagosfijos:${m}`));
+    return Object.fromEntries(meses.map((m, i) => [m, r[i] || []]));
+  }
+  return Object.fromEntries(meses.map((m) => [m, (mem.pagosFijos ||= {})[m] || []]));
+}
