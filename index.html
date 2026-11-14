@@ -37,6 +37,16 @@
         <span id="tCuentas">Pedidos sin pagar por persona</span>
         <em class="cnt" id="cntCuentas" hidden></em>
       </a>
+      <a class="tile t-ventas solo-admin" href="/ventas">
+        <span class="ico">🧾</span>
+        <strong>Ventas</strong>
+        <span>Historial de todo lo vendido</span>
+      </a>
+      <a class="tile t-reportes solo-admin" href="/reportes">
+        <span class="ico">📊</span>
+        <strong>Reportes</strong>
+        <span>Por día, semana, mes · efectivo y transferencia</span>
+      </a>
       <a class="tile t-sabores solo-admin" href="/productos#sabores">
         <span class="ico">🍧</span>
         <strong>Sabores disponibles</strong>
@@ -47,6 +57,11 @@
         <strong>Productos y precios</strong>
         <span id="tProductos">Agregar, quitar, precios y categorías</span>
       </a>
+      <a class="tile t-qr solo-admin" href="/productos#qr">
+        <span class="ico">📲</span>
+        <strong>QR de pago</strong>
+        <span>El QR que se muestra para transferencias</span>
+      </a>
     </div>
 
     <h3 class="sub">Hoy</h3>
@@ -55,7 +70,7 @@
 
   <script type="module">
     import { pesos, agruparCuentas } from '/catalog.js';
-    import { requerirSesion, api } from '/sesion.js';
+    import { requerirSesion, api, traerPedidos, cadaTanto } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     const { usuario, admin } = await requerirSesion();
@@ -64,9 +79,13 @@
     $('#saludo').textContent = `${h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'}, ${usuario} 👋`;
     if (!admin) document.querySelectorAll('.solo-admin').forEach((e) => e.remove());
 
+    const estado = { rev: null, pedidos: [] };
+    let config = null;
     async function cargar() {
       try {
-        const [{ pedidos }, { config }] = await Promise.all([api('/api/pedidos'), api('/api/catalogo')]);
+        if (!config) ({ config } = await api('/api/catalogo'));
+        if (!(await traerPedidos(estado))) return;
+        const pedidos = estado.pedidos;
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
         const delDia = pedidos.filter((p) => p.creado >= hoy.getTime() && p.estado !== 'cancelado');
         const nuevos = pedidos.filter((p) => p.estado === 'nuevo').length;
@@ -98,7 +117,7 @@
       } catch {}
     }
     cargar();
-    setInterval(cargar, 10000);
+    cadaTanto(cargar, 20000);
   </script>
 </body>
 </html>

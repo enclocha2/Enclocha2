@@ -1,10 +1,12 @@
-# 🍧 Granizados – Pedidos (v5)
+# 🍧 Granizados – Pedidos (v6)
 
 | Ruta | Qué es |
 |---|---|
 | `/` | **Menú principal** (resumen del día) |
 | `/tomar` | Tomar pedido: granizados (varios diferentes), cervezas, licor y demás categorías |
 | `/cuentas` | Cuentas abiertas: pedidos sin pagar por persona, agregar algo más y cobrar todo junto |
+| `/ventas` | Historial de ventas (todo lo cobrado), filtros y descarga para Excel |
+| `/reportes` | Ventas por día, semana, mes y año · efectivo vs transferencia · lo más vendido |
 | `/pedidos` | Hoja de pedidos en tiempo real con sonido, cobros y resumen |
 | `/productos` | Sabores disponibles, productos, precios, tamaños, toppings y categorías |
 | `/login` | Ingreso |
@@ -45,3 +47,16 @@ api/_lib/store.js   ← Upstash Redis
   "💳 tiene cuenta abierta → Agregar a su cuenta". O desde **Cuentas abiertas → ➕ Agregar algo más**.
 - Lo nuevo entra como pedido aparte (cocina lo ve y suena) pero ligado a la misma cuenta.
 - Al cobrar (en Cuentas o en Pedidos) se cobran **todos** los pedidos pendientes de esa cuenta.
+
+## Ventas y reportes
+- Una **venta** es un pedido cobrado. Se registra al marcarlo pagado (y se quita si se deshace el cobro o se cancela).
+- Las ventas se guardan para siempre; los pedidos completos, 120 días.
+- Ventas y Reportes solo los ven los administradores (variable `ADMINS`; si no existe, todos).
+
+## QR de transferencia
+Menú → **QR de pago**: sube la imagen del QR y un texto opcional (ej. número de Nequi).
+Aparece al escoger "Transferencia" al tomar el pedido, al cobrar en Cuentas, y con el botón **📲 QR**.
+
+## Consumo de la base de datos (plan gratis Upstash: 500.000 operaciones/mes)
+Las pantallas solo descargan pedidos cuando hay cambios. La hoja de Pedidos revisa cada 4 s
+(≈ 260.000 operaciones/mes si está abierta 12 h diarias). Revisa el consumo en Upstash → Usage.

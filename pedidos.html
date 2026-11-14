@@ -12,6 +12,7 @@
     <div class="row"><a href="/" class="back">← Menú</a><h1>📋 Pedidos</h1></div>
     <div class="row">
       <span class="user-pill">👤 <span id="yo"></span></span>
+      <button class="link" data-qr-grande>📲 QR</button>
       <button class="link" id="btnSonido">🔔 ON</button>
       <a href="/tomar">+ Nuevo</a>
     </div>
@@ -50,10 +51,11 @@
 
   <script type="module">
     import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe } from '/catalog.js';
-    import { requerirSesion, api } from '/sesion.js';
+    import { requerirSesion, api, traerPedidos } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
-    const POLL_MS = 3000;
+    const POLL_MS = 4000;
+    const estado = { rev: null, pedidos: [] };
     let conocidos = null;
     let pedidos = [];
     let sonidoOn = true;
@@ -97,9 +99,12 @@
     // ---------- Datos ----------
     async function cargar() {
       try {
-        const data = await api('/api/pedidos');
-        pedidos = data.pedidos;
-        $('#aviso').innerHTML = data.persistente ? '' :
+        const hayCambios = await traerPedidos(estado);
+        $('#status').className = 'status';
+        $('#status').innerHTML = `<span class="dot"></span>En línea · ${new Date().toLocaleTimeString('es-CO')}`;
+        if (!hayCambios) return;
+        pedidos = estado.pedidos;
+        $('#aviso').innerHTML = estado.persistente ? '' :
           '<div class="warnbar">⚠️ Sin base de datos conectada: los pedidos se pueden perder. Conecta Upstash Redis en Vercel (ver README).</div>';
 
         const ids = new Set(pedidos.map((p) => p.id));
@@ -109,9 +114,6 @@
 
         render(new Set(nuevos.map((p) => p.id)));
         if (nuevos.length) avisar(nuevos);
-
-        $('#status').className = 'status';
-        $('#status').innerHTML = `<span class="dot"></span>En línea · ${new Date().toLocaleTimeString('es-CO')}`;
       } catch {
         $('#status').className = 'status off';
         $('#status').innerHTML = '<span class="dot"></span>Sin conexión, reintentando...';

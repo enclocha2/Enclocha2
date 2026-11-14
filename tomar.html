@@ -12,6 +12,7 @@
     <div class="row"><a href="/" class="back">← Menú</a><h1>🧾 Tomar pedido</h1></div>
     <div class="row">
       <span class="user-pill">👤 <span id="yo"></span></span>
+      <button class="link" data-qr-grande>📲 QR</button>
       <a href="/pedidos">Pedidos</a>
     </div>
   </header>
@@ -109,6 +110,7 @@
           <button class="opt" data-metodo="efectivo">💵 Efectivo</button>
           <button class="opt" data-metodo="transferencia">📲 Transferencia</button>
         </div>
+        <div id="mpQR"></div>
       </div>
       <div class="error" id="mpError"></div>
       <button class="btn" id="mpConfirmar" disabled>Confirmar y enviar</button>
@@ -121,6 +123,7 @@
     <div class="box">
       <h3 id="okTitulo">✅ Pedido enviado</h3>
       <div class="aviso-barra" id="okAviso"></div>
+      <div id="okQR"></div>
       <button class="btn" id="okNuevo">Tomar otro pedido</button>
       <a class="btn ghost" href="/" style="text-align:center;text-decoration:none">Volver al menú</a>
     </div>
@@ -130,7 +133,7 @@
 
   <script type="module">
     import { GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar } from '/catalog.js';
-    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     await requerirSesion();
@@ -166,10 +169,11 @@
     const enCarrito = (id) => carrito.find((d) => d.tipo === 'producto' && d.productoId === id);
 
     // ---------- Cuentas abiertas ----------
+    const estadoPed = { rev: null, pedidos: [] };
     async function cargarCuentas() {
       try {
-        const { pedidos } = await api('/api/pedidos');
-        abiertas = agruparCuentas(pedidos).filter((c) => c.abierta).sort((a, b) => b.desde - a.desde);
+        if (!(await traerPedidos(estadoPed)) && abiertas.length) return;
+        abiertas = agruparCuentas(estadoPed.pedidos).filter((c) => c.abierta).sort((a, b) => b.desde - a.desde);
       } catch {}
     }
 
@@ -395,6 +399,8 @@
         b.classList.toggle('on', pago.ahora !== null && String(Number(pago.ahora)) === b.dataset.ahora));
       document.querySelectorAll('#modalPago [data-metodo]').forEach((b) => b.classList.toggle('on', pago.metodo === b.dataset.metodo));
       $('#mpMetodo').hidden = pago.ahora !== true;
+      if (pago.metodo === 'transferencia') leerQR().then((a) => { if (pago.metodo === 'transferencia') $('#mpQR').innerHTML = htmlQR(a, pesos(totalCarrito())); });
+      else $('#mpQR').innerHTML = '';
       $('#mpConfirmar').disabled = pago.ahora === null || (pago.ahora && !pago.metodo);
     }
 
@@ -438,6 +444,7 @@
           <span class="nom">${esc(r.pedido.cliente)}</span>
           <span class="monto">Total por pagar: ${pesos(r.cuentaPendiente)}</span><br>
           (${r.cuentaPedidos} pedidos). Paga en la barra con ese nombre.`;
+        $('#okQR').innerHTML = '';
         $('#modalOk').classList.add('show');
         carrito = []; item = nuevo(); tab = 'granizados'; $('#nota').value = '';
         salirCuenta(true);
@@ -458,6 +465,8 @@
            <span class="monto">${pesos(p.total)} · ${m.icono} ${m.nombre}</span>`
         : `El pedido de <span class="nom">${esc(p.cliente)}</span>
            <span class="monto">${pesos(p.total)}</span><br>quedó con pago pendiente. Cobra en la barra con ese nombre.`;
+      $('#okQR').innerHTML = '';
+      if (p.pago.ahora && p.pago.metodo === 'transferencia') leerQR().then((a) => { $('#okQR').innerHTML = htmlQR(a, pesos(p.total)); });
       $('#modalOk').classList.add('show');
     }
     $('#okNuevo').addEventListener('click', () => {
@@ -475,7 +484,8 @@
       const c = abiertas.find((x) => x.id === param || x.pedidos.some((p) => p.id === param));
       if (c) usarCuenta(c); else { toast('Esa cuenta ya fue pagada o no existe', true); history.replaceState(null, '', '/tomar'); }
     }
-    setInterval(() => { if (!modoCuenta) cargarCuentas().then(renderSugerencias); }, 15000);
+    cadaTanto(() => { if (!modoCuenta) cargarCuentas().then(renderSugerencias); }, 20000);
+    leerQR(); // precarga el QR
   </script>
 </body>
 </html>

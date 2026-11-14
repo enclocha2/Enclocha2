@@ -312,3 +312,50 @@ body.con-barra main.admin { padding-bottom: 100px; }
 .acts-cuenta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
 .acts-cuenta .btn { text-align: center; text-decoration: none; padding: 12px; }
 .pago.cuenta-linea { background: #e8f1ff; color: #1d4a99; font-weight: 600; }
+
+/* v6: QR, ventas, reportes */
+.qr-box { display: grid; justify-items: center; gap: 6px; background: #fff; border: 2px dashed var(--line); border-radius: 16px; padding: 12px; margin-top: 10px; }
+.qr-box img { width: 200px; max-width: 100%; image-rendering: pixelated; border-radius: 8px; }
+.qr-box.sin-qr { color: var(--muted); font-size: .9rem; text-align: center; }
+.qr-monto { font-size: 1.4rem; font-weight: 900; color: var(--ink); }
+.qr-texto { font-size: .9rem; color: var(--muted); text-align: center; }
+.qr-grande { position: fixed; inset: 0; z-index: 200; background: rgba(42,27,46,.92); display: none; place-items: center; padding: 16px; }
+.qr-grande.show { display: grid; }
+.qr-grande-box { background: #fff; border-radius: 24px; padding: 20px; display: grid; justify-items: center; gap: 8px; max-width: 520px; width: 100%; }
+.qr-grande-box img { width: min(440px, 80vw); image-rendering: pixelated; }
+.qr-grande-box .qr-monto { font-size: 2rem; }
+
+.filtro-fechas { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.filtro-fechas input[type=date] { width: auto; }
+.tabla-wrap { overflow-x: auto; }
+table.tabla { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.tabla th { text-align: left; color: var(--muted); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .4px; padding: 8px; border-bottom: 2px solid var(--line); white-space: nowrap; }
+.tabla td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tabla td.num, .tabla th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tabla tr:hover td { background: #fffaf6; }
+.metodo { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.metodo i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.m-efectivo i { background: #2a78d6; }
+.m-transferencia i { background: #eb6834; }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: #fff; border-radius: 14px; box-shadow: var(--shadow); padding: 12px 14px; }
+.kpi span { color: var(--muted); font-size: .82rem; display: flex; align-items: center; gap: 6px; }
+.kpi b { display: block; font-size: 1.35rem; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.kpi small { color: var(--muted); }
+.periodo { display: flex; align-items: center; gap: 8px; margin: 4px 0 14px; flex-wrap: wrap; }
+.periodo .lbl { font-weight: 800; font-size: 1.1rem; min-width: 200px; text-align: center; }
+.periodo button { border: 2px solid var(--line); background: #fff; border-radius: 10px; width: 40px; height: 40px; font-weight: 800; color: var(--ink); }
+.leyenda { display: flex; gap: 16px; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+.grafica { position: relative; }
+.grafica svg { width: 100%; height: auto; display: block; }
+.grafica .tip { position: absolute; pointer-events: none; background: var(--ink); color: #fff; border-radius: 10px; padding: 8px 10px; font-size: .82rem; white-space: nowrap; transform: translate(-50%, -110%); display: none; z-index: 5; }
+.grafica .tip b { display: block; }
+.barra-h { display: grid; grid-template-columns: minmax(120px, 1.4fr) 3fr auto; gap: 10px; align-items: center; padding: 6px 0; font-size: .9rem; }
+.barra-h .track { height: 12px; background: #f3edf0; border-radius: 4px; overflow: hidden; }
+.barra-h .fill { height: 100%; background: #2a78d6; border-radius: 0 4px 4px 0; }
+.barra-h .val { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.dos-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 800px) { .dos-col { grid-template-columns: 1fr; } }
+.t-ventas .ico, .t-reportes .ico, .t-qr .ico { }
+.modal .box { max-height: 92vh; overflow-y: auto; }

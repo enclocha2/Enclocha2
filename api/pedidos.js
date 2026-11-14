@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual } from './_lib/store.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta } from './_lib/store.js';
 import { usuarioDe } from './_lib/auth.js';
 
 class ErrorUsuario extends Error {}
@@ -16,8 +16,13 @@ export default async function handler(req, res) {
   try {
     // Listar pedidos
     if (req.method === 'GET') {
+      const rev = await leerRev();
+      const revCliente = req.query?.rev ?? new URL(req.url, 'http://x').searchParams.get('rev');
+      if (revCliente != null && String(rev) === String(revCliente)) {
+        return res.status(200).json({ sinCambios: true, rev });
+      }
       const pedidos = await listar();
-      return res.status(200).json({ pedidos, usuario, persistente: usandoRedis, ahora: Date.now() });
+      return res.status(200).json({ pedidos, rev, usuario, persistente: usandoRedis, ahora: Date.now() });
     }
 
     // Crear pedido
@@ -88,6 +93,7 @@ export default async function handler(req, res) {
           Object.assign(p.pago, { pagado: true, metodo: body.metodo, cobradoPor: usuario, pagadoEn: t });
           (p.historial ||= []).push({ accion: 'pagado', usuario, en: t, metodo: body.metodo });
           p.actualizado = t;
+          await registrarVenta(p);
           await guardar(p);
         }
         return res.status(200).json({ pagados: abiertos.length, total: abiertos.reduce((s, p) => s + p.total, 0) });
@@ -102,15 +108,19 @@ export default async function handler(req, res) {
         if (!ESTADOS.includes(body.estado)) throw new ErrorUsuario('Estado inválido');
         pedido.estado = body.estado;
         pedido.historial.push({ accion: body.estado, usuario, en: t });
+        if (body.estado === 'cancelado') await anularVenta(pedido); // un pedido cancelado no cuenta como venta
       }
 
       if (body.pago !== undefined) {
         pedido.pago ||= { ahora: false, metodo: null, pagado: false };
         if (body.pago.pagado) {
           if (!metodoValido(body.pago.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
+          if (pedido.pago.pagado) await anularVenta(pedido);
           Object.assign(pedido.pago, { pagado: true, metodo: body.pago.metodo, cobradoPor: usuario, pagadoEn: t });
           pedido.historial.push({ accion: 'pagado', usuario, en: t, metodo: body.pago.metodo });
+          await registrarVenta(pedido);
         } else {
+          await anularVenta(pedido);
           Object.assign(pedido.pago, { pagado: false, cobradoPor: null, pagadoEn: null });
           pedido.historial.push({ accion: 'pago-deshecho', usuario, en: t });
         }

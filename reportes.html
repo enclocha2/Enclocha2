@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ff3d7f" />
+  <title>Granizados · Reportes</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="back">← Menú</a><h1>📊 Reportes</h1></div>
+    <div class="row"><a href="/ventas">🧾 Ventas</a></div>
+  </header>
+
+  <main class="admin" style="max-width:1100px">
+    <nav class="tabs" id="modos">
+      <button data-modo="dia">Día</button>
+      <button data-modo="semana">Semana</button>
+      <button data-modo="mes">Mes</button>
+      <button data-modo="anio">Año</button>
+    </nav>
+
+    <div class="periodo">
+      <button id="ant" title="Anterior">‹</button>
+      <span class="lbl" id="lblPeriodo"></span>
+      <button id="sig" title="Siguiente">›</button>
+      <button class="mini" id="irHoy">Hoy</button>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h2 id="tituloGrafica">Ventas</h2>
+      <div class="leyenda">
+        <span class="metodo m-efectivo"><i></i>Efectivo</span>
+        <span class="metodo m-transferencia"><i></i>Transferencia</span>
+      </div>
+      <div class="grafica" id="grafica"><div class="tip" id="tip"></div></div>
+      <details style="margin-top:8px"><summary class="hint">Ver como tabla</summary><div class="tabla-wrap"><table class="tabla" id="tablaDatos"></table></div></details>
+    </div>
+
+    <div class="dos-col" id="detalles">
+      <div class="card"><h2>🏆 Lo más vendido</h2><div id="top"></div></div>
+      <div class="card"><h2>👤 Por quién tomó el pedido</h2><div id="vendedores"></div></div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { hoy, diaDe, horaDe, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, diasEntre,
+      nombreMes, nombreDia, fechaLarga, fechaCorta } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para ver los reportes.</div>'; throw 0; }
+
+    const COLOR = { efectivo: '#2a78d6', transferencia: '#eb6834' };
+    let modo = 'dia', ancla = hoy(), resumenCache = null;
+    const corto = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace('.', ',') + ' M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + ' mil' : '$' + n;
+
+    // ---------- Rango del periodo ----------
+    function rango() {
+      if (modo === 'dia') return [ancla, ancla];
+      if (modo === 'semana') { const i = inicioSemana(ancla); return [i, sumarDias(i, 6)]; }
+      if (modo === 'mes') return [inicioMes(ancla), finMes(ancla)];
+      return [ancla.slice(0, 4) + '-01-01', ancla.slice(0, 4) + '-12-31'];
+    }
+    function etiqueta() {
+      const [a, b] = rango();
+      if (modo === 'dia') return fechaLarga(a);
+      if (modo === 'semana') return `${fechaCorta(a)} – ${fechaCorta(b)} ${b.slice(0, 4)}`;
+      if (modo === 'mes') return `${nombreMes(a)} ${a.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
+      return a.slice(0, 4);
+    }
+    function mover(n) {
+      if (modo === 'dia') ancla = sumarDias(ancla, n);
+      else if (modo === 'semana') ancla = sumarDias(ancla, 7 * n);
+      else if (modo === 'mes') ancla = sumarMeses(ancla, n);
+      else ancla = `${Number(ancla.slice(0, 4)) + n}-01-01`;
+      cargar();
+    }
+
+    // ---------- Datos ----------
+    async function cargar() {
+      document.querySelectorAll('#modos button').forEach((b) => b.classList.toggle('on', b.dataset.modo === modo));
+      $('#lblPeriodo').textContent = etiqueta();
+      $('#sig').disabled = rango()[0] > hoy();
+      const [desde, hasta] = rango();
+      try {
+        let buckets, ventas = null;
+        if (modo === 'anio') {
+          if (!resumenCache) ({ dias: resumenCache } = await api('/api/ventas?resumen=1'));
+          buckets = Array.from({ length: 12 }, (_, i) => {
+            const mes = `${desde.slice(0, 4)}-${String(i + 1).padStart(2, '0')}`;
+            const b = { clave: mes, lbl: nombreMes(mes + '-01').slice(0, 3), titulo: `${nombreMes(mes + '-01')} ${mes.slice(0, 4)}`, efectivo: 0, transferencia: 0, n: 0 };
+            for (const [d, v] of Object.entries(resumenCache)) if (d.startsWith(mes)) { b.efectivo += v.efectivo || 0; b.transferencia += v.transferencia || 0; b.n += v.n || 0; }
+            return b;
+          });
+        } else {
+          ({ ventas } = await api(`/api/ventas?desde=${desde}&hasta=${hasta}`));
+          if (modo === 'dia') {
+            const horas = ventas.map((v) => horaDe(v.pa));
+            const h0 = Math.min(10, ...horas), h1 = Math.max(22, ...horas);
+            buckets = Array.from({ length: h1 - h0 + 1 }, (_, i) => {
+              const h = h0 + i;
+              return { clave: h, lbl: `${h % 12 || 12}${h < 12 ? 'a' : 'p'}`, titulo: `${h % 12 || 12}:00 ${h < 12 ? 'a. m.' : 'p. m.'}`, efectivo: 0, transferencia: 0, n: 0 };
+            });
+            for (const v of ventas) { const b = buckets.find((x) => x.clave === horaDe(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
+          } else {
+            buckets = diasEntre(desde, hasta).map((d) => ({
+              clave: d, lbl: modo === 'semana' ? nombreDia(d) : String(Number(d.slice(8))), titulo: fechaLarga(d), efectivo: 0, transferencia: 0, n: 0,
+            }));
+            for (const v of ventas) { const b = buckets.find((x) => x.clave === diaDe(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
+          }
+        }
+        pintar(buckets, ventas);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    // ---------- KPIs + gráfica + tablas ----------
+    function pintar(buckets, ventas) {
+      const ef = buckets.reduce((s, b) => s + b.efectivo, 0);
+      const tr = buckets.reduce((s, b) => s + b.transferencia, 0);
+      const n = buckets.reduce((s, b) => s + b.n, 0);
+      const total = ef + tr;
+      const pct = (x) => (total ? Math.round((x / total) * 100) : 0) + '% del total';
+      $('#kpis').innerHTML = `
+        <div class="kpi"><span>Total vendido</span><b>${pesos(total)}</b><small>${n} venta${n === 1 ? '' : 's'}</small></div>
+        <div class="kpi"><span class="metodo m-efectivo"><i></i>Efectivo</span><b>${pesos(ef)}</b><small>${pct(ef)}</small></div>
+        <div class="kpi"><span class="metodo m-transferencia"><i></i>Transferencia</span><b>${pesos(tr)}</b><small>${pct(tr)}</small></div>
+        <div class="kpi"><span>Ticket promedio</span><b>${pesos(n ? Math.round(total / n) : 0)}</b></div>`;
+
+      $('#tituloGrafica').textContent = { dia: 'Ventas por hora', semana: 'Ventas por día', mes: 'Ventas por día', anio: 'Ventas por mes' }[modo];
+      grafica(buckets);
+
+      $('#tablaDatos').innerHTML = `<thead><tr><th>${modo === 'dia' ? 'Hora' : modo === 'anio' ? 'Mes' : 'Día'}</th><th class="num">Ventas</th><th class="num">Efectivo</th><th class="num">Transferencia</th><th class="num">Total</th></tr></thead>
+        <tbody>${buckets.filter((b) => b.n).map((b) => `<tr><td>${b.titulo}</td><td class="num">${b.n}</td><td class="num">${pesos(b.efectivo)}</td><td class="num">${pesos(b.transferencia)}</td><td class="num"><b>${pesos(b.efectivo + b.transferencia)}</b></td></tr>`).join('') || '<tr><td colspan="5" class="empty">Sin ventas</td></tr>'}</tbody>`;
+
+      // Top productos y vendedores (solo con detalle: día/semana/mes)
+      if (!ventas) {
+        $('#top').innerHTML = $('#vendedores').innerHTML = '<p class="hint">Disponible en las vistas de Día, Semana y Mes.</p>';
+        return;
+      }
+      const prods = new Map();
+      for (const v of ventas) for (const [nom, cant, sub] of v.it) {
+        const p = prods.get(nom) || { cant: 0, sub: 0 }; p.cant += cant; p.sub += sub; prods.set(nom, p);
+      }
+      const top = [...prods.entries()].sort((a, b) => b[1].cant - a[1].cant).slice(0, 10);
+      $('#top').innerHTML = barrasH(top.map(([nom, p]) => [nom, p.cant, `${p.cant} · ${pesos(p.sub)}`]));
+
+      const vend = new Map();
+      for (const v of ventas) vend.set(v.u || '—', (vend.get(v.u || '—') || 0) + v.t);
+      $('#vendedores').innerHTML = barrasH([...vend.entries()].sort((a, b) => b[1] - a[1]).map(([u, t]) => [u, t, pesos(t)]));
+    }
+
+    function barrasH(filas) {
+      if (!filas.length) return '<p class="hint">Sin ventas en este periodo.</p>';
+      const max = Math.max(...filas.map((f) => f[1]));
+      return filas.map(([lbl, val, txt]) => `<div class="barra-h"><span>${esc(lbl)}</span>
+        <div class="track"><div class="fill" style="width:${Math.max(2, (val / max) * 100)}%"></div></div><span class="val">${txt}</span></div>`).join('');
+    }
+
+    // Barras apiladas efectivo (abajo) + transferencia (arriba), una escala, grilla suave
+    function grafica(buckets) {
+      const W = 860, Hh = 280, m = { t: 12, r: 8, b: 30, l: 64 };
+      const iw = W - m.l - m.r, ih = Hh - m.t - m.b;
+      const max = Math.max(1, ...buckets.map((b) => b.efectivo + b.transferencia));
+      const paso = (() => { const raw = max / 4, p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 2.5, 5, 10].map((k) => k * p).find((k) => k >= raw); })();
+      const top = Math.ceil(max / paso) * paso;
+      const y = (v) => m.t + ih - (v / top) * ih;
+      const bw = iw / buckets.length, ancho = Math.min(36, bw * 0.62);
+      const cada = Math.ceil(buckets.length / 16);
+      const barra = (x, y0, alto, r) => {
+        if (alto <= 0) return '';
+        r = Math.min(r, alto, ancho / 2);
+        return `M${x},${y0 + alto} V${y0 + r} Q${x},${y0} ${x + r},${y0} H${x + ancho - r} Q${x + ancho},${y0} ${x + ancho},${y0 + r} V${y0 + alto} Z`;
+      };
+      let svg = `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Ventas por periodo, efectivo y transferencia">`;
+      for (let v = 0; v <= top; v += paso) {
+        svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v ? '#efe7eb' : '#d9cfd5'}" />
+          <text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#7a6a80">${corto(v)}</text>`;
+      }
+      buckets.forEach((b, i) => {
+        const x = m.l + i * bw + (bw - ancho) / 2;
+        const hEf = (b.efectivo / top) * ih, hTr = (b.transferencia / top) * ih;
+        const gap = hEf > 0 && hTr > 0 ? 2 : 0;
+        const yEf = m.t + ih - hEf;
+        // efectivo: anclado a la base; redondeado solo si es el segmento de arriba
+        if (hEf) svg += `<path d="${barra(x, yEf, hEf, hTr ? 0 : 4)}" fill="${COLOR.efectivo}" />`;
+        if (hTr) svg += `<path d="${barra(x, yEf - gap - hTr, hTr, 4)}" fill="${COLOR.transferencia}" />`;
+        if (i % cada === 0) svg += `<text x="${x + ancho / 2}" y="${Hh - 10}" text-anchor="middle" font-size="11" fill="#7a6a80">${b.lbl}</text>`;
+        svg += `<rect class="hit" data-i="${i}" x="${m.l + i * bw}" y="${m.t}" width="${bw}" height="${ih}" fill="transparent" />`;
+      });
+      svg += '</svg>';
+      const g = $('#grafica');
+      g.innerHTML = svg + '<div class="tip" id="tip"></div>';
+      const tip = $('#tip');
+      g.querySelectorAll('.hit').forEach((r) => {
+        r.addEventListener('mouseenter', () => r.setAttribute('fill', 'rgba(42,27,46,.05)'));
+        r.addEventListener('mouseleave', () => { r.setAttribute('fill', 'transparent'); tip.style.display = 'none'; });
+        r.addEventListener('mousemove', (e) => {
+          const b = buckets[r.dataset.i];
+          const box = g.getBoundingClientRect();
+          tip.innerHTML = `<b>${b.titulo}</b>Total ${pesos(b.efectivo + b.transferencia)} · ${b.n} venta${b.n === 1 ? '' : 's'}<br>
+            <span class="metodo m-efectivo"><i></i>Efectivo ${pesos(b.efectivo)}</span><br>
+            <span class="metodo m-transferencia"><i></i>Transferencia ${pesos(b.transferencia)}</span>`;
+          tip.style.display = 'block';
+          tip.style.left = Math.min(Math.max(e.clientX - box.left, 90), box.width - 90) + 'px';
+          tip.style.top = (e.clientY - box.top) + 'px';
+        });
+      });
+    }
+
+    $('#modos').addEventListener('click', (e) => { const b = e.target.closest('[data-modo]'); if (b) { modo = b.dataset.modo; cargar(); } });
+    $('#ant').addEventListener('click', () => mover(-1));
+    $('#sig').addEventListener('click', () => mover(1));
+    $('#irHoy').addEventListener('click', () => { ancla = hoy(); cargar(); });
+    cargar();
+  </script>
+</body>
+</html>

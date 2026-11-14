@@ -49,3 +49,67 @@ export function toast(msg, err = false) {
   t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
   clearTimeout(tt); tt = setTimeout(() => (t.className = 'toast'), 3200);
 }
+
+// ---------- Pedidos con "revisión" (solo descarga si hubo cambios) ----------
+// estado = { rev, pedidos, persistente }. Devuelve true si llegaron datos nuevos.
+export async function traerPedidos(estado) {
+  const q = estado.rev != null ? `?rev=${estado.rev}` : '';
+  const d = await api('/api/pedidos' + q);
+  if (d.sinCambios) return false;
+  estado.rev = d.rev;
+  estado.pedidos = d.pedidos;
+  estado.persistente = d.persistente;
+  return true;
+}
+
+// Repite fn cada ms, solo con la pestaña visible (ahorra operaciones de la base de datos)
+export function cadaTanto(fn, ms) {
+  setInterval(() => { if (!document.hidden) fn(); }, ms);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) fn(); });
+}
+
+// ---------- QR de transferencia ----------
+let ajustesCache = null;
+export async function leerQR(forzar = false) {
+  if (!ajustesCache || forzar) {
+    try { ajustesCache = await api('/api/ajustes'); } catch { ajustesCache = { qr: null, qrTexto: '' }; }
+  }
+  return ajustesCache;
+}
+
+// HTML del QR para meter dentro de otra caja (o '' si no hay QR configurado)
+export function htmlQR(a, monto) {
+  if (!a?.qr) return `<div class="qr-box sin-qr">📲 No hay QR configurado. Súbelo en Menú → QR de pago.</div>`;
+  return `<div class="qr-box">
+    <img src="${a.qr}" alt="QR para transferir" />
+    ${monto ? `<div class="qr-monto">${monto}</div>` : ''}
+    ${a.qrTexto ? `<div class="qr-texto">${esc(a.qrTexto)}</div>` : ''}
+    <button type="button" class="mini" data-qr-grande>🔍 Ver en grande</button>
+  </div>`;
+}
+
+// QR a pantalla completa para mostrarle al cliente
+export async function mostrarQR(monto) {
+  const a = await leerQR();
+  let ov = document.querySelector('#qrGrande');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'qrGrande';
+    ov.className = 'qr-grande';
+    ov.addEventListener('click', () => ov.classList.remove('show'));
+    document.body.append(ov);
+  }
+  ov.innerHTML = a.qr
+    ? `<div class="qr-grande-box"><img src="${a.qr}" alt="QR" />
+        ${monto ? `<div class="qr-monto">${monto}</div>` : ''}
+        ${a.qrTexto ? `<div class="qr-texto">${esc(a.qrTexto)}</div>` : ''}
+        <div class="hint">Toca en cualquier parte para cerrar</div></div>`
+    : `<div class="qr-grande-box"><p>No hay QR configurado.<br>Súbelo en Menú → QR de pago.</p></div>`;
+  ov.classList.add('show');
+}
+
+// Cualquier botón con data-qr-grande abre el QR grande
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-qr-grande]');
+  if (b) { e.preventDefault(); mostrarQR(b.dataset.monto || b.closest('.qr-box')?.querySelector('.qr-monto')?.textContent || ''); }
+});

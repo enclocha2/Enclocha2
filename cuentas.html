@@ -10,7 +10,7 @@
 <body style="visibility:hidden">
   <header class="top">
     <div class="row"><a href="/" class="back">← Menú</a><h1>💳 Cuentas abiertas</h1></div>
-    <div class="row"><span class="user-pill">👤 <span id="yo"></span></span></div>
+    <div class="row"><span class="user-pill">👤 <span id="yo"></span></span><button class="link" data-qr-grande>📲 QR</button></div>
   </header>
 
   <main class="menu">
@@ -30,6 +30,8 @@
         <button class="opt" data-metodo="efectivo">💵 Efectivo</button>
         <button class="opt" data-metodo="transferencia">📲 Transferencia</button>
       </div>
+      <div id="mcQR"></div>
+      <button class="btn" id="mcConfirmar" hidden>✅ Ya transfirió · marcar pagado</button>
       <button class="btn ghost" id="mcCancelar">Cancelar</button>
     </div>
   </div>
@@ -38,7 +40,7 @@
 
   <script type="module">
     import { pesos, vistaItem, agruparCuentas, normalizar } from '/catalog.js';
-    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     await requerirSesion();
@@ -54,10 +56,11 @@
         : `${d.cantidad}× ${esc(d.icono || '')} ${esc(d.nombre)}`).join(', ');
     }
 
+    const estado = { rev: null, pedidos: [] };
     async function cargar() {
       try {
-        const { pedidos } = await api('/api/pedidos');
-        cuentas = agruparCuentas(pedidos).filter((c) => c.abierta).sort((a, b) => a.desde - b.desde);
+        if (!(await traerPedidos(estado))) return;
+        cuentas = agruparCuentas(estado.pedidos).filter((c) => c.abierta).sort((a, b) => a.desde - b.desde);
         render();
       } catch {}
     }
@@ -100,22 +103,32 @@
       $('#mcNombre').textContent = aCobrar.cliente;
       $('#mcTotal').textContent = pesos(aCobrar.pendiente);
       $('#mcDet').textContent = `${aCobrar.abiertos.length} pedido(s): ` + aCobrar.abiertos.map((p) => '#' + p.numero).join(', ');
+      $('#mcQR').innerHTML = ''; $('#mcConfirmar').hidden = true;
+      document.querySelectorAll('#modalCobro [data-metodo]').forEach((x) => x.classList.remove('on'));
       $('#modalCobro').classList.add('show');
     });
     $('#mcCancelar').addEventListener('click', () => $('#modalCobro').classList.remove('show'));
+    async function cobrar(metodo) {
+      $('#modalCobro').classList.remove('show');
+      try {
+        const r = await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ cobrarCuenta: aCobrar.id, metodo }) });
+        toast(`✅ Cuenta de ${aCobrar.cliente} cobrada: ${pesos(r.total)}`);
+      } catch (err) { toast(err.message, true); }
+      estado.rev = null; cargar();
+    }
     $('#modalCobro').addEventListener('click', async (e) => {
       const b = e.target.closest('[data-metodo]');
       if (!b || !aCobrar) return;
-      $('#modalCobro').classList.remove('show');
-      try {
-        const r = await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ cobrarCuenta: aCobrar.id, metodo: b.dataset.metodo }) });
-        toast(`✅ Cuenta de ${aCobrar.cliente} cobrada: ${pesos(r.total)}`);
-      } catch (err) { toast(err.message, true); }
-      cargar();
+      document.querySelectorAll('#modalCobro [data-metodo]').forEach((x) => x.classList.toggle('on', x === b));
+      if (b.dataset.metodo === 'efectivo') return cobrar('efectivo');
+      // Transferencia: primero mostrar el QR, luego confirmar
+      $('#mcQR').innerHTML = htmlQR(await leerQR(), pesos(aCobrar.pendiente));
+      $('#mcConfirmar').hidden = false;
     });
+    $('#mcConfirmar').addEventListener('click', () => cobrar('transferencia'));
 
     cargar();
-    setInterval(cargar, 5000);
+    cadaTanto(cargar, 8000);
   </script>
 </body>
 </html>
