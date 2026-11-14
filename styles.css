@@ -542,3 +542,63 @@ header.top h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
 }
 .toast { opacity: 0; pointer-events: none; }
 .toast.show { opacity: 1; }
+
+/* ---------- Cierre de caja ---------- */
+.cierre { max-width: 980px; }
+.estado-cierre .tag-ok { background: rgba(34,211,138,.14); color: #6ff2b9; border: 1px solid rgba(34,211,138,.4); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: .85rem; }
+.estado-cierre .tag-abierta { background: rgba(255,176,32,.14); color: #ffcf70; border: 1px solid rgba(255,176,32,.4); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: .85rem; }
+.warnbar { margin-bottom: 8px; }
+.warnbar a { color: #9ff0ff; font-weight: 700; }
+.base-row { justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.base-row label { font-weight: 700; }
+.base-row .precio { flex: 0 0 180px; }
+.denom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.denom { display: grid; grid-template-columns: 90px 1fr 80px; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+.denom.has { border-color: rgba(51,225,255,.5); background: rgba(51,225,255,.07); }
+.denom .d-lbl { font-family: var(--font-title); font-weight: 800; }
+.denom .qty { gap: 6px; }
+.denom .d-inp { width: 64px; text-align: center; padding: 6px; -moz-appearance: textfield; }
+.denom .d-inp::-webkit-outer-spin-button, .denom .d-inp::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.denom .d-sub { text-align: right; color: #9ff0ff; font-weight: 700; font-size: .9rem; }
+.total-contado { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding: 14px 16px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(51,225,255,.12), rgba(139,92,246,.12)); border: 1px solid rgba(51,225,255,.35); }
+.total-contado span { font-weight: 700; }
+.total-contado b { font-family: var(--font-title); font-size: 1.7rem; }
+.total-contado.retiro { background: linear-gradient(90deg, rgba(255,63,209,.14), rgba(139,92,246,.14)); border-color: rgba(255,63,209,.4); }
+.cuadre-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 720px) { .cuadre-grid { grid-template-columns: 1fr; } }
+.cuadre-box { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: rgba(255,255,255,.03); }
+.cuadre-box h3 { margin: 0 0 6px; }
+.cuadre-box tr.t td { font-weight: 800; }
+.dif { display: block; margin-top: 10px; padding: 10px 12px; border-radius: 12px; font-family: var(--font-title); font-weight: 800; font-size: 1.2rem; text-align: center; }
+.dif.ok { background: rgba(34,211,138,.15); color: #6ff2b9; }
+.dif.sobra { background: rgba(51,225,255,.13); color: #9ff0ff; }
+.dif.falta { background: rgba(255,77,109,.16); color: #ff8fa3; }
+.acciones-cierre { margin-top: 14px; display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+@media (max-width: 560px) { .acciones-cierre { grid-template-columns: 1fr; } .denom-grid { grid-template-columns: 1fr; } }
+textarea.field { resize: vertical; font: inherit; }
+.tabla td.neg { color: #ff8fa3; font-weight: 700; }
+.tabla td.pos { color: #9ff0ff; font-weight: 700; }
+.tabla tr.clic { cursor: pointer; }
+.t-cierre .cnt { background: var(--warn); }
+
+/* Impresión del cierre: blanco y negro, sin botones */
+@media print {
+  @page { margin: 12mm; }
+  body { background: #fff !important; color: #000 !important; font-size: 11pt; }
+  header.top, .historial, .acciones-cierre, #fGasto, .del, .qty button, #transfIgual, .periodo button, #fecha, .warnbar button, .toast, #descartarBorrador { display: none !important; }
+  .card, .cuadre-box, .denom, .total-contado, .kpi, .dif { background: #fff !important; border: 1px solid #999 !important; box-shadow: none !important; color: #000 !important; break-inside: avoid; }
+  .card h2 .n { background: #000 !important; color: #fff !important; box-shadow: none !important; }
+  * { color: #000 !important; text-shadow: none !important; }
+  .denom:not(.has) { display: none; }
+  .field { border: 0 !important; background: none !important; }
+  .main, main { padding: 0; }
+}
+.denom-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.denom { grid-template-columns: 82px auto 1fr; }
+.denom .d-sub { white-space: nowrap; min-width: 0; }
+.denom .qty button { width: 32px; height: 32px; }
+@media (max-width: 560px) { .denom-grid { grid-template-columns: 1fr; } }
+.solo-print { display: none; }
+@media print { .solo-print { display: block !important; margin-bottom: 10px; } }

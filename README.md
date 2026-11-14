@@ -1,10 +1,11 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v8)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v9)
 
 | Ruta | Qué es |
 |---|---|
 | `/` | **Menú principal** (resumen del día) |
 | `/tomar` | Tomar pedido: granizados (varios diferentes), cervezas, licor y demás categorías |
 | `/cuentas` | Cuentas abiertas: pedidos sin pagar por persona, agregar algo más y cobrar todo junto |
+| `/cierre` | Cierre de caja por jornada: conteo de billetes, gastos, transferencias, cuadre e historial |
 | `/ventas` | Historial de ventas (todo lo cobrado), filtros y descarga para Excel |
 | `/reportes` | Ventas por día, semana, mes y año · efectivo vs transferencia · lo más vendido |
 | `/pedidos` | Hoja de pedidos en tiempo real con sonido, cobros y resumen |
@@ -72,3 +73,13 @@ Las pantallas solo descargan pedidos cuando hay cambios. La hoja de Pedidos revi
 
 - Cada venta pertenece a la **jornada** en que se abrió: lo vendido entre 12:00 a. m. y 5:59 a. m. cuenta para el día anterior.
 - Los festivos de Colombia se calculan solos (Ley Emiliani). El horario está en `fechas.js` → `horarioDe()`.
+
+## Cierre de caja
+1. Escoge la jornada (por defecto la actual; el menú avisa si falta cerrar la de ayer).
+2. Base inicial (se sugiere la base que dejó el cierre anterior) + conteo de billetes y monedas.
+3. Gastos pagados con plata de la caja.
+4. Transferencias que realmente llegaron (Nequi / banco).
+5. La app calcula: **Debería haber = base + ventas en efectivo − gastos** y muestra si cuadra, sobra o falta.
+   También el efectivo para retirar = contado − base que se deja.
+- Los pedidos sin cobrar no entran al cierre (se avisa). Si algo se cobra después de cerrar, avisa que hay que volver a guardar.
+- Se puede imprimir / guardar en PDF. El conteo se guarda como borrador en el navegador mientras no se guarde el cierre.

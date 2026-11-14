@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+  <title>Enclocha 2 · Cierre de caja</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>🔒 Cierre de caja</h1></div>
+    <div class="row"><a href="/ventas">🧾 Ventas</a></div>
+  </header>
+
+  <main class="admin cierre">
+    <div class="solo-print"><img src="/img/logo.png" alt="" style="height:60px;vertical-align:middle"> <b style="font-size:18pt">Enclocha 2 Granizados · Cierre de caja</b></div>
+    <!-- Jornada -->
+    <div class="periodo">
+      <button id="ant" title="Jornada anterior">‹</button>
+      <span class="lbl" id="lblJornada"></span>
+      <button id="sig" title="Jornada siguiente">›</button>
+      <input type="date" class="field" id="fecha" style="width:auto">
+      <span class="estado-cierre" id="estado"></span>
+    </div>
+    <div id="avisos"></div>
+
+    <!-- 1. Sistema -->
+    <section class="card">
+      <h2><span class="n">1</span> Lo que dice el sistema</h2>
+      <div class="kpis" id="kpisSistema"></div>
+      <div id="porUsuario"></div>
+    </section>
+
+    <!-- 2. Efectivo -->
+    <section class="card">
+      <h2><span class="n">2</span> Cuenta el efectivo</h2>
+      <div class="row base-row">
+        <label for="base">💼 Base con la que abrió la caja (sencillo)</label>
+        <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1000" id="base" inputmode="numeric"></div>
+      </div>
+      <div class="denoms" id="denoms"></div>
+      <div class="total-contado"><span>Total contado en caja</span><b id="contado">$0</b></div>
+    </section>
+
+    <!-- 3. Gastos -->
+    <section class="card">
+      <h2><span class="n">3</span> Gastos y salidas de caja <span class="hint">(lo que se pagó con plata de la caja)</span></h2>
+      <div id="gastos"></div>
+      <form class="add" id="fGasto">
+        <input class="field" name="concepto" placeholder="Concepto, ej: hielo, vasos, domicilio" maxlength="80" required>
+        <input class="field" name="valor" type="number" min="0" step="100" placeholder="Valor" inputmode="numeric" required style="max-width:160px">
+        <button class="btn alt">+ Agregar gasto</button>
+      </form>
+    </section>
+
+    <!-- 4. Transferencias -->
+    <section class="card">
+      <h2><span class="n">4</span> Transferencias <span class="hint">(revisa Nequi / banco)</span></h2>
+      <div class="row base-row">
+        <label for="transf">📲 Total que realmente llegó por transferencia</label>
+        <div class="row" style="gap:8px">
+          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="100" id="transf" inputmode="numeric"></div>
+          <button class="mini" id="transfIgual" type="button">= sistema</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Cuadre -->
+    <section class="card cuadre-card">
+      <h2><span class="n">5</span> Cuadre</h2>
+      <div id="cuadre"></div>
+      <div class="row base-row" style="margin-top:12px">
+        <label for="baseSig">💼 Base que se deja para la próxima jornada</label>
+        <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1000" id="baseSig" inputmode="numeric"></div>
+      </div>
+      <div class="total-contado retiro"><span>💰 Efectivo para retirar / entregar</span><b id="retiro">$0</b></div>
+      <label class="hint" for="notas" style="display:block;margin-top:12px">Observaciones</label>
+      <textarea class="field" id="notas" rows="3" maxlength="600" placeholder="Ej: faltaron $2.000 por un vuelto mal dado, se pagó el hielo con la plata de Stiv..."></textarea>
+      <div class="row acciones-cierre">
+        <button class="btn" id="guardar">🔒 Guardar cierre</button>
+        <button class="btn ghost" id="imprimir" type="button">🖨️ Imprimir / PDF</button>
+      </div>
+    </section>
+
+    <!-- Historial -->
+    <section class="card historial">
+      <h2>📚 Cierres anteriores</h2>
+      <div class="tabla-wrap"><table class="tabla" id="historial"></table></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { hoy, sumarDias, fechaLarga, textoHorario, horarioDe, esFestivo, fechaHora } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para el cierre de caja.</div>'; throw 0; }
+
+    const BILLETES = [100000, 50000, 20000, 10000, 5000, 2000];
+    const MONEDAS = [1000, 500, 200, 100, 50];
+    const DENOMS = [...BILLETES, ...MONEDAS];
+
+    let jornada = new URLSearchParams(location.search).get('jornada') || hoy();
+    let sis = null, cierre = null;
+    let f = vacio();
+    function vacio() { return { base: 0, conteo: {}, gastos: [], transf: 0, baseSig: 0, notas: '' }; }
+
+    // ---------- Borrador local (por si se cierra la pestaña mientras cuentan) ----------
+    const claveBorrador = () => `cierre-borrador-${jornada}`;
+    const guardarBorrador = () => { try { localStorage.setItem(claveBorrador(), JSON.stringify(f)); } catch {} };
+    const leerBorrador = () => { try { return JSON.parse(localStorage.getItem(claveBorrador()) || 'null'); } catch { return null; } };
+    const borrarBorrador = () => { try { localStorage.removeItem(claveBorrador()); } catch {} };
+
+    // ---------- Cargar jornada ----------
+    async function cargar() {
+      $('#fecha').value = jornada;
+      $('#lblJornada').textContent = `${fechaLarga(jornada)}${esFestivo(jornada) ? ' (festivo)' : ''}`;
+      $('#sig').disabled = jornada >= hoy();
+      history.replaceState(null, '', `/cierre?jornada=${jornada}`);
+      try {
+        const r = await api(`/api/cierre?jornada=${jornada}`);
+        sis = r.sistema; cierre = r.cierre;
+        const borrador = leerBorrador();
+        if (borrador) f = borrador;
+        else if (cierre) f = { base: cierre.base, conteo: { ...cierre.conteo }, gastos: cierre.gastos.map((g) => ({ ...g })), transf: cierre.transferenciasVerificadas, baseSig: cierre.baseSiguiente, notas: cierre.notas };
+        else f = { ...vacio(), base: r.baseSugerida ?? 0, baseSig: r.baseSugerida ?? 0, transf: 0 };
+
+        $('#estado').innerHTML = cierre
+          ? `<span class="tag-ok">✅ Cerrada por ${esc(cierre.cerradoPor)} · ${fechaHora(cierre.cerradoEn)}${cierre.versiones > 1 ? ` · editado ${cierre.versiones - 1} vez/veces` : ''}</span>`
+          : `<span class="tag-abierta">🟡 Sin cerrar</span>`;
+        const avisos = [];
+        if (!horarioDe(jornada)) avisos.push(`ℹ️ Este día no tiene jornada programada (${textoHorario(jornada)}).`);
+        if (sis.pendientes.n) avisos.push(`⏳ Hay <b>${sis.pendientes.n} pedido(s) sin cobrar</b> por <b>${pesos(sis.pendientes.total)}</b> (${sis.pendientes.clientes.map(esc).join(', ')}). No cuentan en el cierre hasta que se cobren. <a href="/cuentas">Ir a Cuentas abiertas →</a>`);
+        if (r.cambiosDespues) avisos.push(`⚠️ <b>Las ventas cambiaron después de guardar el cierre</b> (se cobró o se deshizo algo). Revisa y vuelve a guardar.`);
+        if (borrador) avisos.push(`📝 Tienes un conteo sin guardar de esta jornada. <button class="mini" id="descartarBorrador">Descartar borrador</button>`);
+        $('#avisos').innerHTML = avisos.map((a) => `<div class="warnbar">${a}</div>`).join('');
+        $('#descartarBorrador')?.addEventListener('click', () => { borrarBorrador(); cargar(); });
+        pintarTodo();
+      } catch (e) { toast(e.message, true); }
+      cargarHistorial();
+    }
+
+    // ---------- Pintar ----------
+    function pintarSistema() {
+      $('#kpisSistema').innerHTML = `
+        <div class="kpi"><span>Ventas cobradas</span><b>${pesos(sis.total)}</b><small>${sis.n} venta${sis.n === 1 ? '' : 's'}</small></div>
+        <div class="kpi"><span class="metodo m-efectivo"><i></i>En efectivo</span><b>${pesos(sis.efectivo)}</b></div>
+        <div class="kpi"><span class="metodo m-transferencia"><i></i>Por transferencia</span><b>${pesos(sis.transferencia)}</b></div>`;
+      const us = Object.entries(sis.porUsuario);
+      $('#porUsuario').innerHTML = us.length ? `<h3 class="sub">Quién cobró qué</h3><div class="tabla-wrap"><table class="tabla">
+        <thead><tr><th>Cobró</th><th class="num">Ventas</th><th class="num">Efectivo</th><th class="num">Transferencia</th></tr></thead>
+        <tbody>${us.map(([u, v]) => `<tr><td><b>${esc(u)}</b></td><td class="num">${v.n}</td><td class="num">${pesos(v.efectivo)}</td><td class="num">${pesos(v.transferencia)}</td></tr>`).join('')}</tbody></table></div>` : '';
+    }
+
+    function pintarDenoms() {
+      const fila = (d) => {
+        const n = f.conteo[d] || 0;
+        return `<div class="denom ${n ? 'has' : ''}">
+          <span class="d-lbl">${pesos(d)}</span>
+          <div class="qty"><button type="button" data-den="${d}" data-d="-1">−</button>
+            <input class="field d-inp" type="number" min="0" inputmode="numeric" data-den="${d}" value="${n || ''}" placeholder="0">
+            <button type="button" data-den="${d}" data-d="1">+</button></div>
+          <span class="d-sub">${n ? pesos(d * n) : ''}</span></div>`;
+      };
+      $('#denoms').innerHTML = `<h3 class="sub">💵 Billetes</h3><div class="denom-grid">${BILLETES.map(fila).join('')}</div>
+        <h3 class="sub">🪙 Monedas</h3><div class="denom-grid">${MONEDAS.map(fila).join('')}</div>`;
+    }
+
+    function pintarGastos() {
+      $('#gastos').innerHTML = f.gastos.length ? f.gastos.map((g, i) => `
+        <div class="fila"><span style="flex:1">${esc(g.concepto)}</span><b>${pesos(g.valor)}</b><button class="del" data-delg="${i}">🗑</button></div>`).join('') +
+        `<div class="fila"><span style="flex:1"><b>Total gastos</b></span><b>${pesos(totalGastos())}</b><span style="width:42px"></span></div>`
+        : '<p class="hint">No hay gastos registrados.</p>';
+    }
+
+    const contado = () => DENOMS.reduce((t, d) => t + d * (f.conteo[d] || 0), 0);
+    const totalGastos = () => f.gastos.reduce((t, g) => t + g.valor, 0);
+
+    function signo(dif) {
+      if (dif === 0) return `<span class="dif ok">✅ Cuadra exacto</span>`;
+      return dif > 0 ? `<span class="dif sobra">🟢 Sobran ${pesos(dif)}</span>` : `<span class="dif falta">🔴 Faltan ${pesos(-dif)}</span>`;
+    }
+
+    function pintarCuadre() {
+      const c = contado(), g = totalGastos();
+      const esperado = f.base + sis.efectivo - g;
+      const dif = c - esperado, difT = f.transf - sis.transferencia;
+      $('#contado').textContent = pesos(c);
+      $('#cuadre').innerHTML = `
+        <div class="cuadre-grid">
+          <div class="cuadre-box">
+            <h3>💵 Efectivo</h3>
+            <table class="tabla"><tbody>
+              <tr><td>Base inicial</td><td class="num">${pesos(f.base)}</td></tr>
+              <tr><td>+ Ventas en efectivo</td><td class="num">${pesos(sis.efectivo)}</td></tr>
+              <tr><td>− Gastos de caja</td><td class="num">${pesos(g)}</td></tr>
+              <tr class="t"><td>= Debería haber</td><td class="num">${pesos(esperado)}</td></tr>
+              <tr class="t"><td>Contado</td><td class="num">${pesos(c)}</td></tr>
+            </tbody></table>
+            ${signo(dif)}
+          </div>
+          <div class="cuadre-box">
+            <h3>📲 Transferencias</h3>
+            <table class="tabla"><tbody>
+              <tr><td>Según el sistema</td><td class="num">${pesos(sis.transferencia)}</td></tr>
+              <tr class="t"><td>Llegó realmente</td><td class="num">${pesos(f.transf)}</td></tr>
+            </tbody></table>
+            ${signo(difT)}
+          </div>
+        </div>`;
+      $('#retiro').textContent = pesos(c - f.baseSig);
+    }
+
+    function pintarCampos() {
+      $('#base').value = f.base || '';
+      $('#transf').value = f.transf || '';
+      $('#baseSig').value = f.baseSig || '';
+      $('#notas').value = f.notas || '';
+    }
+
+    function pintarTodo() { pintarSistema(); pintarDenoms(); pintarGastos(); pintarCampos(); pintarCuadre(); }
+
+    // ---------- Historial ----------
+    async function cargarHistorial() {
+      try {
+        const { cierres } = await api('/api/cierre?lista=30');
+        $('#historial').innerHTML = cierres.length ? `
+          <thead><tr><th>Jornada</th><th class="num">Ventas</th><th class="num">Efectivo</th><th class="num">Dif. efectivo</th><th class="num">Dif. transf.</th><th class="num">Retiro</th><th>Cerró</th></tr></thead>
+          <tbody>${cierres.map((c) => `<tr class="clic" data-j="${c.jornada}">
+            <td><b>${fechaLarga(c.jornada)}</b></td>
+            <td class="num">${pesos(c.sistema.total)}</td>
+            <td class="num">${pesos(c.sistema.efectivo)}</td>
+            <td class="num ${c.difEfectivo < 0 ? 'neg' : c.difEfectivo > 0 ? 'pos' : ''}">${c.difEfectivo === 0 ? '✅' : (c.difEfectivo > 0 ? '+' : '−') + pesos(Math.abs(c.difEfectivo))}</td>
+            <td class="num ${c.difTransferencias < 0 ? 'neg' : c.difTransferencias > 0 ? 'pos' : ''}">${c.difTransferencias === 0 ? '✅' : (c.difTransferencias > 0 ? '+' : '−') + pesos(Math.abs(c.difTransferencias))}</td>
+            <td class="num">${pesos(c.retiro)}</td>
+            <td class="hint">${esc(c.cerradoPor)}</td></tr>`).join('')}</tbody>`
+          : '<tr><td class="empty">Todavía no hay cierres guardados.</td></tr>';
+      } catch {}
+    }
+
+    // ---------- Eventos ----------
+    const cambio = () => { guardarBorrador(); pintarCuadre(); };
+    document.querySelector('main').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (b?.dataset.den) {
+        const d = b.dataset.den;
+        f.conteo[d] = Math.max(0, (f.conteo[d] || 0) + Number(b.dataset.d));
+        if (!f.conteo[d]) delete f.conteo[d];
+        pintarDenoms(); cambio(); return;
+      }
+      if (b?.dataset.delg !== undefined) { f.gastos.splice(Number(b.dataset.delg), 1); pintarGastos(); cambio(); return; }
+      const tr = e.target.closest('tr.clic');
+      if (tr) { jornada = tr.dataset.j; window.scrollTo({ top: 0, behavior: 'smooth' }); cargar(); }
+    });
+    document.querySelector('main').addEventListener('input', (e) => {
+      const el = e.target, v = Math.max(0, Math.round(Number(el.value) || 0));
+      if (el.classList.contains('d-inp')) {
+        if (v) f.conteo[el.dataset.den] = v; else delete f.conteo[el.dataset.den];
+        const den = el.closest('.denom');
+        den.classList.toggle('has', !!v);
+        den.querySelector('.d-sub').textContent = v ? pesos(v * el.dataset.den) : '';
+        return cambio();
+      }
+      if (el.id === 'base') { f.base = v; return cambio(); }
+      if (el.id === 'transf') { f.transf = v; return cambio(); }
+      if (el.id === 'baseSig') { f.baseSig = v; return cambio(); }
+      if (el.id === 'notas') { f.notas = el.value; return guardarBorrador(); }
+    });
+    $('#transfIgual').addEventListener('click', () => { f.transf = sis.transferencia; pintarCampos(); cambio(); });
+    $('#fGasto').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const valor = Math.max(0, Math.round(Number(e.target.valor.value) || 0));
+      if (!valor) return;
+      f.gastos.push({ concepto: e.target.concepto.value.trim(), valor });
+      e.target.reset(); pintarGastos(); cambio();
+    });
+
+    $('#ant').addEventListener('click', () => { jornada = sumarDias(jornada, -1); cargar(); });
+    $('#sig').addEventListener('click', () => { jornada = sumarDias(jornada, 1); cargar(); });
+    $('#fecha').addEventListener('change', (e) => { if (e.target.value) { jornada = e.target.value; cargar(); } });
+    $('#imprimir').addEventListener('click', () => window.print());
+
+    $('#guardar').addEventListener('click', async () => {
+      const c = contado();
+      if (!c && !confirm('No has contado efectivo (total $0). ¿Guardar el cierre así?')) return;
+      if (cierre && !confirm(`Esta jornada ya fue cerrada por ${cierre.cerradoPor}. ¿Reemplazar el cierre?`)) return;
+      const btn = $('#guardar'); btn.disabled = true; btn.textContent = 'Guardando...';
+      try {
+        await api('/api/cierre', { method: 'PUT', body: JSON.stringify({
+          jornada, base: f.base, conteo: f.conteo, gastos: f.gastos,
+          transferenciasVerificadas: f.transf, baseSiguiente: f.baseSig, notas: f.notas,
+        }) });
+        borrarBorrador();
+        toast('✅ Cierre guardado');
+        await cargar();
+      } catch (err) { toast(err.message, true); }
+      finally { btn.disabled = false; btn.textContent = '🔒 Guardar cierre'; }
+    });
+
+    cargar();
+  </script>
+</body>
+</html>

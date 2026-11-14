@@ -51,6 +51,12 @@
         <span id="tCuentas">Pedidos sin pagar por persona</span>
         <em class="cnt" id="cntCuentas" hidden></em>
       </a>
+      <a class="tile t-cierre solo-admin" href="/cierre">
+        <span class="ico">🔒</span>
+        <strong>Cierre de caja</strong>
+        <span id="tCierre">Cuadrar el efectivo y las transferencias</span>
+        <em class="cnt" id="cntCierre" hidden>!</em>
+      </a>
       <a class="tile t-ventas solo-admin" href="/ventas">
         <span class="ico">🧾</span>
         <strong>Ventas</strong>
@@ -85,7 +91,7 @@
   <script type="module">
     import { pesos, agruparCuentas } from '/catalog.js';
     import { requerirSesion, api, traerPedidos, cadaTanto } from '/sesion.js';
-    import { hoy, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo } from '/fechas.js';
+    import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const { usuario, admin } = await requerirSesion();
@@ -100,6 +106,19 @@
         : `🕓 ${fechaLarga(j)} · hoy no hay jornada programada`;
     };
     pintarJornada();
+    // Estado del cierre de la jornada anterior / actual
+    if (admin) (async () => {
+      try {
+        const ayer = sumarDias(hoy(), -1);
+        const [rHoy, rAyer] = await Promise.all([api(`/api/cierre?jornada=${hoy()}`), api(`/api/cierre?jornada=${ayer}`)]);
+        if (rAyer.sistema.n && !rAyer.cierre) {
+          $('#tCierre').innerHTML = `<b class="alerta">⚠️ Falta cerrar la jornada de ayer</b>`;
+          $('#cntCierre').hidden = false;
+          document.querySelector('.t-cierre').href = `/cierre?jornada=${ayer}`;
+        } else if (rHoy.cierre) $('#tCierre').textContent = `✅ Jornada cerrada por ${rHoy.cierre.cerradoPor}`;
+        else $('#tCierre').textContent = rHoy.sistema.n ? `Jornada abierta · ${pesos(rHoy.sistema.total)} cobrado` : 'Cuadrar el efectivo y las transferencias';
+      } catch {}
+    })();
 
     const estado = { rev: null, pedidos: [] };
     let config = null;

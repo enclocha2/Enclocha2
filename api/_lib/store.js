@@ -216,3 +216,26 @@ export async function guardarAjustes(a) {
   else mem.ajustes = a;
   return a;
 }
+
+// ---------- Cierres de caja (uno por jornada) ----------
+export async function leerCierre(jornada) {
+  if (redis) return (await redis.get(`cierre:${jornada}`)) || null;
+  return (mem.cierres ||= {})[jornada] || null;
+}
+export async function guardarCierre(c) {
+  if (redis) {
+    await redis.set(`cierre:${c.jornada}`, c);
+    await redis.zadd('cierres', { score: Date.parse(c.jornada + 'T12:00:00-05:00'), member: c.jornada });
+  } else {
+    (mem.cierres ||= {})[c.jornada] = c;
+  }
+  return c;
+}
+export async function listarCierres(limite = 60) {
+  if (redis) {
+    const js = await redis.zrange('cierres', 0, limite - 1, { rev: true });
+    if (!js.length) return [];
+    return (await redis.mget(...js.map((j) => `cierre:${j}`))).filter(Boolean);
+  }
+  return Object.values(mem.cierres || {}).sort((a, b) => (a.jornada < b.jornada ? 1 : -1)).slice(0, limite);
+}
