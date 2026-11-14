@@ -66,3 +66,10 @@ export function validar(usuario, clave) {
   const b = Buffer.from(lista[nombre]);
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? nombre : null;
 }
+
+// Quién puede editar productos/precios. Variable ADMINS en Vercel, ej: "Stiv,John".
+// Si no existe, todos los usuarios pueden editar.
+export function esAdmin(usuario) {
+  const admins = (process.env.ADMINS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return !!usuario && (!admins.length || admins.includes(usuario.toLowerCase()));
+}

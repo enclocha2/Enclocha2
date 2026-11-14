@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { normalizarItem, ESTADOS, METODOS_PAGO } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis } from './_lib/store.js';
+import { armarItem, ESTADOS, METODOS_PAGO, CONFIG_INICIAL } from '../catalog.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, leerConfig } from './_lib/store.js';
 import { usuarioDe } from './_lib/auth.js';
 
 class ErrorUsuario extends Error {}
@@ -27,11 +27,12 @@ export default async function handler(req, res) {
       const cliente = String(body.cliente || '').slice(0, 60).trim();
       if (!cliente) throw new ErrorUsuario('Escribe el nombre de la persona del pedido');
 
+      const cfg = (await leerConfig()) || CONFIG_INICIAL;
       let items;
-      try { items = (body.items || []).map(normalizarItem); }
+      try { items = (body.items || []).map((i) => armarItem(i, cfg)); }
       catch (e) { throw new ErrorUsuario(e.message); }
       if (items.length === 0) throw new ErrorUsuario('El pedido está vacío');
-      if (items.length > 30) throw new ErrorUsuario('Demasiados granizados');
+      if (items.length > 60) throw new ErrorUsuario('Demasiados productos en un pedido');
 
       const ahora = !!body.pago?.ahora;
       const metodo = metodoValido(body.pago?.metodo) ? body.pago.metodo : null;

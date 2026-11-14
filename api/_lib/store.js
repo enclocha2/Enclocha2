@@ -57,3 +57,15 @@ export async function borrar(id) {
     mem.pedidos.delete(id);
   }
 }
+
+// ---------- Catálogo (productos, sabores, precios) ----------
+export async function leerConfig() {
+  if (redis) return (await redis.get('config')) || null;
+  return mem.config || null;
+}
+
+export async function guardarConfig(cfg) {
+  if (redis) await redis.set('config', cfg);
+  else mem.config = cfg;
+  return cfg;
+}

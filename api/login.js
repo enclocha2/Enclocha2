@@ -1,4 +1,4 @@
-import { validar, firmar, usuarioDe, cookieSesion } from './_lib/auth.js';
+import { validar, firmar, usuarioDe, cookieSesion, esAdmin } from './_lib/auth.js';
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   // ¿Quién está conectado?
   if (req.method === 'GET') {
     const usuario = usuarioDe(req);
-    return usuario ? res.status(200).json({ usuario }) : res.status(401).json({ error: 'Sin sesión' });
+    return usuario ? res.status(200).json({ usuario, admin: esAdmin(usuario) }) : res.status(401).json({ error: 'Sin sesión' });
   }
 
   // Iniciar sesión
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
     }
     res.setHeader('Set-Cookie', cookieSesion(req, firmar(usuario)));
-    return res.status(200).json({ usuario });
+    return res.status(200).json({ usuario, admin: esAdmin(usuario) });
   }
 
   // Cerrar sesión
