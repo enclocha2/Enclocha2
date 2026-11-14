@@ -37,6 +37,11 @@ export const TOPPINGS = [
 
 export const ESTADOS = ['nuevo', 'preparando', 'entregado', 'cancelado'];
 
+export const METODOS_PAGO = [
+  { id: 'efectivo', nombre: 'Efectivo', icono: '💵' },
+  { id: 'transferencia', nombre: 'Transferencia', icono: '📲' },
+];
+
 export const pesos = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
 
 const toppingPorId = (id) => TOPPINGS.find((t) => t.id === id);

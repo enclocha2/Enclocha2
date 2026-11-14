@@ -2,19 +2,28 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#ff3d7f" />
   <title>Granizados · Tomar pedido</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body style="visibility:hidden">
   <header class="top">
     <h1>🍧 Tomar pedido</h1>
-    <a href="/pedidos">Ver pedidos →</a>
+    <div class="row">
+      <span class="user-pill">👤 <span id="yo"></span></span>
+      <a href="/pedidos">Pedidos →</a>
+      <button class="link" id="salir">Salir</button>
+    </div>
   </header>
 
   <main class="layout">
     <section>
+      <div class="card cliente-card">
+        <h2>👤 ¿Para quién es el pedido?</h2>
+        <input class="field" id="cliente" maxlength="60" placeholder="Nombre de la persona" autocomplete="off" />
+      </div>
+
       <div class="card">
         <h2><span class="n">1</span> Tamaño</h2>
         <div class="grid g4" id="tamanos"></div>
@@ -38,7 +47,7 @@
       <div class="card">
         <h2><span class="n">5</span> Cantidad y nota</h2>
         <div class="row" style="justify-content:space-between;margin-bottom:10px">
-          <span>¿Cuántos iguales?</span>
+          <span>¿Cuántos iguales a este?</span>
           <div class="qty" id="cantidad"></div>
         </div>
         <input class="field" id="nota" maxlength="200" placeholder="Nota (opcional): poco hielo, sin chile..." />
@@ -47,26 +56,65 @@
       <div class="card">
         <div class="total"><span>Este granizado</span><span id="subtotal">$0</span></div>
         <button class="btn alt" id="agregar" disabled>+ Agregar al pedido</button>
+        <p class="hint" style="text-align:center;margin:10px 0 0">Después de agregarlo puedes armar otro granizado para la misma persona.</p>
       </div>
     </section>
 
-    <aside class="sticky">
+    <aside class="sticky" id="panel">
       <div class="card">
-        <h2>🧾 Pedido actual</h2>
+        <h2>🧾 Pedido de <span class="para" id="paraNombre">—</span></h2>
         <div id="carrito"><div class="empty">Aún no hay granizados</div></div>
-        <input class="field" id="cliente" maxlength="60" placeholder="Nombre del cliente (opcional)" style="margin-top:8px" />
         <div class="total"><span>Total</span><span id="total">$0</span></div>
         <button class="btn" id="enviar" disabled>Enviar pedido</button>
       </div>
     </aside>
   </main>
 
+  <!-- Barra inferior en celular -->
+  <div class="bottombar" id="bottombar">
+    <div><b id="bbCant">0 granizados</b><br><span id="bbTotal">$0</span></div>
+    <button id="bbVer">Ver y enviar ↓</button>
+  </div>
+
+  <!-- Modal de pago -->
+  <div class="modal" id="modalPago">
+    <div class="box">
+      <h3>💰 ¿<span id="mpNombre"></span> va a pagar ya?</h3>
+      <div class="total" style="margin:0"><span>Total</span><span id="mpTotal"></span></div>
+      <div class="g2">
+        <button class="opt" data-ahora="1">Sí, paga ya</button>
+        <button class="opt" data-ahora="0">Paga después</button>
+      </div>
+      <div id="mpMetodo" hidden>
+        <p style="margin:0 0 8px;font-weight:700">¿Cómo va a pagar?</p>
+        <div class="g2">
+          <button class="opt" data-metodo="efectivo">💵 Efectivo</button>
+          <button class="opt" data-metodo="transferencia">📲 Transferencia</button>
+        </div>
+      </div>
+      <div class="error" id="mpError"></div>
+      <button class="btn" id="mpConfirmar" disabled>Confirmar y enviar</button>
+      <button class="btn ghost" id="mpCancelar">Volver</button>
+    </div>
+  </div>
+
+  <!-- Modal de confirmación -->
+  <div class="modal" id="modalOk">
+    <div class="box">
+      <h3 id="okTitulo">✅ Pedido enviado</h3>
+      <div class="aviso-barra" id="okAviso"></div>
+      <button class="btn" id="okNuevo">Tomar otro pedido</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { TAMANOS, SABORES, GRUPOS, TOPPINGS, pesos, calcularItem, describirItem } from '/catalog.js';
+    import { TAMANOS, SABORES, GRUPOS, TOPPINGS, METODOS_PAGO, pesos, calcularItem, describirItem } from '/catalog.js';
+    import { requerirSesion, api, salir } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const nuevo = () => ({
       tamano: null, sabores: [],
       incluidos: Object.fromEntries(GRUPOS.map((g) => [g.id, null])),
@@ -75,19 +123,24 @@
 
     let item = nuevo();
     let carrito = [];
+    let pago = { ahora: null, metodo: null };
+
+    $('#yo').textContent = (await requerirSesion()) || '';
+    $('#salir').addEventListener('click', salir);
+
+    const cliente = () => $('#cliente').value.trim();
+    const totalCarrito = () => carrito.reduce((s, it) => s + calcularItem(it), 0);
+    const unidades = () => carrito.reduce((s, it) => s + it.cantidad, 0);
 
     function render() {
-      // Tamaños
       $('#tamanos').innerHTML = TAMANOS.map((t) => `
         <button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
           <strong>${t.nombre}</strong><span>${pesos(t.precio)}</span>
         </button>`).join('');
 
-      // Sabores
       $('#sabores').innerHTML = SABORES.map((s) => `
         <button class="chip ${item.sabores.includes(s) ? 'on' : ''}" data-sabor="${s}">${s}</button>`).join('');
 
-      // Incluidos (uno por grupo)
       $('#incluidos').innerHTML = GRUPOS.map((g) => {
         const ops = TOPPINGS.filter((t) => t.grupo === g.id);
         const sel = item.incluidos[g.id];
@@ -98,33 +151,34 @@
           <div class="seg">${botones}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">Sin</button></div></div>`;
       }).join('');
 
-      // Adicionales
       $('#adicionales').innerHTML = TOPPINGS.map((t) => {
         const n = item.adicionales[t.id] || 0;
         return `<div class="extra"><div>${t.nombre}<small>+${pesos(t.precio)} c/u</small></div>
           <div class="qty ${n ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${n}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
       }).join('');
 
-      // Cantidad
       $('#cantidad').innerHTML = `<button data-cant="-1">−</button><b>${item.cantidad}</b><button data-cant="1">+</button>`;
 
-      // Subtotal
-      const listo = item.tamano && item.sabores.length;
       $('#subtotal').textContent = item.tamano ? pesos(calcularItem(item)) : '$0';
+      const listo = item.tamano && item.sabores.length;
       $('#agregar').disabled = !listo;
-      $('#agregar').textContent = !item.tamano ? 'Escoge un tamaño' : !item.sabores.length ? 'Escoge al menos un sabor' : '+ Agregar al pedido';
+      const para = cliente() ? ` de ${cliente()}` : '';
+      $('#agregar').textContent = !item.tamano ? 'Escoge un tamaño'
+        : !item.sabores.length ? 'Escoge al menos un sabor'
+        : carrito.length ? `+ Agregar otro granizado al pedido${para}` : `+ Agregar al pedido${para}`;
 
       renderCarrito();
     }
 
     function renderCarrito() {
+      $('#paraNombre').textContent = cliente() || '—';
       if (!carrito.length) {
         $('#carrito').innerHTML = '<div class="empty">Aún no hay granizados</div>';
       } else {
         $('#carrito').innerHTML = carrito.map((it, i) => {
           const d = describirItem(it);
           return `<div class="cart-item"><div class="det">
-              <b>${it.cantidad}× Granizado ${d.tam}</b> — ${pesos(calcularItem(it))}<br>
+              <b>${i + 1}. ${it.cantidad}× Granizado ${d.tam}</b> — ${pesos(calcularItem(it))}<br>
               Sabores: ${d.sabores.join(', ')}<br>
               ${d.incluidos.length ? 'Incluye: ' + d.incluidos.join(', ') + '<br>' : 'Sin toppings incluidos<br>'}
               ${d.adicionales.length ? '<b>Adicionales:</b> ' + d.adicionales.join(', ') + '<br>' : ''}
@@ -132,14 +186,20 @@
             </div><button class="x" data-del="${i}" title="Quitar">✕</button></div>`;
         }).join('');
       }
-      const total = carrito.reduce((s, it) => s + calcularItem(it), 0);
-      $('#total').textContent = pesos(total);
+      $('#total').textContent = pesos(totalCarrito());
       $('#enviar').disabled = !carrito.length;
+      $('#enviar').textContent = !carrito.length ? 'Enviar pedido'
+        : !cliente() ? 'Escribe el nombre arriba' : `Enviar pedido (${unidades()})`;
+
+      // barra inferior (celular)
+      const u = unidades();
+      $('#bottombar').classList.toggle('show', u > 0);
+      document.body.classList.toggle('con-barra', u > 0);
+      $('#bbCant').textContent = `${u} granizado${u === 1 ? '' : 's'}${cliente() ? ' · ' + cliente() : ''}`;
+      $('#bbTotal').textContent = pesos(totalCarrito());
     }
 
-    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-    document.addEventListener('click', (e) => {
+    document.querySelector('main').addEventListener('click', (e) => {
       const b = e.target.closest('button');
       if (!b) return;
       const ds = b.dataset;
@@ -155,49 +215,101 @@
         if (n) item.adicionales[ds.adi] = n; else delete item.adicionales[ds.adi];
       }
       else if (ds.cant) item.cantidad = Math.max(1, item.cantidad + Number(ds.cant));
-      else if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return renderCarrito(); }
+      else if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
       else return;
       render();
     });
 
     $('#nota').addEventListener('input', (e) => { item.nota = e.target.value; });
+    $('#cliente').addEventListener('input', render);
+    $('#bbVer').addEventListener('click', () => $('#panel').scrollIntoView({ behavior: 'smooth' }));
 
     $('#agregar').addEventListener('click', () => {
       carrito.push(structuredClone(item));
       item = nuevo();
       $('#nota').value = '';
       render();
-      toast('Granizado agregado ✔');
+      const n = unidades();
+      toast(`Agregado ✔ — van ${n} granizado${n === 1 ? '' : 's'}${cliente() ? ' para ' + cliente() : ''}. Puedes agregar otro.`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
-    $('#enviar').addEventListener('click', async () => {
-      const btn = $('#enviar');
+    // ---------- Envío + pago ----------
+    $('#enviar').addEventListener('click', () => {
+      if (!cliente()) {
+        toast('Escribe el nombre de la persona del pedido', true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        $('#cliente').focus();
+        return;
+      }
+      pago = { ahora: null, metodo: null };
+      $('#mpNombre').textContent = cliente();
+      $('#mpTotal').textContent = pesos(totalCarrito());
+      $('#mpError').textContent = '';
+      renderPago();
+      $('#toast').className = 'toast';
+      $('#modalPago').classList.add('show');
+    });
+
+    function renderPago() {
+      document.querySelectorAll('#modalPago [data-ahora]').forEach((b) =>
+        b.classList.toggle('on', pago.ahora !== null && String(Number(pago.ahora)) === b.dataset.ahora));
+      document.querySelectorAll('#modalPago [data-metodo]').forEach((b) =>
+        b.classList.toggle('on', pago.metodo === b.dataset.metodo));
+      $('#mpMetodo').hidden = pago.ahora !== true;
+      $('#mpConfirmar').disabled = pago.ahora === null || (pago.ahora && !pago.metodo);
+    }
+
+    $('#modalPago').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.ahora !== undefined) { pago.ahora = b.dataset.ahora === '1'; if (!pago.ahora) pago.metodo = null; renderPago(); }
+      if (b.dataset.metodo) { pago.metodo = b.dataset.metodo; renderPago(); }
+    });
+    $('#mpCancelar').addEventListener('click', () => $('#modalPago').classList.remove('show'));
+
+    $('#mpConfirmar').addEventListener('click', async () => {
+      const btn = $('#mpConfirmar');
       btn.disabled = true; btn.textContent = 'Enviando...';
       try {
-        const r = await fetch('/api/pedidos', {
+        const { pedido } = await api('/api/pedidos', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cliente: $('#cliente').value, items: carrito }),
+          body: JSON.stringify({ cliente: cliente(), items: carrito, pago }),
         });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || 'No se pudo enviar');
-        toast(`Pedido #${data.pedido.numero} enviado · ${pesos(data.pedido.total)}`);
-        carrito = []; $('#cliente').value = '';
-        renderCarrito();
+        $('#modalPago').classList.remove('show');
+        mostrarOk(pedido);
+        carrito = []; item = nuevo(); $('#cliente').value = ''; $('#nota').value = '';
+        render();
       } catch (err) {
-        toast(err.message, true);
+        $('#mpError').textContent = err.message;
         btn.disabled = false;
       } finally {
-        btn.textContent = 'Enviar pedido';
+        btn.textContent = 'Confirmar y enviar';
       }
+    });
+
+    function mostrarOk(p) {
+      const m = METODOS_PAGO.find((x) => x.id === p.pago.metodo);
+      $('#okTitulo').textContent = `✅ Pedido #${p.numero} enviado`;
+      $('#okAviso').innerHTML = p.pago.ahora
+        ? `📢 Dile que se acerque a la barra a pagar con el nombre:
+           <span class="nom">${esc(p.cliente)}</span>
+           <span class="monto">${pesos(p.total)} · ${m.icono} ${m.nombre}</span>`
+        : `El pedido de <span class="nom">${esc(p.cliente)}</span>
+           <span class="monto">${pesos(p.total)}</span><br>quedó con pago pendiente. Cobra en la barra con ese nombre.`;
+      $('#modalOk').classList.add('show');
+    }
+    $('#okNuevo').addEventListener('click', () => {
+      $('#modalOk').classList.remove('show');
+      window.scrollTo({ top: 0 });
+      $('#cliente').focus();
     });
 
     let tt;
     function toast(msg, err = false) {
       const t = $('#toast');
       t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
-      clearTimeout(tt); tt = setTimeout(() => (t.className = 'toast'), 2800);
+      clearTimeout(tt); tt = setTimeout(() => (t.className = 'toast'), 3000);
     }
 
     render();

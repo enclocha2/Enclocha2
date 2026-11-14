@@ -2,22 +2,25 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#ff3d7f" />
   <title>Granizados · Pedidos</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body style="visibility:hidden">
   <header class="top">
     <h1>📋 Pedidos</h1>
     <div class="row">
-      <button class="link" id="btnSonido">🔔 Sonido: ON</button>
-      <a href="/">+ Nuevo pedido</a>
+      <span class="user-pill">👤 <span id="yo"></span></span>
+      <button class="link" id="btnSonido">🔔 ON</button>
+      <a href="/">+ Nuevo</a>
+      <button class="link" id="salir">Salir</button>
     </div>
   </header>
 
   <main>
     <div id="aviso"></div>
+    <div class="resumen" id="resumen"></div>
     <div class="status" id="status"><span class="dot"></span>Conectando...</div>
     <div class="cols">
       <div class="col new"><h2>Nuevos <span class="badge" id="cNuevo">0</span></h2><div id="lNuevo"></div></div>
@@ -35,18 +38,34 @@
     </div>
   </div>
 
+  <!-- Confirmación de cancelar (sin alert del navegador) -->
+  <div class="modal" id="modalCancelar">
+    <div class="box">
+      <h3>¿Cancelar el pedido <span id="mcNum"></span>?</h3>
+      <div class="g2">
+        <button class="btn ghost" id="mcNo">No</button>
+        <button class="btn" id="mcSi" style="background:#c3293f">Sí, cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
-    import { pesos, describirItem } from '/catalog.js';
+    import { pesos, describirItem, METODOS_PAGO } from '/catalog.js';
+    import { requerirSesion, api, salir } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     const POLL_MS = 3000;
-    let conocidos = null;      // ids ya vistos (null = primera carga, no suena)
+    let conocidos = null;
     let pedidos = [];
-    let sonidoOn = localStorage.getItem('sonido') !== 'off';
+    let sonidoOn = true;
+    try { sonidoOn = localStorage.getItem('sonido') !== 'off'; } catch {}
     let ctx = null;
     let pendientes = 0;
 
-    // ---------- Sonido (Web Audio, sin archivos) ----------
+    $('#yo').textContent = (await requerirSesion()) || '';
+    $('#salir').addEventListener('click', salir);
+
+    // ---------- Sonido ----------
     function tono(freq, inicio, dur, vol = 0.35) {
       const o = ctx.createOscillator(), g = ctx.createGain();
       o.type = 'sine'; o.frequency.value = freq;
@@ -59,35 +78,29 @@
     function sonar() {
       if (!sonidoOn || !ctx) return;
       if (ctx.state === 'suspended') ctx.resume();
-      // "ding-dong" x2
       [0, 0.9].forEach((t) => { tono(1046, t, 0.45); tono(784, t + 0.25, 0.6); });
       navigator.vibrate?.([200, 100, 200]);
     }
-
     $('#activar').addEventListener('click', () => {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
-      tono(880, 0, 0.2, 0.2); // tono de prueba
+      tono(880, 0, 0.2, 0.2);
       $('#overlay').remove();
       if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
     });
-
-    function pintarBotonSonido() { $('#btnSonido').textContent = sonidoOn ? '🔔 Sonido: ON' : '🔕 Sonido: OFF'; }
+    const pintarSonido = () => ($('#btnSonido').textContent = sonidoOn ? '🔔 ON' : '🔕 OFF');
     $('#btnSonido').addEventListener('click', () => {
       sonidoOn = !sonidoOn;
-      localStorage.setItem('sonido', sonidoOn ? 'on' : 'off');
-      pintarBotonSonido();
+      try { localStorage.setItem('sonido', sonidoOn ? 'on' : 'off'); } catch {}
+      pintarSonido();
       if (sonidoOn && ctx) tono(880, 0, 0.2, 0.2);
     });
-    pintarBotonSonido();
+    pintarSonido();
 
     // ---------- Datos ----------
     async function cargar() {
       try {
-        const r = await fetch('/api/pedidos', { cache: 'no-store' });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error);
+        const data = await api('/api/pedidos');
         pedidos = data.pedidos;
-
         $('#aviso').innerHTML = data.persistente ? '' :
           '<div class="warnbar">⚠️ Sin base de datos conectada: los pedidos se pueden perder. Conecta Upstash Redis en Vercel (ver README).</div>';
 
@@ -100,7 +113,7 @@
         if (nuevos.length) avisar(nuevos);
 
         $('#status').className = 'status';
-        $('#status').innerHTML = `<span class="dot"></span>En línea · actualizado ${new Date().toLocaleTimeString('es-CO')}`;
+        $('#status').innerHTML = `<span class="dot"></span>En línea · ${new Date().toLocaleTimeString('es-CO')}`;
       } catch {
         $('#status').className = 'status off';
         $('#status').innerHTML = '<span class="dot"></span>Sin conexión, reintentando...';
@@ -114,18 +127,38 @@
         document.title = `(${pendientes}) ¡Nuevo pedido! · Granizados`;
       }
       if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
-        nuevos.forEach((p) => new Notification(`Pedido #${p.numero}`, { body: `${p.items.length} granizado(s) · ${pesos(p.total)}` }));
+        nuevos.forEach((p) => new Notification(`Pedido #${p.numero} · ${p.cliente}`, { body: `Tomó ${p.tomadoPor} · ${pesos(p.total)}` }));
       }
     }
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) { pendientes = 0; document.title = 'Granizados · Pedidos'; }
     });
 
-    const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const hora = (t) => new Date(t).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+    const metodo = (id) => METODOS_PAGO.find((m) => m.id === id);
+    const inicioHoy = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+
+    const ACCIONES = {
+      preparando: 'Preparó', entregado: 'Entregó', cancelado: 'Canceló', nuevo: 'Devolvió',
+      pagado: 'Cobró', 'pago-deshecho': 'Deshizo cobro',
+    };
+
+    function bloquePago(p) {
+      const pg = p.pago || {};
+      if (pg.pagado) {
+        const m = metodo(pg.metodo);
+        return `<div class="pago ok"><span>✅ Pagado · ${m?.icono} ${m?.nombre} · cobró ${esc(pg.cobradoPor)}</span>
+          <button class="undo" data-id="${p.id}" data-despagar="1">deshacer</button></div>`;
+      }
+      const botones = METODOS_PAGO.map((m) =>
+        `<button class="${pg.metodo === m.id ? 'sug' : ''}" data-id="${p.id}" data-cobrar="${m.id}">Cobrado ${m.icono}</button>`).join('');
+      return pg.ahora
+        ? `<div class="pago barra"><span>💰 Paga en barra · ${metodo(pg.metodo)?.icono} ${metodo(pg.metodo)?.nombre}</span><div class="cobrar">${botones}</div></div>`
+        : `<div class="pago despues"><span>⏳ Paga después</span><div class="cobrar">${botones}</div></div>`;
+    }
 
     function tarjeta(p, flash) {
-      const hora = new Date(p.creado).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
       const grs = p.items.map((it) => {
         const d = describirItem(it);
         return `<div class="gr"><span class="t">${it.cantidad}× ${d.tam}</span> · ${d.sabores.map(esc).join(' + ')}<br>
@@ -135,23 +168,32 @@
       }).join('');
 
       let acts = '';
-      if (p.estado === 'nuevo') acts = `<button data-id="${p.id}" data-e="preparando">Preparar</button><button class="ok" data-id="${p.id}" data-e="entregado">Entregar</button><button class="no" data-id="${p.id}" data-e="cancelado" title="Cancelar">✕</button>`;
+      if (p.estado === 'nuevo') acts = `<button data-id="${p.id}" data-e="preparando">Preparar</button><button class="ok" data-id="${p.id}" data-e="entregado">Entregar</button><button class="no" data-id="${p.id}" data-cancelar="1" title="Cancelar">✕</button>`;
       if (p.estado === 'preparando') acts = `<button class="back" data-id="${p.id}" data-e="nuevo" title="Devolver">↩</button><button class="ok" data-id="${p.id}" data-e="entregado">Entregado ✔</button>`;
       if (p.estado === 'entregado') acts = `<button class="back" data-id="${p.id}" data-e="preparando">↩ Devolver</button>`;
 
+      const hist = (p.historial || []).filter((h) => h.accion !== 'tomado')
+        .map((h) => `${ACCIONES[h.accion] || h.accion} ${esc(h.usuario)} ${hora(h.en)}`).join(' · ');
+
+      const n = p.items.reduce((s, i) => s + i.cantidad, 0);
       return `<div class="ped ${flash ? 'flash' : ''}">
-        <div class="head"><span class="num">#${p.numero}</span><span class="hora">${hora}</span></div>
-        ${p.cliente ? `<div class="cli">👤 ${esc(p.cliente)}</div>` : ''}
+        <div class="head"><span class="num">#${p.numero}</span><span class="hora">${hora(p.creado)}</span></div>
+        <div class="cli">👤 ${esc(p.cliente)} <span class="hint">· ${n} granizado${n === 1 ? '' : 's'}</span></div>
+        <div class="meta">✍️ Tomó: <b>${esc(p.tomadoPor || '—')}</b></div>
+        ${bloquePago(p)}
         ${grs}
         <div class="total" style="font-size:1.1rem;margin:8px 0 0"><span>Total</span><span>${pesos(p.total)}</span></div>
-        <div class="acts">${acts}</div></div>`;
+        <div class="acts">${acts}</div>
+        ${hist ? `<div class="hist">${hist}</div>` : ''}
+      </div>`;
     }
 
     function render(flashIds = new Set()) {
+      const hoy = inicioHoy();
       const asc = (a, b) => a.creado - b.creado;
       const nuevos = pedidos.filter((p) => p.estado === 'nuevo').sort(asc);
       const prep = pedidos.filter((p) => p.estado === 'preparando').sort(asc);
-      const done = pedidos.filter((p) => p.estado === 'entregado' && p.creado >= hoy.getTime());
+      const done = pedidos.filter((p) => p.estado === 'entregado' && p.creado >= hoy);
 
       const vacio = '<div class="empty">—</div>';
       $('#lNuevo').innerHTML = nuevos.map((p) => tarjeta(p, flashIds.has(p.id))).join('') || vacio;
@@ -159,21 +201,48 @@
       $('#lDone').innerHTML = done.map((p) => tarjeta(p)).join('') || vacio;
       $('#cNuevo').textContent = nuevos.length;
       $('#cPrep').textContent = prep.length;
-      $('#cDone').textContent = `${done.length} · ${pesos(done.reduce((s, p) => s + p.total, 0))}`;
+      $('#cDone').textContent = done.length;
+
+      // Resumen del día (sin cancelados)
+      const delDia = pedidos.filter((p) => p.creado >= hoy && p.estado !== 'cancelado');
+      const suma = (f) => delDia.filter(f).reduce((s, p) => s + p.total, 0);
+      const ef = suma((p) => p.pago?.pagado && p.pago.metodo === 'efectivo');
+      const tr = suma((p) => p.pago?.pagado && p.pago.metodo === 'transferencia');
+      const pend = suma((p) => !p.pago?.pagado);
+      $('#resumen').innerHTML = `
+        <div>Vendido hoy<b>${pesos(ef + tr + pend)}</b></div>
+        <div>💵 Efectivo<b>${pesos(ef)}</b></div>
+        <div>📲 Transferencia<b>${pesos(tr)}</b></div>
+        <div>⏳ Por cobrar<b>${pesos(pend)}</b></div>`;
     }
 
-    document.addEventListener('click', async (e) => {
-      const b = e.target.closest('button[data-e]');
-      if (!b) return;
-      if (b.dataset.e === 'cancelado' && !window.confirm('¿Cancelar este pedido?')) return;
-      b.disabled = true;
-      const p = pedidos.find((x) => x.id === b.dataset.id);
-      if (p) { p.estado = b.dataset.e; render(); } // respuesta inmediata
-      await fetch('/api/pedidos', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: b.dataset.id, estado: b.dataset.e }),
-      }).catch(() => {});
+    async function actualizar(id, cambios) {
+      const p = pedidos.find((x) => x.id === id);
+      if (p && cambios.estado) p.estado = cambios.estado;
+      if (p && cambios.pago) p.pago = { ...p.pago, ...cambios.pago, cobradoPor: $('#yo').textContent };
+      render();
+      try { await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ id, ...cambios }) }); } catch {}
       cargar();
+    }
+
+    let aCancelar = null;
+    document.querySelector('main').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-id]');
+      if (!b) return;
+      const id = b.dataset.id;
+      if (b.dataset.e) return actualizar(id, { estado: b.dataset.e });
+      if (b.dataset.cobrar) return actualizar(id, { pago: { pagado: true, metodo: b.dataset.cobrar } });
+      if (b.dataset.despagar) return actualizar(id, { pago: { pagado: false } });
+      if (b.dataset.cancelar) {
+        aCancelar = id;
+        $('#mcNum').textContent = '#' + (pedidos.find((p) => p.id === id)?.numero ?? '');
+        $('#modalCancelar').classList.add('show');
+      }
+    });
+    $('#mcNo').addEventListener('click', () => $('#modalCancelar').classList.remove('show'));
+    $('#mcSi').addEventListener('click', () => {
+      $('#modalCancelar').classList.remove('show');
+      if (aCancelar) actualizar(aCancelar, { estado: 'cancelado' });
     });
 
     cargar();

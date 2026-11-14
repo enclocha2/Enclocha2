@@ -1,36 +1,34 @@
-# 🍧 Granizados – Pedidos
+# 🍧 Granizados – Pedidos (v2)
 
-- `/` → Tomar pedido (tamaño, varios sabores, 4 toppings incluidos, adicionales con cobro)
-- `/pedidos` → Hoja de pedidos en tiempo real (suena con cada pedido nuevo)
+- `/login` → ingreso de Stiv, Angel y John
+- `/` → Tomar pedido: nombre del cliente, varios granizados por persona, pago (ya / después, efectivo / transferencia)
+- `/pedidos` → Hoja de pedidos en tiempo real (suena con cada pedido nuevo), quién lo tomó, cobros y resumen del día
+
+## Usuarios
+| Usuario | Contraseña por defecto |
+|---|---|
+| Stiv  | Stiv2026*  |
+| Angel | Angel2026* |
+| John  | John2026*  |
+
+**Cámbialas** sin tocar código: en Vercel → Settings → Environment Variables crea
+`USUARIOS` = `Stiv:claveNueva1,Angel:claveNueva2,John:claveNueva3` y haz Redeploy.
+(Así también agregas o quitas usuarios.) Al cambiarlas, las sesiones abiertas se cierran.
 
 ## Estructura
 ```
-catalog.js          ← precios, sabores y toppings (editar aquí)
+catalog.js          ← precios, sabores, toppings, métodos de pago
 index.html          ← toma de pedidos
 pedidos.html        ← hoja de pedidos con sonido
+login.html          ← ingreso
+sesion.js           ← utilidades de sesión del navegador
 styles.css
-api/pedidos.js      ← API (GET / POST / PATCH / DELETE)
+api/pedidos.js      ← API de pedidos (requiere sesión)
+api/login.js        ← iniciar / cerrar sesión
+api/_lib/auth.js    ← usuarios y cookies firmadas
 api/_lib/store.js   ← guardado en Upstash Redis
 ```
 
-## Subir a Vercel
-1. Sube esta carpeta a un repo de GitHub.
-2. En vercel.com → **Add New → Project** → importa el repo → **Deploy** (sin configurar nada; Framework: *Other*).
-3. En el proyecto → pestaña **Storage** → **Create / Connect** → **Upstash for Redis** (plan gratis) → conéctalo al proyecto.
-   Esto crea solas las variables `KV_REST_API_URL` y `KV_REST_API_TOKEN` (o `UPSTASH_REDIS_REST_URL/TOKEN`; sirven cualquiera de las dos).
-4. **Deployments → ⋯ → Redeploy** para que tome las variables.
-
-Sin el paso 3 la app funciona pero los pedidos se pierden (lo avisa en /pedidos).
-
-## Uso
-- Abre `/pedidos` en el equipo de cocina/caja y toca **Activar** (el navegador exige un toque para permitir sonido). Déjala abierta.
-- Revisa cada 3 s; si llega un pedido nuevo suena un "ding-dong" doble, la tarjeta parpadea y, si la pestaña está en segundo plano, cambia el título y manda notificación.
-- Flujo: **Nuevo → Preparar → Entregado**. "Entregados hoy" muestra la cantidad y el total vendido del día.
-- Los pedidos se guardan 30 días.
-
-## Probar local
-```
-npm i -g vercel
-npm install
-vercel dev
-```
+## Base de datos
+Vercel → Storage → Upstash for Redis → conectar al proyecto → Redeploy.
+Sin eso la app funciona pero los pedidos se pierden (lo avisa en /pedidos).
