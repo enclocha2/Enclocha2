@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO } from '../catalog.js';
+import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual } from './_lib/store.js';
 import { usuarioDe } from './_lib/auth.js';
 
@@ -24,7 +24,15 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const body = leer(req);
 
-      const cliente = String(body.cliente || '').slice(0, 60).trim();
+      // ¿Se agrega a una cuenta abierta?
+      let cuenta = null;
+      let cliente = String(body.cliente || '').slice(0, 60).trim();
+      if (body.cuenta) {
+        const base = await obtener(String(body.cuenta));
+        if (!base || base.estado === 'cancelado' || base.pago?.pagado) throw new ErrorUsuario('Esa cuenta ya está cerrada o pagada');
+        cuenta = cuentaDe(base);
+        cliente = base.cliente;
+      }
       if (!cliente) throw new ErrorUsuario('Escribe el nombre de la persona del pedido');
 
       const cfg = await configActual();
@@ -34,13 +42,16 @@ export default async function handler(req, res) {
       if (items.length === 0) throw new ErrorUsuario('El pedido está vacío');
       if (items.length > 60) throw new ErrorUsuario('Demasiados productos en un pedido');
 
-      const ahora = !!body.pago?.ahora;
-      const metodo = metodoValido(body.pago?.metodo) ? body.pago.metodo : null;
+      const ahora = !cuenta && !!body.pago?.ahora;
+      const metodo = ahora && metodoValido(body.pago?.metodo) ? body.pago.metodo : null;
       if (ahora && !metodo) throw new ErrorUsuario('Escoge efectivo o transferencia');
 
       const t = Date.now();
+      const id = randomUUID();
       const pedido = {
-        id: randomUUID(),
+        id,
+        cuenta: cuenta || id,
+        agregadoACuenta: !!cuenta,
         numero: await siguienteNumero(),
         cliente,
         items,
@@ -52,12 +63,36 @@ export default async function handler(req, res) {
         historial: [{ accion: 'tomado', usuario, en: t }],
       };
       await guardar(pedido);
-      return res.status(201).json({ pedido });
+      const resp = { pedido };
+      if (cuenta) {
+        const c = agruparCuentas(await listar(300)).find((x) => x.id === cuenta);
+        resp.cuentaPendiente = c?.pendiente ?? pedido.total;
+        resp.cuentaPedidos = c?.abiertos.length ?? 1;
+      }
+      return res.status(201).json(resp);
     }
 
     // Cambiar estado y/o pago
     if (req.method === 'PATCH') {
       const body = leer(req);
+
+      // Cobrar una cuenta completa (todos sus pedidos sin pagar)
+      if (body.cobrarCuenta) {
+        if (!metodoValido(body.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
+        const todos = await listar(300);
+        const abiertos = todos.filter((p) => cuentaDe(p) === body.cobrarCuenta && p.estado !== 'cancelado' && !p.pago?.pagado);
+        if (!abiertos.length) throw new ErrorUsuario('Esa cuenta ya está pagada');
+        const t = Date.now();
+        for (const p of abiertos) {
+          p.pago ||= { ahora: false, metodo: null, pagado: false };
+          Object.assign(p.pago, { pagado: true, metodo: body.metodo, cobradoPor: usuario, pagadoEn: t });
+          (p.historial ||= []).push({ accion: 'pagado', usuario, en: t, metodo: body.metodo });
+          p.actualizado = t;
+          await guardar(p);
+        }
+        return res.status(200).json({ pagados: abiertos.length, total: abiertos.reduce((s, p) => s + p.total, 0) });
+      }
+
       const pedido = await obtener(body.id);
       if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado' });
       const t = Date.now();

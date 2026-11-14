@@ -226,3 +226,26 @@ export function vistaItem(it) {
     adicionales: Object.entries(it.adicionales || {}).map(([id, n]) => `${n}× ${nom(id)}`),
   };
 }
+
+// ---------- Cuentas (varios pedidos de la misma persona que se pagan juntos) ----------
+export const cuentaDe = (p) => p.cuenta || p.id;
+export const normalizar = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+export function agruparCuentas(pedidos) {
+  const m = new Map();
+  for (const p of [...pedidos].sort((a, b) => a.creado - b.creado)) {
+    const id = cuentaDe(p);
+    if (!m.has(id)) m.set(id, { id, cliente: p.cliente, pedidos: [], total: 0, pendiente: 0, desde: p.creado });
+    const c = m.get(id);
+    c.pedidos.push(p);
+    if (p.estado !== 'cancelado') {
+      c.total += p.total;
+      if (!p.pago?.pagado) c.pendiente += p.total;
+    }
+  }
+  for (const c of m.values()) {
+    c.abiertos = c.pedidos.filter((p) => p.estado !== 'cancelado' && !p.pago?.pagado);
+    c.abierta = c.abiertos.length > 0;
+  }
+  return [...m.values()];
+}

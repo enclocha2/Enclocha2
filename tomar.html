@@ -21,6 +21,8 @@
       <div class="card cliente-card">
         <h2>👤 ¿Para quién es el pedido?</h2>
         <input class="field" id="cliente" maxlength="60" placeholder="Nombre de la persona" autocomplete="off" />
+        <div id="sugCuentas"></div>
+        <div class="cuenta-banner" id="bannerCuenta" hidden></div>
       </div>
 
       <nav class="tabs" id="tabs"></nav>
@@ -127,7 +129,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem } from '/catalog.js';
+    import { GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
@@ -153,6 +155,8 @@
     let carrito = [];
     let tab = 'granizados';
     let pago = { ahora: null, metodo: null };
+    let abiertas = [];       // cuentas abiertas (sin pagar)
+    let modoCuenta = null;   // cuenta a la que se le está agregando
 
     const cliente = () => $('#cliente').value.trim();
     const armar = (d) => { try { return armarItem(d, cfg); } catch { return null; } };
@@ -160,6 +164,48 @@
     const unidades = () => carrito.reduce((s, d) => s + d.cantidad, 0);
     const granizadosEnCarrito = () => carrito.filter((d) => d.tipo === 'granizado').length;
     const enCarrito = (id) => carrito.find((d) => d.tipo === 'producto' && d.productoId === id);
+
+    // ---------- Cuentas abiertas ----------
+    async function cargarCuentas() {
+      try {
+        const { pedidos } = await api('/api/pedidos');
+        abiertas = agruparCuentas(pedidos).filter((c) => c.abierta).sort((a, b) => b.desde - a.desde);
+      } catch {}
+    }
+
+    function renderSugerencias() {
+      const box = $('#sugCuentas');
+      if (modoCuenta) { box.innerHTML = ''; return; }
+      const q = normalizar(cliente());
+      const encontradas = q.length >= 2 ? abiertas.filter((c) => normalizar(c.cliente).includes(q)).slice(0, 4) : [];
+      box.innerHTML = encontradas.map((c) => `
+        <div class="sug">
+          <span>💳 <b>${esc(c.cliente)}</b> tiene cuenta abierta · ${c.abiertos.length} pedido${c.abiertos.length === 1 ? '' : 's'} · <b>${pesos(c.pendiente)}</b></span>
+          <button data-usar-cuenta="${c.id}">➕ Agregar a su cuenta</button>
+        </div>`).join('');
+    }
+
+    function usarCuenta(c) {
+      modoCuenta = c;
+      $('#cliente').value = c.cliente;
+      $('#cliente').disabled = true;
+      $('#bannerCuenta').hidden = false;
+      $('#bannerCuenta').innerHTML = `
+        <div>➕ <b>Agregando a la cuenta de ${esc(c.cliente)}</b><br>
+        <span class="hint">Ya lleva ${c.abiertos.length} pedido${c.abiertos.length === 1 ? '' : 's'} sin pagar · ${pesos(c.pendiente)}. Lo nuevo se suma a esa cuenta.</span></div>
+        <button id="salirCuenta">Cancelar</button>`;
+      $('#salirCuenta').onclick = () => salirCuenta(true);
+      renderSugerencias(); render();
+    }
+
+    function salirCuenta(limpiarNombre) {
+      modoCuenta = null;
+      $('#cliente').disabled = false;
+      if (limpiarNombre) $('#cliente').value = '';
+      $('#bannerCuenta').hidden = true;
+      history.replaceState(null, '', '/tomar');
+      renderSugerencias(); render();
+    }
 
     // ---------- Pestañas ----------
     function renderTabs() {
@@ -268,7 +314,9 @@
       $('#total').textContent = pesos(totalCarrito());
       $('#enviar').disabled = !carrito.length;
       $('#vaciar').hidden = !carrito.length;
-      $('#enviar').textContent = !carrito.length ? 'Enviar pedido' : !cliente() ? 'Escribe el nombre arriba' : `Enviar pedido (${unidades()})`;
+      $('#enviar').textContent = !carrito.length ? (modoCuenta ? 'Agregar a la cuenta' : 'Enviar pedido')
+        : modoCuenta ? `➕ Agregar a la cuenta de ${modoCuenta.cliente} (${unidades()})`
+        : !cliente() ? 'Escribe el nombre arriba' : `Enviar pedido (${unidades()})`;
 
       const u = unidades();
       $('#bottombar').classList.toggle('show', u > 0);
@@ -305,7 +353,12 @@
     });
 
     $('#nota').addEventListener('input', (e) => { item.nota = e.target.value; });
-    $('#cliente').addEventListener('input', () => { renderCarrito(); if (tab === 'granizados') renderGranizado(); });
+    $('#cliente').addEventListener('input', () => { renderSugerencias(); renderCarrito(); if (tab === 'granizados') renderGranizado(); });
+    $('#sugCuentas').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-usar-cuenta]');
+      const c = b && abiertas.find((x) => x.id === b.dataset.usarCuenta);
+      if (c) usarCuenta(c);
+    });
     $('#bbVer').addEventListener('click', () => $('#panel').scrollIntoView({ behavior: 'smooth' }));
     $('#vaciar').addEventListener('click', () => { carrito = []; render(); });
 
@@ -327,6 +380,7 @@
         $('#cliente').focus();
         return;
       }
+      if (modoCuenta) return enviarACuenta();
       pago = { ahora: null, metodo: null };
       $('#mpNombre').textContent = cliente();
       $('#mpTotal').textContent = pesos(totalCarrito());
@@ -364,7 +418,7 @@
         mostrarOk(pedido);
         carrito = []; item = nuevo(); tab = 'granizados';
         $('#cliente').value = ''; $('#nota').value = '';
-        render();
+        render(); renderSugerencias(); cargarCuentas();
       } catch (err) {
         $('#mpError').textContent = err.message;
         btn.disabled = false;
@@ -372,6 +426,28 @@
         btn.textContent = 'Confirmar y enviar';
       }
     });
+
+    async function enviarACuenta() {
+      const btn = $('#enviar');
+      btn.disabled = true; btn.textContent = 'Agregando...';
+      try {
+        const ultimo = modoCuenta.abiertos[modoCuenta.abiertos.length - 1];
+        const r = await api('/api/pedidos', { method: 'POST', body: JSON.stringify({ cuenta: ultimo.id, items: carrito }) });
+        $('#okTitulo').textContent = `✅ Pedido #${r.pedido.numero} agregado a la cuenta`;
+        $('#okAviso').innerHTML = `Se sumó <b>${pesos(r.pedido.total)}</b> a la cuenta de
+          <span class="nom">${esc(r.pedido.cliente)}</span>
+          <span class="monto">Total por pagar: ${pesos(r.cuentaPendiente)}</span><br>
+          (${r.cuentaPedidos} pedidos). Paga en la barra con ese nombre.`;
+        $('#modalOk').classList.add('show');
+        carrito = []; item = nuevo(); tab = 'granizados'; $('#nota').value = '';
+        salirCuenta(true);
+        cargarCuentas();
+      } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+        renderCarrito();
+      }
+    }
 
     function mostrarOk(p) {
       const m = METODOS_PAGO.find((x) => x.id === p.pago.metodo);
@@ -391,6 +467,15 @@
     });
 
     render();
+
+    // Cargar cuentas abiertas; si viene ?cuenta=ID (desde "Cuentas"), entrar directo en modo agregar
+    await cargarCuentas();
+    const param = new URLSearchParams(location.search).get('cuenta');
+    if (param) {
+      const c = abiertas.find((x) => x.id === param || x.pedidos.some((p) => p.id === param));
+      if (c) usarCuenta(c); else { toast('Esa cuenta ya fue pagada o no existe', true); history.replaceState(null, '', '/tomar'); }
+    }
+    setInterval(() => { if (!modoCuenta) cargarCuentas().then(renderSugerencias); }, 15000);
   </script>
 </body>
 </html>

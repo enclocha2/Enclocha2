@@ -31,6 +31,12 @@
         <span id="tPedidos">Ver y despachar pedidos</span>
         <em class="cnt" id="cntNuevos" hidden></em>
       </a>
+      <a class="tile t-cuentas" href="/cuentas">
+        <span class="ico">💳</span>
+        <strong>Cuentas abiertas</strong>
+        <span id="tCuentas">Pedidos sin pagar por persona</span>
+        <em class="cnt" id="cntCuentas" hidden></em>
+      </a>
       <a class="tile t-sabores solo-admin" href="/productos#sabores">
         <span class="ico">🍧</span>
         <strong>Sabores disponibles</strong>
@@ -48,7 +54,7 @@
   </main>
 
   <script type="module">
-    import { pesos } from '/catalog.js';
+    import { pesos, agruparCuentas } from '/catalog.js';
     import { requerirSesion, api } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
@@ -70,6 +76,12 @@
         $('#cntNuevos').hidden = !nuevos;
         $('#cntNuevos').textContent = nuevos;
         $('#tPedidos').textContent = nuevos || prep ? `${nuevos} nuevos · ${prep} en preparación` : 'Sin pedidos pendientes';
+
+        const abiertas = agruparCuentas(pedidos).filter((c) => c.abierta);
+        $('#cntCuentas').hidden = !abiertas.length;
+        $('#cntCuentas').textContent = abiertas.length;
+        $('#tCuentas').textContent = abiertas.length
+          ? `${abiertas.length} por cobrar · ${pesos(abiertas.reduce((s, c) => s + c.pendiente, 0))}` : 'Todo está pagado';
 
         const sab = config.sabores.filter((s) => s.activo).length;
         const sinPrecio = config.productos.filter((p) => p.activo && !p.precio).length + config.tamanos.filter((t) => t.activo && !t.precio).length;

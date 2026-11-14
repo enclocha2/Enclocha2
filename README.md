@@ -1,9 +1,10 @@
-# 🍧 Granizados – Pedidos (v4)
+# 🍧 Granizados – Pedidos (v5)
 
 | Ruta | Qué es |
 |---|---|
 | `/` | **Menú principal** (resumen del día) |
 | `/tomar` | Tomar pedido: granizados (varios diferentes), cervezas, licor y demás categorías |
+| `/cuentas` | Cuentas abiertas: pedidos sin pagar por persona, agregar algo más y cobrar todo junto |
 | `/pedidos` | Hoja de pedidos en tiempo real con sonido, cobros y resumen |
 | `/productos` | Sabores disponibles, productos, precios, tamaños, toppings y categorías |
 | `/login` | Ingreso |
@@ -38,3 +39,9 @@ api/login.js        ← sesión
 api/_lib/auth.js    ← usuarios, admins
 api/_lib/store.js   ← Upstash Redis
 ```
+
+## Cuentas abiertas
+- Si alguien no ha pagado y pide algo más: en **Tomar pedido** escribe su nombre → sale
+  "💳 tiene cuenta abierta → Agregar a su cuenta". O desde **Cuentas abiertas → ➕ Agregar algo más**.
+- Lo nuevo entra como pedido aparte (cocina lo ve y suena) pero ligado a la misma cuenta.
+- Al cobrar (en Cuentas o en Pedidos) se cobran **todos** los pedidos pendientes de esa cuenta.

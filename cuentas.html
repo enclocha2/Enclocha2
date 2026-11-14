@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ff3d7f" />
+  <title>Granizados · Cuentas abiertas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="back">← Menú</a><h1>💳 Cuentas abiertas</h1></div>
+    <div class="row"><span class="user-pill">👤 <span id="yo"></span></span></div>
+  </header>
+
+  <main class="menu">
+    <div class="row" style="margin-bottom:12px">
+      <input class="field" id="buscar" placeholder="🔍 Buscar por nombre..." style="flex:1" />
+    </div>
+    <div class="resumen" id="resumen"></div>
+    <div id="lista"><div class="empty">Cargando...</div></div>
+  </main>
+
+  <!-- Confirmar cobro -->
+  <div class="modal" id="modalCobro">
+    <div class="box">
+      <h3>Cobrar cuenta de <span id="mcNombre"></span></h3>
+      <div class="aviso-barra"><span class="monto" id="mcTotal"></span><br><span class="hint" id="mcDet"></span></div>
+      <div class="g2">
+        <button class="opt" data-metodo="efectivo">💵 Efectivo</button>
+        <button class="opt" data-metodo="transferencia">📲 Transferencia</button>
+      </div>
+      <button class="btn ghost" id="mcCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos, vistaItem, agruparCuentas, normalizar } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+
+    const $ = (s) => document.querySelector(s);
+    await requerirSesion();
+
+    let cuentas = [];
+    let aCobrar = null;
+    const hora = (t) => new Date(t).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+    const ESTADO = { nuevo: '🆕 Nuevo', preparando: '⏳ Preparando', entregado: '✅ Entregado' };
+
+    function resumenItems(p) {
+      return p.items.map(vistaItem).map((d) => d.esGranizado
+        ? `${d.cantidad}× 🍧 ${esc(d.tam)} (${d.sabores.map(esc).join(' + ')})`
+        : `${d.cantidad}× ${esc(d.icono || '')} ${esc(d.nombre)}`).join(', ');
+    }
+
+    async function cargar() {
+      try {
+        const { pedidos } = await api('/api/pedidos');
+        cuentas = agruparCuentas(pedidos).filter((c) => c.abierta).sort((a, b) => a.desde - b.desde);
+        render();
+      } catch {}
+    }
+
+    function render() {
+      const q = normalizar($('#buscar').value);
+      const lista = cuentas.filter((c) => !q || normalizar(c.cliente).includes(q));
+      $('#resumen').innerHTML = `
+        <div>Cuentas abiertas<b>${cuentas.length}</b></div>
+        <div>⏳ Total por cobrar<b>${pesos(cuentas.reduce((s, c) => s + c.pendiente, 0))}</b></div>`;
+
+      $('#lista').innerHTML = lista.map((c) => `
+        <div class="card cuenta">
+          <div class="head">
+            <div><span class="cli-big">👤 ${esc(c.cliente)}</span>
+              <div class="hint">Abierta desde ${hora(c.desde)} · ${c.abiertos.length} pedido${c.abiertos.length === 1 ? '' : 's'}</div></div>
+            <div class="monto-big">${pesos(c.pendiente)}</div>
+          </div>
+          ${c.abiertos.map((p) => `
+            <div class="cta-ped">
+              <div><b>#${p.numero}</b> · ${hora(p.creado)} · ${ESTADO[p.estado] || p.estado} · tomó ${esc(p.tomadoPor || '—')}
+                ${p.pago?.ahora ? `<span class="tag">💰 iba a pagar ya</span>` : ''}<br>
+                <span class="hint">${resumenItems(p)}</span></div>
+              <b>${pesos(p.total)}</b>
+            </div>`).join('')}
+          <div class="acts-cuenta">
+            <a class="btn alt" href="/tomar?cuenta=${c.id}">➕ Agregar algo más</a>
+            <button class="btn" data-cobrar="${c.id}">💰 Cobrar ${pesos(c.pendiente)}</button>
+          </div>
+        </div>`).join('') || `<div class="card empty">${q ? 'No hay cuentas abiertas con ese nombre' : '🎉 No hay cuentas pendientes por cobrar'}</div>`;
+    }
+
+    $('#buscar').addEventListener('input', render);
+
+    $('#lista').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cobrar]');
+      if (!b) return;
+      aCobrar = cuentas.find((c) => c.id === b.dataset.cobrar);
+      if (!aCobrar) return;
+      $('#mcNombre').textContent = aCobrar.cliente;
+      $('#mcTotal').textContent = pesos(aCobrar.pendiente);
+      $('#mcDet').textContent = `${aCobrar.abiertos.length} pedido(s): ` + aCobrar.abiertos.map((p) => '#' + p.numero).join(', ');
+      $('#modalCobro').classList.add('show');
+    });
+    $('#mcCancelar').addEventListener('click', () => $('#modalCobro').classList.remove('show'));
+    $('#modalCobro').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-metodo]');
+      if (!b || !aCobrar) return;
+      $('#modalCobro').classList.remove('show');
+      try {
+        const r = await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ cobrarCuenta: aCobrar.id, metodo: b.dataset.metodo }) });
+        toast(`✅ Cuenta de ${aCobrar.cliente} cobrada: ${pesos(r.total)}`);
+      } catch (err) { toast(err.message, true); }
+      cargar();
+    });
+
+    cargar();
+    setInterval(cargar, 5000);
+  </script>
+</body>
+</html>
