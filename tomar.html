@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ff3d7f" />
+  <title>Granizados · Tomar pedido</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="back">← Menú</a><h1>🧾 Tomar pedido</h1></div>
+    <div class="row">
+      <span class="user-pill">👤 <span id="yo"></span></span>
+      <a href="/pedidos">Pedidos</a>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section>
+      <div class="card cliente-card">
+        <h2>👤 ¿Para quién es el pedido?</h2>
+        <input class="field" id="cliente" maxlength="60" placeholder="Nombre de la persona" autocomplete="off" />
+      </div>
+
+      <nav class="tabs" id="tabs"></nav>
+
+      <!-- Granizados -->
+      <div id="panelGranizado">
+        <div class="card armando">
+          <b>🍧 Armando granizado <span id="numGranizado">#1</span></b>
+          <span class="hint">Cuando lo agregues, puedes armar otro diferente.</span>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">1</span> Tamaño</h2>
+          <div class="grid g4" id="tamanos"></div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">2</span> Sabores <span class="hint">(puedes escoger varios)</span></h2>
+          <div class="chips" id="sabores"></div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">3</span> Toppings incluidos <span class="hint">(sin costo)</span></h2>
+          <div id="incluidos"></div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">4</span> Toppings adicionales <span class="hint">(con cobro)</span></h2>
+          <div id="adicionales"></div>
+        </div>
+
+        <div class="card">
+          <h2><span class="n">5</span> Cantidad y nota</h2>
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <span>¿Cuántos iguales a este?</span>
+            <div class="qty" id="cantidad"></div>
+          </div>
+          <input class="field" id="nota" maxlength="200" placeholder="Nota (opcional): poco hielo, sin chile..." />
+        </div>
+
+        <div class="card">
+          <div class="total"><span>Este granizado</span><span id="subtotal">$0</span></div>
+          <button class="btn alt" id="agregar" disabled>+ Agregar al pedido</button>
+        </div>
+      </div>
+
+      <!-- Otros productos -->
+      <div id="panelProductos" hidden>
+        <div class="card">
+          <h2 id="tituloCat"></h2>
+          <div class="prods" id="prods"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="sticky" id="panel">
+      <div class="card">
+        <h2>🧾 Pedido de <span class="para" id="paraNombre">—</span></h2>
+        <div id="carrito"><div class="empty">Aún no hay productos</div></div>
+        <div class="total"><span>Total</span><span id="total">$0</span></div>
+        <button class="btn" id="enviar" disabled>Enviar pedido</button>
+        <button class="btn ghost" id="vaciar" style="margin-top:8px" hidden>Vaciar pedido</button>
+      </div>
+    </aside>
+  </main>
+
+  <div class="bottombar" id="bottombar">
+    <div><b id="bbCant">0</b><br><span id="bbTotal">$0</span></div>
+    <button id="bbVer">Ver y enviar ↓</button>
+  </div>
+
+  <!-- Modal de pago -->
+  <div class="modal" id="modalPago">
+    <div class="box">
+      <h3>💰 ¿<span id="mpNombre"></span> va a pagar ya?</h3>
+      <div class="total" style="margin:0"><span>Total</span><span id="mpTotal"></span></div>
+      <div class="g2">
+        <button class="opt" data-ahora="1">Sí, paga ya</button>
+        <button class="opt" data-ahora="0">Paga después</button>
+      </div>
+      <div id="mpMetodo" hidden>
+        <p style="margin:0 0 8px;font-weight:700">¿Cómo va a pagar?</p>
+        <div class="g2">
+          <button class="opt" data-metodo="efectivo">💵 Efectivo</button>
+          <button class="opt" data-metodo="transferencia">📲 Transferencia</button>
+        </div>
+      </div>
+      <div class="error" id="mpError"></div>
+      <button class="btn" id="mpConfirmar" disabled>Confirmar y enviar</button>
+      <button class="btn ghost" id="mpCancelar">Volver</button>
+    </div>
+  </div>
+
+  <!-- Modal de confirmación -->
+  <div class="modal" id="modalOk">
+    <div class="box">
+      <h3 id="okTitulo">✅ Pedido enviado</h3>
+      <div class="aviso-barra" id="okAviso"></div>
+      <button class="btn" id="okNuevo">Tomar otro pedido</button>
+      <a class="btn ghost" href="/" style="text-align:center;text-decoration:none">Volver al menú</a>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { GRUPOS, METODOS_PAGO, pesos, armarItem } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+
+    const $ = (s) => document.querySelector(s);
+    await requerirSesion();
+
+    let cfg;
+    try { ({ config: cfg } = await api('/api/catalogo')); }
+    catch (e) { toast('No se pudo cargar el catálogo: ' + e.message, true); throw e; }
+
+    const act = (l) => l.filter((x) => x.activo);
+    const tamanos = act(cfg.tamanos);
+    const sabores = act(cfg.sabores);
+    const toppings = act(cfg.toppings);
+    const categorias = cfg.categorias.filter((c) => cfg.productos.some((p) => p.categoria === c.id && p.activo));
+
+    const nuevo = () => ({
+      tipo: 'granizado', tamano: null, sabores: [],
+      incluidos: Object.fromEntries(GRUPOS.map((g) => [g.id, null])),
+      adicionales: {}, cantidad: 1, nota: '',
+    });
+
+    let item = nuevo();
+    let carrito = [];
+    let tab = 'granizados';
+    let pago = { ahora: null, metodo: null };
+
+    const cliente = () => $('#cliente').value.trim();
+    const armar = (d) => { try { return armarItem(d, cfg); } catch { return null; } };
+    const totalCarrito = () => carrito.reduce((s, d) => s + (armar(d)?.subtotal || 0), 0);
+    const unidades = () => carrito.reduce((s, d) => s + d.cantidad, 0);
+    const granizadosEnCarrito = () => carrito.filter((d) => d.tipo === 'granizado').length;
+    const enCarrito = (id) => carrito.find((d) => d.tipo === 'producto' && d.productoId === id);
+
+    // ---------- Pestañas ----------
+    function renderTabs() {
+      const cuenta = (catId) => carrito.filter((d) => d.tipo === 'producto' && cfg.productos.find((p) => p.id === d.productoId)?.categoria === catId)
+        .reduce((s, d) => s + d.cantidad, 0);
+      const ng = carrito.filter((d) => d.tipo === 'granizado').reduce((s, d) => s + d.cantidad, 0);
+      $('#tabs').innerHTML =
+        `<button class="${tab === 'granizados' ? 'on' : ''}" data-tab="granizados">🍧 Granizados${ng ? ` <i>${ng}</i>` : ''}</button>` +
+        categorias.map((c) => { const n = cuenta(c.id);
+          return `<button class="${tab === c.id ? 'on' : ''}" data-tab="${c.id}">${esc(c.icono)} ${esc(c.nombre)}${n ? ` <i>${n}</i>` : ''}</button>`; }).join('');
+      $('#panelGranizado').hidden = tab !== 'granizados';
+      $('#panelProductos').hidden = tab === 'granizados';
+    }
+
+    // ---------- Granizado ----------
+    function renderGranizado() {
+      $('#numGranizado').textContent = '#' + (granizadosEnCarrito() + 1);
+      $('#tamanos').innerHTML = tamanos.map((t) => `
+        <button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
+          <strong>${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span>
+        </button>`).join('') || '<div class="empty">No hay tamaños activos</div>';
+
+      $('#sabores').innerHTML = sabores.map((s) => `
+        <button class="chip ${item.sabores.includes(s.id) ? 'on' : ''}" data-sabor="${s.id}">${esc(s.nombre)}</button>`).join('')
+        || '<div class="empty">No hay sabores disponibles. Actívalos en el menú → Sabores.</div>';
+
+      $('#incluidos').innerHTML = GRUPOS.map((g) => {
+        const ops = toppings.filter((t) => t.grupo === g.id);
+        if (!ops.length) return '';
+        const sel = item.incluidos[g.id];
+        const botones = ops.length === 1
+          ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}">Sí</button>`
+          : ops.map((t) => `<button class="${sel === t.id ? 'on' : ''}" data-inc="${g.id}" data-val="${t.id}">${esc(t.nombre.replace(/^Paleta de /, ''))}</button>`).join('');
+        return `<div class="grupo"><span class="lbl">${g.nombre}</span>
+          <div class="seg">${botones}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">Sin</button></div></div>`;
+      }).join('');
+
+      $('#adicionales').innerHTML = toppings.map((t) => {
+        const n = item.adicionales[t.id] || 0;
+        return `<div class="extra"><div>${esc(t.nombre)}<small>+${pesos(t.precio)} c/u</small></div>
+          <div class="qty ${n ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${n}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
+      }).join('');
+
+      $('#cantidad').innerHTML = `<button data-cant="-1">−</button><b>${item.cantidad}</b><button data-cant="1">+</button>`;
+
+      const a = armar(item);
+      $('#subtotal').textContent = a ? pesos(a.subtotal) : '$0';
+      $('#agregar').disabled = !a;
+      const para = cliente() ? ` de ${cliente()}` : '';
+      $('#agregar').textContent = !item.tamano ? 'Escoge un tamaño'
+        : !item.sabores.length ? 'Escoge al menos un sabor'
+        : `+ Agregar granizado #${granizadosEnCarrito() + 1} al pedido${para}`;
+    }
+
+    // ---------- Productos ----------
+    function renderProductos() {
+      const c = categorias.find((x) => x.id === tab);
+      if (!c) return;
+      $('#tituloCat').textContent = `${c.icono} ${c.nombre}`;
+      $('#prods').innerHTML = cfg.productos.filter((p) => p.categoria === c.id && p.activo).sort((x, y) => (!x.precio) - (!y.precio)).map((p) => {
+        const n = enCarrito(p.id)?.cantidad || 0;
+        if (!p.precio) return `<div class="prod off"><div><b>${esc(p.nombre)}</b><span>Sin precio</span></div></div>`;
+        return `<div class="prod ${n ? 'has' : ''}">
+          <button class="prod-main" data-prod="${p.id}" data-d="1"><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span></button>
+          ${n ? `<div class="qty has"><button data-prod="${p.id}" data-d="-1">−</button><b>${n}</b><button data-prod="${p.id}" data-d="1">+</button></div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function cambiarProducto(id, d) {
+      const linea = enCarrito(id);
+      if (linea) {
+        linea.cantidad += d;
+        if (linea.cantidad <= 0) carrito = carrito.filter((x) => x !== linea);
+      } else if (d > 0) {
+        carrito.push({ tipo: 'producto', productoId: id, cantidad: 1 });
+      }
+    }
+
+    // ---------- Carrito ----------
+    function renderCarrito() {
+      $('#paraNombre').textContent = cliente() || '—';
+      let ng = 0;
+      $('#carrito').innerHTML = carrito.length ? carrito.map((d, i) => {
+        const a = armar(d);
+        if (!a) return `<div class="cart-item"><div class="det">⚠️ Ítem ya no disponible</div><button class="x" data-del="${i}">✕</button></div>`;
+        if (a.tipo === 'producto') {
+          return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b></div>
+            <div class="qty has"><button data-prod="${a.productoId}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-d="1">+</button></div></div>`;
+        }
+        ng++;
+        return `<div class="cart-item"><div class="det">
+            <b>🍧 Granizado #${ng} · ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${pesos(a.subtotal)}<br>
+            ${a.sabores.map((s) => esc(s.nombre)).join(' + ')}<br>
+            ${a.incluidos.length ? 'Incluye: ' + a.incluidos.map((t) => esc(t.nombre)).join(', ') + '<br>' : 'Sin toppings<br>'}
+            ${a.adicionales.length ? '<b>Adicionales:</b> ' + a.adicionales.map((x) => `${x.cantidad}× ${esc(x.nombre)}`).join(', ') + '<br>' : ''}
+            ${a.nota ? '📝 ' + esc(a.nota) : ''}
+          </div><button class="x" data-del="${i}" title="Quitar">✕</button></div>`;
+      }).join('') : '<div class="empty">Aún no hay productos</div>';
+
+      $('#total').textContent = pesos(totalCarrito());
+      $('#enviar').disabled = !carrito.length;
+      $('#vaciar').hidden = !carrito.length;
+      $('#enviar').textContent = !carrito.length ? 'Enviar pedido' : !cliente() ? 'Escribe el nombre arriba' : `Enviar pedido (${unidades()})`;
+
+      const u = unidades();
+      $('#bottombar').classList.toggle('show', u > 0);
+      document.body.classList.toggle('con-barra', u > 0);
+      $('#bbCant').textContent = `${u} producto${u === 1 ? '' : 's'}${cliente() ? ' · ' + cliente() : ''}`;
+      $('#bbTotal').textContent = pesos(totalCarrito());
+    }
+
+    function render() {
+      renderTabs();
+      if (tab === 'granizados') renderGranizado(); else renderProductos();
+      renderCarrito();
+    }
+
+    document.querySelector('main').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const ds = b.dataset;
+      if (ds.tab) { tab = ds.tab; render(); return $('#tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      if (ds.prod) { cambiarProducto(ds.prod, Number(ds.d)); return render(); }
+      if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
+      if (ds.tam) item.tamano = ds.tam;
+      else if (ds.sabor) {
+        item.sabores = item.sabores.includes(ds.sabor) ? item.sabores.filter((s) => s !== ds.sabor) : [...item.sabores, ds.sabor];
+      }
+      else if (ds.inc !== undefined) item.incluidos[ds.inc] = ds.val || null;
+      else if (ds.adi) {
+        const n = Math.max(0, (item.adicionales[ds.adi] || 0) + Number(ds.d));
+        if (n) item.adicionales[ds.adi] = n; else delete item.adicionales[ds.adi];
+      }
+      else if (ds.cant) item.cantidad = Math.max(1, item.cantidad + Number(ds.cant));
+      else return;
+      render();
+    });
+
+    $('#nota').addEventListener('input', (e) => { item.nota = e.target.value; });
+    $('#cliente').addEventListener('input', () => { renderCarrito(); if (tab === 'granizados') renderGranizado(); });
+    $('#bbVer').addEventListener('click', () => $('#panel').scrollIntoView({ behavior: 'smooth' }));
+    $('#vaciar').addEventListener('click', () => { carrito = []; render(); });
+
+    $('#agregar').addEventListener('click', () => {
+      carrito.push(structuredClone(item));
+      const n = granizadosEnCarrito();
+      item = nuevo();
+      $('#nota').value = '';
+      render();
+      toast(`Granizado #${n} agregado ✔ — arma el siguiente o cambia de pestaña`);
+      $('#tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // ---------- Envío + pago ----------
+    $('#enviar').addEventListener('click', () => {
+      if (!cliente()) {
+        toast('Escribe el nombre de la persona del pedido', true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        $('#cliente').focus();
+        return;
+      }
+      pago = { ahora: null, metodo: null };
+      $('#mpNombre').textContent = cliente();
+      $('#mpTotal').textContent = pesos(totalCarrito());
+      $('#mpError').textContent = '';
+      renderPago();
+      $('#toast').className = 'toast';
+      $('#modalPago').classList.add('show');
+    });
+
+    function renderPago() {
+      document.querySelectorAll('#modalPago [data-ahora]').forEach((b) =>
+        b.classList.toggle('on', pago.ahora !== null && String(Number(pago.ahora)) === b.dataset.ahora));
+      document.querySelectorAll('#modalPago [data-metodo]').forEach((b) => b.classList.toggle('on', pago.metodo === b.dataset.metodo));
+      $('#mpMetodo').hidden = pago.ahora !== true;
+      $('#mpConfirmar').disabled = pago.ahora === null || (pago.ahora && !pago.metodo);
+    }
+
+    $('#modalPago').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.ahora !== undefined) { pago.ahora = b.dataset.ahora === '1'; if (!pago.ahora) pago.metodo = null; renderPago(); }
+      if (b.dataset.metodo) { pago.metodo = b.dataset.metodo; renderPago(); }
+    });
+    $('#mpCancelar').addEventListener('click', () => $('#modalPago').classList.remove('show'));
+
+    $('#mpConfirmar').addEventListener('click', async () => {
+      const btn = $('#mpConfirmar');
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      try {
+        const { pedido } = await api('/api/pedidos', {
+          method: 'POST',
+          body: JSON.stringify({ cliente: cliente(), items: carrito, pago }),
+        });
+        $('#modalPago').classList.remove('show');
+        mostrarOk(pedido);
+        carrito = []; item = nuevo(); tab = 'granizados';
+        $('#cliente').value = ''; $('#nota').value = '';
+        render();
+      } catch (err) {
+        $('#mpError').textContent = err.message;
+        btn.disabled = false;
+      } finally {
+        btn.textContent = 'Confirmar y enviar';
+      }
+    });
+
+    function mostrarOk(p) {
+      const m = METODOS_PAGO.find((x) => x.id === p.pago.metodo);
+      $('#okTitulo').textContent = `✅ Pedido #${p.numero} enviado`;
+      $('#okAviso').innerHTML = p.pago.ahora
+        ? `📢 Dile que se acerque a la barra a pagar con el nombre:
+           <span class="nom">${esc(p.cliente)}</span>
+           <span class="monto">${pesos(p.total)} · ${m.icono} ${m.nombre}</span>`
+        : `El pedido de <span class="nom">${esc(p.cliente)}</span>
+           <span class="monto">${pesos(p.total)}</span><br>quedó con pago pendiente. Cobra en la barra con ese nombre.`;
+      $('#modalOk').classList.add('show');
+    }
+    $('#okNuevo').addEventListener('click', () => {
+      $('#modalOk').classList.remove('show');
+      window.scrollTo({ top: 0 });
+      $('#cliente').focus();
+    });
+
+    render();
+  </script>
+</body>
+</html>

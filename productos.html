@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ff3d7f" />
+  <title>Granizados · Productos</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="back">← Menú</a><h1>🛠️ Productos</h1></div>
+    <div class="row"><span class="user-pill">👤 <span id="yo"></span></span></div>
+  </header>
+
+  <main class="admin">
+    <nav class="tabs" id="tabs">
+      <button data-tab="sabores">🍧 Sabores</button>
+      <button data-tab="productos">🍺 Productos</button>
+      <button data-tab="granizado">📏 Tamaños y toppings</button>
+      <button data-tab="categorias">🗂️ Categorías</button>
+    </nav>
+
+    <!-- SABORES -->
+    <section id="t-sabores" class="card" hidden>
+      <h2>Sabores de granizado</h2>
+      <p class="hint">Solo los sabores <b>disponibles</b> salen en "Tomar pedido".</p>
+      <div class="row" style="margin-bottom:10px">
+        <button class="mini" data-todos="1">Todos disponibles</button>
+        <button class="mini" data-todos="0">Ninguno</button>
+      </div>
+      <div id="lSabores"></div>
+      <form class="add" id="fSabor">
+        <input class="field" name="nombre" placeholder="Nuevo sabor, ej: Maracumango" maxlength="50" required />
+        <button class="btn alt">+ Agregar sabor</button>
+      </form>
+    </section>
+
+    <!-- PRODUCTOS -->
+    <section id="t-productos" class="card" hidden>
+      <h2>Productos</h2>
+      <div class="row filtros">
+        <input class="field" id="buscar" placeholder="🔍 Buscar producto..." style="flex:1;min-width:180px" />
+        <div class="chips" id="filtroCat"></div>
+      </div>
+      <div id="lProductos"></div>
+      <form class="add add-prod" id="fProducto">
+        <input class="field" name="nombre" placeholder="Nombre del producto" maxlength="60" required />
+        <select class="field" name="categoria" id="selCatNuevo"></select>
+        <input class="field" name="precio" type="number" min="0" step="100" placeholder="Precio" required />
+        <button class="btn alt">+ Agregar</button>
+      </form>
+    </section>
+
+    <!-- TAMAÑOS Y TOPPINGS -->
+    <section id="t-granizado" hidden>
+      <div class="card">
+        <h2>Tamaños y precios del granizado</h2>
+        <div id="lTamanos"></div>
+      </div>
+      <div class="card">
+        <h2>Toppings <span class="hint">(el precio aplica cuando es adicional)</span></h2>
+        <div id="lToppings"></div>
+      </div>
+    </section>
+
+    <!-- CATEGORÍAS -->
+    <section id="t-categorias" class="card" hidden>
+      <h2>Categorías</h2>
+      <p class="hint">Cada categoría sale como una pestaña en "Tomar pedido". Solo se puede borrar si no tiene productos.</p>
+      <div id="lCategorias"></div>
+      <form class="add" id="fCategoria">
+        <input class="field" name="icono" placeholder="🍷" maxlength="4" style="max-width:70px;text-align:center" />
+        <input class="field" name="nombre" placeholder="Nueva categoría, ej: Gaseosas" maxlength="30" required />
+        <button class="btn alt">+ Agregar</button>
+      </form>
+    </section>
+  </main>
+
+  <div class="savebar" id="savebar">
+    <span id="saveMsg">Tienes cambios sin guardar</span>
+    <div class="row">
+      <button class="btn ghost" id="descartar">Descartar</button>
+      <button class="btn" id="guardar">💾 Guardar cambios</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { GRUPOS, pesos, slug } from '/catalog.js';
+    import { requerirSesion, api, esc, toast } from '/sesion.js';
+
+    const $ = (s) => document.querySelector(s);
+    const { admin } = await requerirSesion();
+    if (!admin) { document.querySelector('main').innerHTML = '<div class="card empty">No tienes permiso para editar productos.</div>'; throw 0; }
+
+    let original, cfg, sucio = false, filtroCat = 'todas';
+
+    async function cargar() {
+      const { config } = await api('/api/catalogo');
+      original = config;
+      cfg = structuredClone(config);
+      marcar(false);
+      renderTodo();
+    }
+
+    function marcar(v = true) {
+      sucio = v;
+      $('#savebar').classList.toggle('show', sucio);
+      document.body.classList.toggle('con-barra', sucio);
+    }
+    window.addEventListener('beforeunload', (e) => { if (sucio) { e.preventDefault(); e.returnValue = ''; } });
+
+    const nuevoId = (lista, nombre) => {
+      let base = slug(nombre), id = base, i = 2;
+      while (lista.some((x) => x.id === id)) id = `${base}-${i++}`;
+      return id;
+    };
+    const sw = (l, id, on) => `<label class="switch" title="Disponible"><input type="checkbox" data-l="${l}" data-id="${id}" data-k="activo" ${on ? 'checked' : ''}><span></span></label>`;
+    const inp = (l, id, k, v, extra = '') => `<input class="field" data-l="${l}" data-id="${id}" data-k="${k}" value="${esc(v)}" ${extra}>`;
+    const precio = (l, id, v) => `<div class="precio"><span>$</span><input class="field" type="number" min="0" step="100" data-l="${l}" data-id="${id}" data-k="precio" value="${v}"></div>`;
+    const borrar = (l, id) => `<button class="del" data-del="${l}" data-id="${id}" title="Eliminar">🗑</button>`;
+
+    // ---------- Pestañas (#sabores, #productos, ...) ----------
+    const TABS = ['sabores', 'productos', 'granizado', 'categorias'];
+    function mostrarTab() {
+      const t = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'sabores';
+      TABS.forEach((x) => { $('#t-' + x).hidden = x !== t; });
+      document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+    }
+    window.addEventListener('hashchange', mostrarTab);
+    $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) location.hash = b.dataset.tab; });
+
+    // ---------- Render ----------
+    function renderSabores() {
+      const disp = cfg.sabores.filter((s) => s.activo).length;
+      $('#lSabores').innerHTML = `<p class="hint" style="margin-top:0">${disp} de ${cfg.sabores.length} disponibles</p>` +
+        (cfg.sabores.map((s) => `<div class="fila ${s.activo ? '' : 'apagado'}">${sw('sabores', s.id, s.activo)}${inp('sabores', s.id, 'nombre', s.nombre, 'maxlength="50"')}${borrar('sabores', s.id)}</div>`).join('')
+        || '<div class="empty">No hay sabores</div>');
+    }
+
+    function renderProductos() {
+      const q = $('#buscar').value.trim().toLowerCase();
+      $('#filtroCat').innerHTML = [{ id: 'todas', nombre: 'Todas', icono: '' }, ...cfg.categorias]
+        .map((c) => `<button class="chip ${filtroCat === c.id ? 'on' : ''}" data-fcat="${c.id}">${esc(c.icono)} ${esc(c.nombre)}</button>`).join('');
+      const opciones = (sel) => cfg.categorias.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.icono)} ${esc(c.nombre)}</option>`).join('');
+      $('#selCatNuevo').innerHTML = opciones(filtroCat !== 'todas' ? filtroCat : cfg.categorias[0]?.id);
+
+      const grupos = cfg.categorias.filter((c) => filtroCat === 'todas' || c.id === filtroCat).map((c) => {
+        const prods = cfg.productos.filter((p) => p.categoria === c.id && (!q || p.nombre.toLowerCase().includes(q)));
+        if (!prods.length && q) return '';
+        const sinPrecio = prods.filter((p) => !p.precio).length;
+        return `<h3 class="sub">${esc(c.icono)} ${esc(c.nombre)} <span class="hint">· ${prods.length}${sinPrecio ? ` · <b class="alerta">${sinPrecio} sin precio</b>` : ''}</span></h3>` +
+          (prods.map((p) => `<div class="fila prod-fila ${p.activo ? '' : 'apagado'} ${p.precio ? '' : 'sinprecio'}">
+            ${sw('productos', p.id, p.activo)}
+            ${inp('productos', p.id, 'nombre', p.nombre, 'maxlength="60"')}
+            <select class="field" data-l="productos" data-id="${p.id}" data-k="categoria">${opciones(p.categoria)}</select>
+            ${precio('productos', p.id, p.precio)}
+            ${borrar('productos', p.id)}
+          </div>`).join('') || '<div class="empty">Sin productos</div>');
+      }).join('');
+      $('#lProductos').innerHTML = grupos || '<div class="empty">Nada coincide con la búsqueda</div>';
+    }
+
+    function renderGranizado() {
+      $('#lTamanos').innerHTML = cfg.tamanos.map((t) => `<div class="fila ${t.activo ? '' : 'apagado'}">
+        ${sw('tamanos', t.id, t.activo)}${inp('tamanos', t.id, 'nombre', t.nombre, 'maxlength="30"')}${precio('tamanos', t.id, t.precio)}</div>`).join('');
+      $('#lToppings').innerHTML = GRUPOS.map((g) => `<h3 class="sub">${g.nombre}</h3>` +
+        cfg.toppings.filter((t) => t.grupo === g.id).map((t) => `<div class="fila ${t.activo ? '' : 'apagado'}">
+          ${sw('toppings', t.id, t.activo)}${inp('toppings', t.id, 'nombre', t.nombre, 'maxlength="40"')}${precio('toppings', t.id, t.precio)}</div>`).join('')).join('');
+    }
+
+    function renderCategorias() {
+      $('#lCategorias').innerHTML = cfg.categorias.map((c) => {
+        const n = cfg.productos.filter((p) => p.categoria === c.id).length;
+        return `<div class="fila">
+          <input class="field" data-l="categorias" data-id="${c.id}" data-k="icono" value="${esc(c.icono)}" maxlength="4" style="max-width:70px;text-align:center">
+          ${inp('categorias', c.id, 'nombre', c.nombre, 'maxlength="30"')}
+          <span class="hint" style="white-space:nowrap">${n} prod.</span>
+          ${borrar('categorias', c.id)}</div>`;
+      }).join('') || '<div class="empty">No hay categorías</div>';
+    }
+
+    function renderTodo() { renderSabores(); renderProductos(); renderGranizado(); renderCategorias(); mostrarTab(); }
+
+    // ---------- Edición ----------
+    const buscarEn = (l, id) => cfg[l].find((x) => x.id === id);
+
+    document.querySelector('main').addEventListener('input', (e) => {
+      const el = e.target;
+      if (el.id === 'buscar') return renderProductos();
+      if (!el.dataset.l) return;
+      const obj = buscarEn(el.dataset.l, el.dataset.id);
+      if (!obj) return;
+      const k = el.dataset.k;
+      obj[k] = el.type === 'checkbox' ? el.checked : k === 'precio' ? Math.max(0, Math.round(Number(el.value) || 0)) : el.value;
+      marcar();
+      const fila = el.closest('.fila');
+      if (k === 'activo') fila?.classList.toggle('apagado', !el.checked);
+      if (k === 'precio') fila?.classList.toggle('sinprecio', el.dataset.l === 'productos' && !obj.precio);
+      if (k === 'activo' && el.dataset.l === 'sabores') renderSabores();
+      if (k === 'categoria') renderProductos();
+    });
+
+    document.querySelector('main').addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.fcat) { filtroCat = b.dataset.fcat; return renderProductos(); }
+      if (b.dataset.todos !== undefined) { cfg.sabores.forEach((s) => (s.activo = b.dataset.todos === '1')); marcar(); return renderSabores(); }
+      if (b.dataset.del) {
+        const l = b.dataset.del, id = b.dataset.id, obj = buscarEn(l, id);
+        if (l === 'categorias' && cfg.productos.some((p) => p.categoria === id)) return toast('Primero mueve o borra los productos de esa categoría', true);
+        if (b.classList.contains('confirmar')) {
+          cfg[l] = cfg[l].filter((x) => x.id !== id);
+          marcar(); renderTodo(); toast(`"${obj?.nombre}" eliminado (guarda para confirmar)`);
+        } else {
+          b.classList.add('confirmar'); b.textContent = '¿Borrar?';
+          setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000);
+        }
+      }
+    });
+
+    $('#fSabor').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nombre = e.target.nombre.value.trim();
+      if (!nombre) return;
+      if (cfg.sabores.some((s) => s.nombre.toLowerCase() === nombre.toLowerCase())) return toast('Ese sabor ya existe', true);
+      cfg.sabores.push({ id: nuevoId(cfg.sabores, nombre), nombre, activo: true });
+      e.target.reset(); marcar(); renderSabores();
+    });
+
+    $('#fProducto').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = e.target, nombre = f.nombre.value.trim();
+      if (!cfg.categorias.length) return toast('Primero crea una categoría', true);
+      if (cfg.productos.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase() && p.categoria === f.categoria.value)) return toast('Ese producto ya existe', true);
+      cfg.productos.push({ id: nuevoId(cfg.productos, nombre), nombre, categoria: f.categoria.value, precio: Math.max(0, Math.round(Number(f.precio.value) || 0)), activo: true });
+      f.nombre.value = ''; f.precio.value = ''; marcar(); renderProductos(); renderCategorias();
+      toast(`"${nombre}" agregado (guarda para confirmar)`);
+    });
+
+    $('#fCategoria').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = e.target, nombre = f.nombre.value.trim();
+      if (cfg.categorias.some((c) => c.nombre.toLowerCase() === nombre.toLowerCase())) return toast('Esa categoría ya existe', true);
+      let id = nuevoId(cfg.categorias, nombre); if (id === 'granizados') id = 'granizados-2';
+      cfg.categorias.push({ id, nombre, icono: f.icono.value.trim() || '🛒' });
+      f.reset(); marcar(); renderTodo();
+    });
+
+    // ---------- Guardar ----------
+    $('#descartar').addEventListener('click', () => { cfg = structuredClone(original); marcar(false); renderTodo(); });
+    $('#guardar').addEventListener('click', async () => {
+      const btn = $('#guardar');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+      try {
+        const { config } = await api('/api/catalogo', { method: 'PUT', body: JSON.stringify({ version: original.version, config: cfg }) });
+        original = config; cfg = structuredClone(config);
+        marcar(false); renderTodo();
+        toast('✅ Cambios guardados');
+      } catch (err) {
+        toast(err.message, true);
+        if (err.status === 409) $('#saveMsg').innerHTML = `${esc(err.message)} <button class="mini" onclick="location.reload()">Recargar</button>`;
+      } finally {
+        btn.disabled = false; btn.textContent = '💾 Guardar cambios';
+      }
+    });
+
+    await cargar();
+  </script>
+</body>
+</html>

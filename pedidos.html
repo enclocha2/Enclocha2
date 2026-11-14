@@ -9,12 +9,11 @@
 </head>
 <body style="visibility:hidden">
   <header class="top">
-    <h1>📋 Pedidos</h1>
+    <div class="row"><a href="/" class="back">← Menú</a><h1>📋 Pedidos</h1></div>
     <div class="row">
       <span class="user-pill">👤 <span id="yo"></span></span>
       <button class="link" id="btnSonido">🔔 ON</button>
-      <a href="/">+ Nuevo</a>
-      <button class="link" id="salir">Salir</button>
+      <a href="/tomar">+ Nuevo</a>
     </div>
   </header>
 
@@ -50,8 +49,8 @@
   </div>
 
   <script type="module">
-    import { pesos, describirItem, METODOS_PAGO } from '/catalog.js';
-    import { requerirSesion, api, salir } from '/sesion.js';
+    import { pesos, vistaItem, METODOS_PAGO } from '/catalog.js';
+    import { requerirSesion, api } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     const POLL_MS = 3000;
@@ -62,8 +61,7 @@
     let ctx = null;
     let pendientes = 0;
 
-    $('#yo').textContent = (await requerirSesion()) || '';
-    $('#salir').addEventListener('click', salir);
+    await requerirSesion();
 
     // ---------- Sonido ----------
     function tono(freq, inicio, dur, vol = 0.35) {
@@ -159,13 +157,15 @@
     }
 
     function tarjeta(p, flash) {
-      const grs = p.items.map((it) => {
-        const d = describirItem(it);
-        return `<div class="gr"><span class="t">${it.cantidad}× ${d.tam}</span> · ${d.sabores.map(esc).join(' + ')}<br>
-          ${d.incluidos.length ? '🍬 ' + d.incluidos.join(', ') : '🍬 Sin toppings'}<br>
-          ${d.adicionales.length ? '➕ <b>' + d.adicionales.join(', ') + '</b><br>' : ''}
-          ${it.nota ? '📝 <i>' + esc(it.nota) + '</i>' : ''}</div>`;
-      }).join('');
+      const vistas = p.items.map(vistaItem);
+      const grs = vistas.filter((d) => d.esGranizado).map((d) =>
+        `<div class="gr"><span class="t">🍧 ${d.cantidad}× ${esc(d.tam)}</span> · ${d.sabores.map(esc).join(' + ')}<br>
+          ${d.incluidos.length ? '🍬 ' + d.incluidos.map(esc).join(', ') : '🍬 Sin toppings'}<br>
+          ${d.adicionales.length ? '➕ <b>' + d.adicionales.map(esc).join(', ') + '</b><br>' : ''}
+          ${d.nota ? '📝 <i>' + esc(d.nota) + '</i>' : ''}</div>`).join('');
+      const otros = vistas.filter((d) => !d.esGranizado);
+      const bebidas = otros.length ? `<div class="gr">${otros.map((d) =>
+        `<div><span class="t">${esc(d.icono || '🛒')} ${d.cantidad}×</span> ${esc(d.nombre)}${d.nota ? ' · 📝 <i>' + esc(d.nota) + '</i>' : ''}</div>`).join('')}</div>` : '';
 
       let acts = '';
       if (p.estado === 'nuevo') acts = `<button data-id="${p.id}" data-e="preparando">Preparar</button><button class="ok" data-id="${p.id}" data-e="entregado">Entregar</button><button class="no" data-id="${p.id}" data-cancelar="1" title="Cancelar">✕</button>`;
@@ -178,10 +178,10 @@
       const n = p.items.reduce((s, i) => s + i.cantidad, 0);
       return `<div class="ped ${flash ? 'flash' : ''}">
         <div class="head"><span class="num">#${p.numero}</span><span class="hora">${hora(p.creado)}</span></div>
-        <div class="cli">👤 ${esc(p.cliente)} <span class="hint">· ${n} granizado${n === 1 ? '' : 's'}</span></div>
+        <div class="cli">👤 ${esc(p.cliente)} <span class="hint">· ${n} producto${n === 1 ? '' : 's'}</span></div>
         <div class="meta">✍️ Tomó: <b>${esc(p.tomadoPor || '—')}</b></div>
         ${bloquePago(p)}
-        ${grs}
+        ${grs}${bebidas}
         <div class="total" style="font-size:1.1rem;margin:8px 0 0"><span>Total</span><span>${pesos(p.total)}</span></div>
         <div class="acts">${acts}</div>
         ${hist ? `<div class="hist">${hist}</div>` : ''}

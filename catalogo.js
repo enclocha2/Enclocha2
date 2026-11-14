@@ -1,0 +1,39 @@
+import { CONFIG_INICIAL, normalizarConfig } from '../catalog.js';
+import { leerConfig, guardarConfig } from './_lib/store.js';
+import { usuarioDe, esAdmin } from './_lib/auth.js';
+
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  const usuario = usuarioDe(req);
+  if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
+
+  try {
+    const actual = (await leerConfig()) || CONFIG_INICIAL;
+
+    if (req.method === 'GET') {
+      return res.status(200).json({ config: actual, admin: esAdmin(usuario) });
+    }
+
+    if (req.method === 'PUT') {
+      if (!esAdmin(usuario)) return res.status(403).json({ error: 'No tienes permiso para cambiar productos' });
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      if (body.version !== actual.version) {
+        return res.status(409).json({ error: 'Alguien más cambió los productos mientras editabas. Recarga la página.' });
+      }
+      let nueva;
+      try { nueva = normalizarConfig(body.config); }
+      catch (e) { return res.status(400).json({ error: e.message }); }
+      nueva.version = (actual.version || 1) + 1;
+      nueva.actualizadoPor = usuario;
+      nueva.actualizado = Date.now();
+      await guardarConfig(nueva);
+      return res.status(200).json({ config: nueva });
+    }
+
+    res.setHeader('Allow', 'GET, PUT');
+    return res.status(405).json({ error: 'Método no permitido' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: 'Error del servidor' });
+  }
+}

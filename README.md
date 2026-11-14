@@ -1,34 +1,38 @@
-# 🍧 Granizados – Pedidos (v2)
+# 🍧 Granizados – Pedidos (v3)
 
-- `/login` → ingreso de Stiv, Angel y John
-- `/` → Tomar pedido: nombre del cliente, varios granizados por persona, pago (ya / después, efectivo / transferencia)
-- `/pedidos` → Hoja de pedidos en tiempo real (suena con cada pedido nuevo), quién lo tomó, cobros y resumen del día
+| Ruta | Qué es |
+|---|---|
+| `/` | **Menú principal** (resumen del día) |
+| `/tomar` | Tomar pedido: granizados (varios diferentes), cervezas, licor y demás categorías |
+| `/pedidos` | Hoja de pedidos en tiempo real con sonido, cobros y resumen |
+| `/productos` | Sabores disponibles, productos, precios, tamaños, toppings y categorías |
+| `/login` | Ingreso |
 
 ## Usuarios
-| Usuario | Contraseña por defecto |
-|---|---|
-| Stiv  | Stiv2026*  |
-| Angel | Angel2026* |
-| John  | John2026*  |
+Stiv / `Stiv2026*` · Angel / `Angel2026*` · John / `John2026*`
 
-**Cámbialas** sin tocar código: en Vercel → Settings → Environment Variables crea
-`USUARIOS` = `Stiv:claveNueva1,Angel:claveNueva2,John:claveNueva3` y haz Redeploy.
-(Así también agregas o quitas usuarios.) Al cambiarlas, las sesiones abiertas se cierran.
+Cambiar claves: variable `USUARIOS` en Vercel → `Stiv:clave1,Angel:clave2,John:clave3` y Redeploy.
+
+**¿Quién puede editar productos y precios?** Por defecto todos. Para limitarlo, crea la variable
+`ADMINS` con los nombres, ej: `Stiv` o `Stiv,John`, y haz Redeploy.
+
+## Productos
+- La primera vez carga los sabores, cervezas y licores de fábrica. **Cervezas y licor arrancan en $0**:
+  ponles precio en Productos (salen en amarillo). Los que no tienen precio aparecen en gris y no se pueden vender.
+- Todo cambio se guarda con el botón **💾 Guardar cambios**.
+- Los pedidos guardan el precio del momento: si cambias un precio, los pedidos viejos no se alteran.
 
 ## Estructura
 ```
-catalog.js          ← precios, sabores, toppings, métodos de pago
-index.html          ← toma de pedidos
-pedidos.html        ← hoja de pedidos con sonido
-login.html          ← ingreso
-sesion.js           ← utilidades de sesión del navegador
-styles.css
-api/pedidos.js      ← API de pedidos (requiere sesión)
-api/login.js        ← iniciar / cerrar sesión
-api/_lib/auth.js    ← usuarios y cookies firmadas
-api/_lib/store.js   ← guardado en Upstash Redis
+catalog.js          ← catálogo inicial y reglas de precio
+index.html          ← menú
+tomar.html          ← tomar pedido
+pedidos.html        ← hoja de pedidos
+productos.html      ← administración de productos
+login.html, sesion.js, styles.css
+api/pedidos.js      ← pedidos
+api/catalogo.js     ← leer/guardar productos
+api/login.js        ← sesión
+api/_lib/auth.js    ← usuarios, admins
+api/_lib/store.js   ← Upstash Redis
 ```
-
-## Base de datos
-Vercel → Storage → Upstash for Redis → conectar al proyecto → Redeploy.
-Sin eso la app funciona pero los pedidos se pierden (lo avisa en /pedidos).
