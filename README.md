@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v16)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v17)
 
 | Ruta | Qué es |
 |---|---|
@@ -57,6 +57,13 @@ api/_lib/store.js   ← Upstash Redis
 - Una **venta** es un pedido cobrado. Se registra al marcarlo pagado (y se quita si se deshace el cobro o se cancela).
 - Las ventas se guardan para siempre; los pedidos completos, 120 días.
 - Ventas y Reportes solo los ven los administradores (variable `ADMINS`; si no existe, todos).
+
+### Reporte mensual: ventas vs gastos (v17)
+En **Reportes → 📈 Mensual** (requiere permiso de reportes; datos de `/api/estadisticas?mes=AAAA-MM`):
+- Ventas, gastos (compras + gastos fijos pagados + gastos del cierre), utilidad, margen, cantidad, ticket promedio, promedio por jornada y jornadas trabajadas.
+- Cada número se compara con el mes anterior. Si es el mes en curso, se compara **hasta el mismo día** del mes anterior.
+- Frases automáticas: comparación con el mes anterior y con el mismo mes del año pasado, proyección de cierre de mes, cuánto se llevan los gastos, mejor día de la semana, hora pico, producto estrella, mejor jornada, efectivo vs transferencia y domicilios.
+- Gráfica de 12 meses de ventas vs gastos (toca un mes para verlo), tabla, promedio por día de la semana, en qué se fue la plata, lo más vendido y horas con más ventas.
 
 ## QR de transferencia
 Menú → **QR de pago**: sube la imagen del QR y un texto opcional (ej. número de Nequi).

@@ -29,6 +29,7 @@
       <button data-modo="semana">Semana</button>
       <button data-modo="mes">Mes</button>
       <button data-modo="anio">Año</button>
+      <button data-modo="mensual" class="tab-destacada">📈 Mensual: ventas vs gastos</button>
     </nav>
 
     <div class="periodo">
@@ -38,13 +39,33 @@
       <button class="mini" id="irHoy">Hoy</button>
     </div>
 
+    <!-- ========== Vista mensual: ventas vs gastos ========== -->
+    <div id="vistaMensual" hidden>
+      <div class="kpis kpis-delta" id="mKpis"></div>
+      <section class="card insights"><h2>💡 Lo más importante del mes</h2><ul id="mInsights"></ul></section>
+      <section class="card">
+        <h2>📊 Ventas vs gastos · últimos 12 meses</h2>
+        <div class="leyenda"><span class="metodo"><i style="background:#199e70"></i>Ventas</span><span class="metodo"><i style="background:#9085e9"></i>Gastos</span></div>
+        <div class="grafica" id="mGrafica"></div>
+        <details style="margin-top:8px"><summary class="hint">Ver como tabla</summary><div class="tabla-wrap"><table class="tabla" id="mTabla"></table></div></details>
+      </section>
+      <div class="dos-col">
+        <section class="card"><h2>📅 Promedio por jornada según el día</h2><div id="mSemana"></div></section>
+        <section class="card"><h2>💸 ¿En qué se fue la plata?</h2><div id="mGastos"></div></section>
+      </div>
+      <div class="dos-col">
+        <section class="card"><h2>🏆 Lo más vendido del mes</h2><div id="mTop"></div></section>
+        <section class="card"><h2>🕘 Horas con más ventas</h2><div id="mHoras"></div></section>
+      </div>
+    </div>
+
     <div class="kpis" id="kpis"></div>
     <section class="card" id="balanceCard" hidden>
       <h2>💼 Balance <span class="hint" id="balanceHint"></span></h2>
       <div class="kpis balance" id="balance" style="margin:0"></div>
     </section>
 
-    <div class="card">
+    <div class="card" id="cardGrafica">
       <h2 id="tituloGrafica">Ventas</h2>
       <div class="leyenda">
         <span class="metodo m-efectivo"><i></i>Efectivo</span>
@@ -79,20 +100,20 @@
     function rango() {
       if (modo === 'dia') return [ancla, ancla];
       if (modo === 'semana') { const i = inicioSemana(ancla); return [i, sumarDias(i, 6)]; }
-      if (modo === 'mes') return [inicioMes(ancla), finMes(ancla)];
+      if (modo === 'mes' || modo === 'mensual') return [inicioMes(ancla), finMes(ancla)];
       return [ancla.slice(0, 4) + '-01-01', ancla.slice(0, 4) + '-12-31'];
     }
     function etiqueta() {
       const [a, b] = rango();
       if (modo === 'dia') return `${fechaLarga(a)}${esFestivo(a) ? ' (festivo)' : ''} · ${textoHorario(a)}`;
       if (modo === 'semana') return `${fechaCorta(a)} – ${fechaCorta(b)} ${b.slice(0, 4)}`;
-      if (modo === 'mes') return `${nombreMes(a)} ${a.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
+      if (modo === 'mes' || modo === 'mensual') return `${nombreMes(a)} ${a.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
       return a.slice(0, 4);
     }
     function mover(n) {
       if (modo === 'dia') ancla = sumarDias(ancla, n);
       else if (modo === 'semana') ancla = sumarDias(ancla, 7 * n);
-      else if (modo === 'mes') ancla = sumarMeses(ancla, n);
+      else if (modo === 'mes' || modo === 'mensual') ancla = sumarMeses(ancla, n);
       else ancla = `${Number(ancla.slice(0, 4)) + n}-01-01`;
       cargar();
     }
@@ -101,6 +122,10 @@
     async function cargar() {
       document.querySelectorAll('#modos button').forEach((b) => b.classList.toggle('on', b.dataset.modo === modo));
       $('#lblPeriodo').textContent = etiqueta();
+      const mensual = modo === 'mensual';
+      $('#vistaMensual').hidden = !mensual;
+      for (const id of ['#kpis', '#cardGrafica', '#detalles']) $(id).hidden = mensual;
+      if (mensual) { $('#balanceCard').hidden = true; $('#sig').disabled = ancla.slice(0, 7) >= hoy().slice(0, 7); return cargarMensual(); }
       $('#sig').disabled = rango()[0] > hoy();
       const [desde, hasta] = rango();
       try {
@@ -252,6 +277,137 @@
           tip.style.left = Math.min(Math.max(e.clientX - box.left, 90), box.width - 90) + 'px';
           tip.style.top = (e.clientY - box.top) + 'px';
         });
+      });
+    }
+
+    // =====================================================================
+    // VISTA MENSUAL: ventas vs gastos, comparaciones y estadísticas clave
+    // =====================================================================
+    const C_VENTAS = '#199e70', C_GASTOS = '#9085e9'; // validados (también para daltonismo)
+    const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const CATS = { hielo: '🧊 Hielo', sabores: '🍓 Pulpas y sabores', 'licor-prep': '🍸 Licor para preparar', toppings: '🍬 Toppings', desechables: '🥤 Vasos y desechables', reventa: '🍺 Cerveza y licor para vender', limpieza: '🧽 Aseo', otros: '📦 Otros' };
+    const mesTxt = (m) => `${nombreMes(m + '-01')} ${m.slice(0, 4)}`;
+    const mesCorto = (m) => nombreMes(m + '-01').slice(0, 3);
+    const pct = (a, b) => (b ? Math.round(((a - b) / Math.abs(b)) * 100) : null);
+    // flecha de cambio; "malo" = subir es malo (gastos)
+    const delta = (a, b, malo = false) => {
+      const p = pct(a, b);
+      if (p === null) return '<small class="hint">sin datos del mes anterior</small>';
+      if (p === 0) return '<small class="hint">= igual que el mes anterior</small>';
+      const bueno = malo ? p < 0 : p > 0;
+      return `<small class="delta ${bueno ? 'sube' : 'baja'}">${p > 0 ? '▲' : '▼'} ${Math.abs(p)}%${sufijoDelta}</small>`;
+    };
+    let sufijoDelta = '';
+
+    async function cargarMensual() {
+      const mes = ancla.slice(0, 7);
+      try {
+        const d = await api(`/api/estadisticas?mes=${mes}&meses=12`);
+        pintarMensual(d);
+      } catch (e) { toast(e.message, true); }
+    }
+
+    function pintarMensual(d) {
+      const M = d.porMes, act = M[M.length - 1], antCompleto = M[M.length - 2] || {};
+      // Mes en curso: se compara contra el mes anterior hasta el mismo día (comparación justa)
+      const ant = d.corte && antCompleto.alDia ? { ...antCompleto, ...antCompleto.alDia, utilidad: antCompleto.alDia.ventas - antCompleto.alDia.gastos } : antCompleto;
+      sufijoDelta = d.corte ? ` al ${d.corte} de ${mesCorto(antCompleto.mes || '2000-01')}` : ` vs ${mesCorto(antCompleto.mes || '2000-01')}`;
+      const margen = act.ventas ? Math.round((act.utilidad / act.ventas) * 100) : 0;
+      const margenAnt = ant.ventas ? Math.round((ant.utilidad / ant.ventas) * 100) : null;
+      const ticket = act.n ? Math.round(act.ventas / act.n) : 0, ticketAnt = ant.n ? Math.round(ant.ventas / ant.n) : 0;
+      const porJ = act.jornadas ? Math.round(act.ventas / act.jornadas) : 0, porJAnt = ant.jornadas ? Math.round(ant.ventas / ant.jornadas) : 0;
+
+      $('#mKpis').innerHTML = `
+        <div class="kpi"><span><i class="dot" style="background:${C_VENTAS}"></i>Ventas</span><b>${pesos(act.ventas)}</b>${delta(act.ventas, ant.ventas)}</div>
+        <div class="kpi"><span><i class="dot" style="background:${C_GASTOS}"></i>Gastos</span><b>${pesos(act.gastos)}</b>${delta(act.gastos, ant.gastos, true)}</div>
+        <div class="kpi ${act.utilidad >= 0 ? 'utilidad' : 'perdida'}"><span>${act.utilidad >= 0 ? '📈 Utilidad' : '📉 Pérdida'}</span><b>${pesos(Math.abs(act.utilidad))}</b>${delta(act.utilidad, ant.utilidad)}</div>
+        <div class="kpi"><span>Margen</span><b>${margen}%</b>${margenAnt === null ? '<small class="hint">de cada $100 vendidos</small>' : `<small class="delta ${margen >= margenAnt ? 'sube' : 'baja'}">${margen >= margenAnt ? '▲' : '▼'} ${Math.abs(margen - margenAnt)} puntos</small>`}</div>
+        <div class="kpi"><span>🧾 Ventas (cantidad)</span><b>${act.n}</b>${delta(act.n, ant.n)}</div>
+        <div class="kpi"><span>🎟️ Ticket promedio</span><b>${pesos(ticket)}</b>${delta(ticket, ticketAnt)}</div>
+        <div class="kpi"><span>📅 Promedio por jornada</span><b>${pesos(porJ)}</b>${delta(porJ, porJAnt)}</div>
+        <div class="kpi"><span>Jornadas trabajadas</span><b>${act.jornadas}</b><small class="hint">de ${act.jornadasProgramadas} programadas</small></div>`;
+
+      // ---------- Frases con lo más importante ----------
+      const ins = [];
+      const pV = pct(act.ventas, ant.ventas);
+      const refAnt = d.corte ? `${mesTxt(antCompleto.mes)} a esta misma altura (día ${d.corte})` : mesTxt(antCompleto.mes);
+      if (pV !== null && ant.ventas) ins.push(pV >= 0 ? `📈 Vas <b>${pV}% arriba</b> de ${refAnt}: ${pesos(act.ventas - ant.ventas)} más.` : `📉 Vas <b>${Math.abs(pV)}% abajo</b> de ${refAnt}: ${pesos(ant.ventas - act.ventas)} menos.`);
+      if (d.detalle.ventasAnioPasado) { const pA = pct(act.ventas, d.detalle.ventasAnioPasado); ins.push(`📆 Frente al mismo mes del año pasado: <b>${pA >= 0 ? '+' : ''}${pA}%</b>.`); }
+      const esActual = act.mes === hoy().slice(0, 7);
+      if (esActual && act.jornadasTranscurridas && act.jornadasProgramadas > act.jornadasTranscurridas) {
+        const proy = Math.round((act.ventas / act.jornadasTranscurridas) * act.jornadasProgramadas);
+        ins.push(`🔮 Si sigues a este ritmo, <b>cerrarás el mes con unos ${pesos(proy)}</b> en ventas (faltan ${act.jornadasProgramadas - act.jornadasTranscurridas} jornadas).`);
+      }
+      if (act.ventas) ins.push(`💸 Los gastos se llevan <b>${Math.round((act.gastos / act.ventas) * 100)}%</b> de lo vendido: de cada $10.000 te quedan ${pesos(Math.max(0, Math.round((act.utilidad / act.ventas) * 10000)))}.`);
+      if (act.utilidad < 0) ins.push(`⚠️ <b>Te faltan ${pesos(-act.utilidad)} en ventas</b> para cubrir los gastos del mes.`);
+      const sem = d.detalle.porDiaSemana.filter((x) => x.jornadas);
+      if (sem.length) { const m = [...sem].sort((a, b) => b.promedio - a.promedio)[0]; ins.push(`⭐ Tu mejor día es el <b>${DIAS[m.dia].toLowerCase()}</b>: ${pesos(m.promedio)} en promedio por jornada.`); }
+      if (d.detalle.porHora.length) { const h = d.detalle.porHora[0].hora; ins.push(`🕘 La hora con más ventas es de <b>${textoHora(h)} a ${textoHora(h + 1)}</b>: refuerza el personal ahí.`); }
+      if (d.detalle.topProductos.length) { const t = d.detalle.topProductos[0]; ins.push(`🏆 El más vendido: <b>${esc(t.nombre)}</b> (${t.cant} unidades · ${pesos(t.total)}).`); }
+      if (d.detalle.mejorJornada) ins.push(`🔥 La mejor jornada fue el <b>${fechaLarga(d.detalle.mejorJornada.fecha)}</b> con ${pesos(d.detalle.mejorJornada.total)}.`);
+      if (act.ventas) ins.push(`📲 El <b>${Math.round((act.transferencia / act.ventas) * 100)}%</b> se pagó por transferencia y el ${Math.round((act.efectivo / act.ventas) * 100)}% en efectivo.`);
+      if (d.detalle.domicilios) ins.push(`🛵 ${d.detalle.domicilios} venta${d.detalle.domicilios === 1 ? '' : 's'} fueron domicilios.`);
+      const prom3 = M.slice(-4, -1).filter((x) => x.ventas);
+      if (prom3.length >= 2) { const p = Math.round(prom3.reduce((s, x) => s + x.ventas, 0) / prom3.length); ins.push(`📊 Promedio de los ${prom3.length} meses anteriores: ${pesos(p)} → este mes vas <b>${act.ventas >= p ? 'por encima' : 'por debajo'}</b>.`); }
+      $('#mInsights').innerHTML = ins.length ? ins.map((x) => `<li>${x}</li>`).join('') : '<li class="hint">Todavía no hay suficientes datos este mes.</li>';
+
+      // ---------- Gráfica 12 meses ----------
+      graficaAgrupada($('#mGrafica'), M.map((x) => ({ ...x, lbl: mesCorto(x.mes), titulo: mesTxt(x.mes), sel: x.mes === act.mes })));
+      $('#mTabla').innerHTML = `<thead><tr><th>Mes</th><th class="num">Ventas</th><th class="num">Compras</th><th class="num">Gastos fijos</th><th class="num">Gastos caja</th><th class="num">Gastos total</th><th class="num">Utilidad</th><th class="num">Margen</th><th class="num">Ventas #</th><th class="num">Ticket</th><th class="num">Prom. jornada</th></tr></thead><tbody>` +
+        [...M].reverse().map((x) => `<tr ${x.mes === act.mes ? 'class="fila-sel"' : ''}><td>${mesTxt(x.mes)}</td><td class="num">${pesos(x.ventas)}</td><td class="num">${pesos(x.compras)}</td><td class="num">${pesos(x.fijos)}</td><td class="num">${pesos(x.caja)}</td><td class="num">${pesos(x.gastos)}</td>
+          <td class="num ${x.utilidad < 0 ? 'neg' : 'pos'}">${pesos(x.utilidad)}</td><td class="num">${x.ventas ? Math.round((x.utilidad / x.ventas) * 100) + '%' : '—'}</td><td class="num">${x.n}</td>
+          <td class="num">${x.n ? pesos(Math.round(x.ventas / x.n)) : '—'}</td><td class="num">${x.jornadas ? pesos(Math.round(x.ventas / x.jornadas)) : '—'}</td></tr>`).join('') + '</tbody>';
+
+      // ---------- Por día de la semana ----------
+      const filasSem = d.detalle.porDiaSemana.filter((x) => x.jornadas).map((x) => [`${DIAS[x.dia]} <span class="hint">(${x.jornadas})</span>`, x.promedio, pesos(x.promedio)]);
+      $('#mSemana').innerHTML = barrasColor(filasSem, C_VENTAS) || '<p class="hint">Sin ventas este mes.</p>';
+
+      // ---------- Gastos ----------
+      const g = [...Object.entries(act.comprasPorCat).map(([k, v]) => [CATS[k] || k, v]), ['🏦 Gastos fijos', act.fijos], ['🔒 Gastos de caja', act.caja]].filter(([, v]) => v).sort((a, b) => b[1] - a[1]);
+      $('#mGastos').innerHTML = g.length ? barrasColor(g.map(([n, v]) => [n, v, `${pesos(v)} · ${act.gastos ? Math.round((v / act.gastos) * 100) : 0}%`]), C_GASTOS) : '<p class="hint">No hay gastos registrados este mes.</p>';
+
+      // ---------- Top y horas ----------
+      $('#mTop').innerHTML = barrasColor(d.detalle.topProductos.map((t) => [esc(t.nombre), t.cant, `${t.cant} · ${pesos(t.total)}`]), C_VENTAS) || '<p class="hint">Sin ventas este mes.</p>';
+      const horas = [...d.detalle.porHora].sort((a, b) => (a.hora < 6 ? a.hora + 24 : a.hora) - (b.hora < 6 ? b.hora + 24 : b.hora));
+      $('#mHoras').innerHTML = barrasColor(horas.map((h) => [`${textoHora(h.hora)}`, h.total, pesos(h.total)]), C_VENTAS) || '<p class="hint">Sin ventas este mes.</p>';
+    }
+
+    function barrasColor(filas, color) {
+      if (!filas.length) return '';
+      const max = Math.max(...filas.map((f) => f[1]), 1);
+      return filas.map(([lbl, v, txt]) => `<div class="barra-h"><span>${lbl}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%;background:${color}"></div></div><span class="val">${txt}</span></div>`).join('');
+    }
+
+    // Barras agrupadas ventas/gastos por mes (una escala, mes escogido resaltado)
+    function graficaAgrupada(cont, meses) {
+      const W = 860, Hh = 290, m = { t: 14, r: 8, b: 30, l: 64 }, iw = W - m.l - m.r, ih = Hh - m.t - m.b;
+      const max = Math.max(1, ...meses.flatMap((x) => [x.ventas, x.gastos]));
+      const raw = max / 4, p10 = 10 ** Math.floor(Math.log10(raw)), paso = [1, 2, 2.5, 5, 10].map((k) => k * p10).find((k) => k >= raw), top = Math.ceil(max / paso) * paso;
+      const y = (v) => m.t + ih - (v / top) * ih;
+      const bw = iw / meses.length, ancho = Math.min(18, (bw - 10) / 2);
+      const barra = (x, v, c) => { const h = (v / top) * ih; if (h <= 0) return ''; const r = Math.min(4, h, ancho / 2), y0 = m.t + ih - h;
+        return `<path d="M${x},${y0 + h} V${y0 + r} Q${x},${y0} ${x + r},${y0} H${x + ancho - r} Q${x + ancho},${y0} ${x + ancho},${y0 + r} V${y0 + h} Z" fill="${c}"/>`; };
+      let svg = `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Ventas y gastos por mes">`;
+      for (let v = 0; v <= top; v += paso) svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="${v ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.28)'}"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="#b6a6d9">${corto(v)}</text>`;
+      meses.forEach((x, i) => {
+        const x0 = m.l + i * bw + (bw - (ancho * 2 + 2)) / 2;
+        if (x.sel) svg += `<rect x="${m.l + i * bw + 2}" y="${m.t}" width="${bw - 4}" height="${ih}" rx="8" fill="rgba(255,255,255,.05)"/>`;
+        svg += barra(x0, x.ventas, C_VENTAS) + barra(x0 + ancho + 2, x.gastos, C_GASTOS);
+        svg += `<text x="${m.l + i * bw + bw / 2}" y="${Hh - 10}" text-anchor="middle" font-size="11" fill="${x.sel ? '#ffffff' : '#b6a6d9'}" font-weight="${x.sel ? 800 : 400}">${x.lbl}</text>`;
+        svg += `<rect class="hit" data-i="${i}" x="${m.l + i * bw}" y="${m.t}" width="${bw}" height="${ih}" fill="transparent"/>`;
+      });
+      cont.innerHTML = svg + '</svg><div class="tip"></div>';
+      const tip = cont.querySelector('.tip');
+      cont.querySelectorAll('.hit').forEach((r) => {
+        r.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+        r.addEventListener('mousemove', (e) => {
+          const x = meses[r.dataset.i], box = cont.getBoundingClientRect();
+          tip.innerHTML = `<b>${x.titulo}</b><span class="metodo"><i style="background:${C_VENTAS}"></i>Ventas ${pesos(x.ventas)}</span><br><span class="metodo"><i style="background:${C_GASTOS}"></i>Gastos ${pesos(x.gastos)}</span><br>${x.utilidad >= 0 ? '📈 Utilidad' : '📉 Pérdida'} ${pesos(Math.abs(x.utilidad))}`;
+          tip.style.display = 'block';
+          tip.style.left = Math.min(Math.max(e.clientX - box.left, 100), box.width - 100) + 'px';
+          tip.style.top = (e.clientY - box.top) + 'px';
+        });
+        r.addEventListener('click', () => { ancla = meses[r.dataset.i].mes + '-01'; cargar(); });
       });
     }
 

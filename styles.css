@@ -890,3 +890,18 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
 .btn.peligro { color: #ff8fa3; border-color: rgba(255,77,109,.45); }
 .btn.peligro.confirmar { background: var(--danger); color: #fff; }
 .roles-tabla .grupo-fila td { color: #9ff0ff; font-weight: 800; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; background: rgba(255,255,255,.03); }
+
+/* ---------- Reportes: vista mensual ---------- */
+.tabs button.tab-destacada:not(.on) { border-color: rgba(51,225,255,.55); color: #b8f6ff; }
+.kpis-delta .kpi small { display: block; margin-top: 4px; }
+.delta { font-weight: 800; }
+.delta.sube { color: #6ff2b9; }
+.delta.baja { color: #ff8fa3; }
+.insights ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.insights li { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); line-height: 1.45; }
+.insights li b { color: #fff; }
+.tabla tr.fila-sel td { background: rgba(51,225,255,.08); font-weight: 700; }
+#mGrafica .hit { cursor: pointer; }
+
+/* Asegura que [hidden] gane sobre display:grid/flex de las clases */
+[hidden] { display: none !important; }
