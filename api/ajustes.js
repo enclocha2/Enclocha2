@@ -1,10 +1,11 @@
 import { sesion } from './_lib/auth.js';
 import { leerAjustes, guardarAjustes } from './_lib/store.js';
+import { conSede } from './_lib/sede.js';
 
 export const DOM_DEFECTO = { activo: false, soloEnHorario: true, minimo: 0, mensaje: '', whatsapp: '', local: null, tarifas: [], zonas: [] };
 const MAX_QR = 900 * 1024; // ~900 KB (la imagen se reduce en el navegador antes de subirla)
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
@@ -12,8 +13,8 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const a = await leerAjustes();
-      return res.status(200).json({ qr: a.qr || null, qrTexto: a.qrTexto || '', domicilio: { ...DOM_DEFECTO, ...(a.domicilio || {}) } });
+      const a = await leerAjustes(true);
+      return res.status(200).json({ qr: a.qr || null, qrTexto: a.qrTexto || '', qrDePrincipal: !!a.qrDePrincipal, domicilio: { ...DOM_DEFECTO, ...(a.domicilio || {}) } });
     }
 
     if (req.method === 'PUT') {
@@ -65,3 +66,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler);

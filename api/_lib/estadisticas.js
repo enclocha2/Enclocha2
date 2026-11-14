@@ -1,6 +1,23 @@
 // Estadísticas mensuales: ventas vs gastos de los últimos meses + detalle del mes escogido.
 import { sesion } from './auth.js';
-import { leerResumen, comprasEntre, pagosFijosAnio, listarCierres, ventasEntre, migrarVentas, recalcularResumenJornadas } from './store.js';
+import { leerResumen, comprasEntre, pagosFijosAnio, listarCierres, ventasEntre, migrarVentas, recalcularResumenJornadas, leerPagosFijos, enSede, sedeActual } from './store.js';
+import { sedesCache } from './sede.js';
+
+// Totales del mes en cada sede (para compararlas). Solo para quien no está fijo en una sede.
+async function compararSedes(mes) {
+  const sedes = (await sedesCache()).filter((s) => s.activa !== false);
+  if (sedes.length < 2) return null;
+  const desde = `${mes}-01`, hasta = finMes(desde);
+  return Promise.all(sedes.map((s) => enSede(s.id, async () => {
+    const [resumen, compras, pagos, cierres] = await Promise.all([leerResumen(), comprasEntre(desde, hasta), leerPagosFijos(mes), listarCierres(40)]);
+    const dias = Object.entries(resumen).filter(([d]) => d.startsWith(mes));
+    const ventas = dias.reduce((t, [, v]) => t + (v.total || 0), 0), n = dias.reduce((t, [, v]) => t + (v.n || 0), 0);
+    const c = compras.reduce((t, x) => t + x.valor, 0), fijos = pagos.reduce((t, x) => t + x.valor, 0);
+    const caja = cierres.filter((x) => x.jornada.startsWith(mes)).reduce((t, x) => t + (x.totalGastos || 0), 0);
+    return { id: s.id, nombre: s.nombre, ventas, n, compras: c, fijos, caja, gastos: c + fijos + caja, utilidad: ventas - c - fijos - caja,
+      jornadas: dias.filter(([, v]) => (v.total || 0) > 0).length };
+  })));
+}
 import { finMes, sumarMeses, inicioJornada, finJornada, jornadaDe, horaJornada, diaSemana, diasEntre, horarioDe, hoy } from '../../fechas.js';
 
 const MES = /^\d{4}-\d{2}$/;
@@ -89,7 +106,8 @@ export default async function handler(req, res) {
     const ventasAnioPasado = Object.entries(resumen).filter(([d]) => d.startsWith(mesAnt)).reduce((s, [, v]) => s + (v.total || 0), 0);
 
     return res.status(200).json({
-      mes: q.mes, porMes, corte,
+      mes: q.mes, porMes, corte, sede: sedeActual(),
+      porSede: yo.sede ? null : await compararSedes(q.mes),
       detalle: {
         porDiaSemana: semana.map((d, i) => ({ dia: i, total: d.total, jornadas: d.jornadas, promedio: d.jornadas ? Math.round(d.total / d.jornadas) : 0 })),
         porHora: Object.entries(porHora).map(([h, t]) => ({ hora: Number(h), total: t })).sort((a, b) => b.total - a.total),

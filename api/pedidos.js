@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
+import { conSede } from './_lib/sede.js';
 
 class ErrorUsuario extends Error {}
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
 const metodoValido = (m) => METODOS_PAGO.some((x) => x.id === m);
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   const yo = await sesion(req);
@@ -170,3 +171,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler);

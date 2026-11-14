@@ -49,6 +49,11 @@
         <div class="grafica" id="mGrafica"></div>
         <details style="margin-top:8px"><summary class="hint">Ver como tabla</summary><div class="tabla-wrap"><table class="tabla" id="mTabla"></table></div></details>
       </section>
+      <section class="card" id="mSedesCard" hidden>
+        <h2>🏢 Comparación por sede <span class="hint">(este mes)</span></h2>
+        <div id="mSedesBarras"></div>
+        <div class="tabla-wrap" style="margin-top:10px"><table class="tabla" id="mSedes"></table></div>
+      </section>
       <section class="card">
         <h2>🛒 Compras vs ventas</h2>
         <div class="kpis" id="mCompraKpis" style="margin:0 0 12px"></div>
@@ -370,6 +375,21 @@
         [...M].reverse().map((x) => `<tr ${x.mes === act.mes ? 'class="fila-sel"' : ''}><td>${mesTxt(x.mes)}</td><td class="num">${pesos(x.ventas)}</td><td class="num">${pesos(x.compras)}</td><td class="num">${pesos(x.fijos)}</td><td class="num">${pesos(x.caja)}</td><td class="num">${pesos(x.gastos)}</td>
           <td class="num ${x.utilidad < 0 ? 'neg' : 'pos'}">${pesos(x.utilidad)}</td><td class="num">${x.ventas ? Math.round((x.utilidad / x.ventas) * 100) + '%' : '—'}</td><td class="num">${x.n}</td>
           <td class="num">${x.n ? pesos(Math.round(x.ventas / x.n)) : '—'}</td><td class="num">${x.jornadas ? pesos(Math.round(x.ventas / x.jornadas)) : '—'}</td></tr>`).join('') + '</tbody>';
+
+      // ---------- Por sede ----------
+      $('#mSedesCard').hidden = !d.porSede;
+      if (d.porSede) {
+        const S = [...d.porSede].sort((a, b) => b.ventas - a.ventas), totV = S.reduce((t, x) => t + x.ventas, 0);
+        const T = S.reduce((t, x) => ({ ventas: t.ventas + x.ventas, n: t.n + x.n, compras: t.compras + x.compras, fijos: t.fijos + x.fijos, caja: t.caja + x.caja, gastos: t.gastos + x.gastos, utilidad: t.utilidad + x.utilidad }), { ventas: 0, n: 0, compras: 0, fijos: 0, caja: 0, gastos: 0, utilidad: 0 });
+        $('#mSedesBarras').innerHTML = barrasColor(S.map((x) => [`${x.id === d.sede ? '📍 ' : ''}${esc(x.nombre)}`, x.ventas, `${pesos(x.ventas)} · ${totV ? Math.round((x.ventas / totV) * 100) : 0}%`]), C_VENTAS);
+        const fila = (x, total) => `<tr class="${total ? 'fila-sel' : ''}"><td>${total ? '<b>Total todas las sedes</b>' : esc(x.nombre)}</td><td class="num">${pesos(x.ventas)}</td><td class="num">${x.n}</td>
+          <td class="num">${x.n ? pesos(Math.round(x.ventas / x.n)) : '—'}</td><td class="num">${pesos(x.compras)}</td><td class="num">${pesos(x.fijos + x.caja)}</td>
+          <td class="num ${x.utilidad < 0 ? 'neg' : 'pos'}">${pesos(x.utilidad)}</td><td class="num">${x.ventas ? Math.round((x.utilidad / x.ventas) * 100) + '%' : '—'}</td></tr>`;
+        $('#mSedes').innerHTML = `<thead><tr><th>Sede</th><th class="num">Ventas</th><th class="num">Ventas #</th><th class="num">Ticket</th><th class="num">Compras</th><th class="num">Fijos + caja</th><th class="num">Utilidad</th><th class="num">Margen</th></tr></thead><tbody>`
+          + S.map((x) => fila(x)).join('') + fila(T, true) + '</tbody>';
+        if (S.length > 1 && totV) ins.push(`🏢 La sede que más vendió fue <b>${esc(S[0].nombre)}</b> con ${Math.round((S[0].ventas / totV) * 100)}% del total (${pesos(S[0].ventas)}).`);
+        $('#mInsights').innerHTML = ins.length ? ins.map((x) => `<li>${x}</li>`).join('') : '<li class="hint">Todavía no hay suficientes datos este mes.</li>';
+      }
 
       // ---------- Compras vs ventas ----------
       const pc = (x) => (x.ventas ? Math.round((x.compras / x.ventas) * 100) : null);

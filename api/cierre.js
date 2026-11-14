@@ -1,6 +1,7 @@
 import { sesion } from './_lib/auth.js';
 import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas, comprasEntre } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
+import { conSede } from './_lib/sede.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 export const DENOMINACIONES = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
@@ -25,7 +26,7 @@ async function sistema(jornada) {
   return r;
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
@@ -86,3 +87,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler);

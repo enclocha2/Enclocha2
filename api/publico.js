@@ -7,6 +7,9 @@ import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, c
 import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock } from './_lib/store.js';
 import { horarioDe, jornadaActual, horaJornada, textoHorario, hoy } from '../fechas.js';
 import { DOM_DEFECTO } from './ajustes.js';
+import { conSede, sedesCache } from './_lib/sede.js';
+import { sedeActual } from './_lib/store.js';
+const nombreSede = async () => { const s = (await sedesCache()).find((x) => x.id === sedeActual()); return s ? { id: s.id, nombre: s.nombre, direccion: s.direccion || '', principal: !!s.principal } : null; };
 
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
@@ -42,11 +45,11 @@ function estadoAbierto(dom) {
   return { abierto: false, motivo: 'Estamos cerrados en este momento. Atendemos jueves a domingo y lunes festivos desde las 4:00 p. m.' };
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
     const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
-    const ajustes = await leerAjustes();
+    const ajustes = await leerAjustes(true);
     const dom = { ...DOM_DEFECTO, ...(ajustes.domicilio || {}) };
 
     // GET ?lat=..&lng=..  o  ?zona=..  → cuánto vale el domicilio
@@ -85,6 +88,7 @@ export default async function handler(req, res) {
           zonas: (dom.zonas || []).map((z) => ({ nombre: z.nombre, valor: z.valor })),
         },
         qr: ajustes.qr || null, qrTexto: ajustes.qrTexto || '',
+        sede: await nombreSede(),
       });
     }
 
@@ -159,3 +163,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler, true);

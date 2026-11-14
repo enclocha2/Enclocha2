@@ -404,6 +404,7 @@ export const PERMISOS = [
     ['productos', '🛠️ Productos, precios y sabores'],
     ['configuracion', '🛵 Domicilios y QR de pago'],
     ['usuarios', '👥 Usuarios, roles y permisos'],
+    ['sedes', '🏢 Crear y editar sedes'],
   ] },
 ];
 export const TODOS_PERMISOS = PERMISOS.flatMap((g) => g.items.map(([id]) => id));

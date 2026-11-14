@@ -1,13 +1,14 @@
 import { sesion } from './_lib/auth.js';
 import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez } from './_lib/store.js';
 import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos } from '../catalog.js';
+import { conSede } from './_lib/sede.js';
 
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const num = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
 const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado'];
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
@@ -88,3 +89,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler);

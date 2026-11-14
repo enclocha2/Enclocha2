@@ -1,6 +1,9 @@
 // Administración de usuarios, roles y permisos (requiere el permiso "usuarios").
 // /api/usuarios            → usuarios
 // /api/usuarios?r=roles    → roles (crear, editar permisos, borrar)
+// /api/usuarios?r=sedes    → sedes (ver: cualquiera con sesión; crear/editar: permiso "sedes")
+import { leerSedes, guardarSedes, SEDE_PRINCIPAL } from './_lib/store.js';
+import { sedesCache, olvidarSedes, resolverSede } from './_lib/sede.js';
 import { sesion, leerUsuarios, guardarUsuarios, leerRoles, guardarRoles, cifrar, publico, TODOS_PERMISOS } from './_lib/auth.js';
 import { permisosDe, slug } from '../catalog.js';
 
@@ -12,6 +15,47 @@ const NOMBRE_USUARIO = /^[\p{L}\p{N}._-]{2,30}$/u;
 const quedaAdmin = (lista, roles) => lista.some((u) => u.activo !== false && permisosDe(u, roles).includes('usuarios'));
 const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');
 const limpiarPermisos = (ps) => [...new Set((Array.isArray(ps) ? ps : []).filter((p) => TODOS_PERMISOS.includes(p)))];
+
+// ---------- Sedes ----------
+async function manejarSedes(req, res, yo) {
+  if (req.method === 'GET') {
+    const sedes = await sedesCache();
+    return res.status(200).json({ sedes, actual: await resolverSede(req), fija: !!yo.sede });
+  }
+  if (!yo.puede('sedes')) return res.status(403).json({ error: 'No tienes permiso para crear o editar sedes' });
+  const b = leer(req);
+  const sedes = await leerSedes();
+  if (req.method === 'POST') {
+    const nombre = txt(b.nombre, 50);
+    if (nombre.length < 2) return res.status(400).json({ error: 'Escribe el nombre de la sede' });
+    if (sedes.some((s) => s.nombre.toLowerCase() === nombre.toLowerCase())) return res.status(400).json({ error: 'Ya existe una sede con ese nombre' });
+    if (sedes.length >= 20) return res.status(400).json({ error: 'Máximo 20 sedes' });
+    let id = slug(nombre) || 'sede'; while (sedes.some((s) => s.id === id) || id === 's') id += '-2';
+    const nueva = { id, nombre, direccion: txt(b.direccion, 120), activa: true, creada: Date.now(), creadaPor: yo.usuario };
+    sedes.push(nueva);
+    await guardarSedes(sedes); olvidarSedes();
+    return res.status(201).json({ sede: nueva, sedes });
+  }
+  if (req.method === 'PUT') {
+    const s = sedes.find((x) => x.id === b.id);
+    if (!s) return res.status(404).json({ error: 'Sede no encontrada' });
+    if (b.nombre !== undefined) {
+      const nombre = txt(b.nombre, 50);
+      if (nombre.length < 2) return res.status(400).json({ error: 'Escribe el nombre de la sede' });
+      if (sedes.some((x) => x.id !== s.id && x.nombre.toLowerCase() === nombre.toLowerCase())) return res.status(400).json({ error: 'Ya existe una sede con ese nombre' });
+      s.nombre = nombre;
+    }
+    if (b.direccion !== undefined) s.direccion = txt(b.direccion, 120);
+    if (b.activa !== undefined) {
+      if (s.id === SEDE_PRINCIPAL && !b.activa) return res.status(400).json({ error: 'La sede principal no se puede desactivar' });
+      s.activa = !!b.activa;
+    }
+    await guardarSedes(sedes); olvidarSedes();
+    return res.status(200).json({ sede: s, sedes });
+  }
+  res.setHeader('Allow', 'GET, POST, PUT');
+  return res.status(405).json({ error: 'Método no permitido' });
+}
 
 // ---------- Roles ----------
 async function manejarRoles(req, res, yo, lista, roles) {
@@ -68,6 +112,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
+  if (ruta(req) === 'sedes') { try { return await manejarSedes(req, res, yo); } catch (e) { console.error(e); return res.status(500).json({ error: 'Error del servidor' }); } }
   if (!yo.puede('usuarios')) return res.status(403).json({ error: 'No tienes permiso para administrar usuarios' });
 
   try {
@@ -77,7 +122,9 @@ export default async function handler(req, res) {
     const existeRol = (id) => roles.some((r) => r.id === id);
     const rolPorDefecto = existeRol('vendedor') ? 'vendedor' : (roles.find((r) => !r.fijo) || roles[0]).id;
 
-    if (req.method === 'GET') return res.status(200).json({ usuarios: lista.map((u) => publico(u, roles)), roles, yo: yo.id });
+    const sedes = await sedesCache();
+    const sedeValida = (id) => id === '' || sedes.some((x) => x.id === id);
+    if (req.method === 'GET') return res.status(200).json({ usuarios: lista.map((u) => publico(u, roles)), roles, sedes, yo: yo.id });
     if (ruta(req) === 'roles') return manejarRoles(req, res, yo, lista, roles);
 
     const b = leer(req);
@@ -93,6 +140,7 @@ export default async function handler(req, res) {
         id, usuario, nombre: txt(b.nombre, 50) || usuario,
         rol: existeRol(b.rol) ? b.rol : rolPorDefecto,
         permisos: Array.isArray(b.permisos) ? b.permisos.filter((p) => TODOS_PERMISOS.includes(p)) : null,
+        sede: sedeValida(b.sede ?? '') ? (b.sede ?? '') : '',
         activo: true, hash: cifrar(b.clave), ver: 1, creado: Date.now(), creadoPor: yo.usuario,
       };
       lista.push(nuevo);
@@ -106,6 +154,7 @@ export default async function handler(req, res) {
       if (!u) return res.status(404).json({ error: 'Usuario no encontrado' });
       if (b.nombre !== undefined) u.nombre = txt(b.nombre, 50) || u.usuario;
       if (b.rol !== undefined && existeRol(b.rol)) u.rol = b.rol;
+      if (b.sede !== undefined && sedeValida(b.sede)) u.sede = b.sede;
       if (b.permisos !== undefined) u.permisos = Array.isArray(b.permisos) ? b.permisos.filter((p) => TODOS_PERMISOS.includes(p)) : null;
       if (b.activo !== undefined) {
         if (!b.activo && u.id === yo.id) return res.status(400).json({ error: 'No puedes desactivarte a ti mismo' });

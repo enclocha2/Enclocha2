@@ -170,12 +170,36 @@ export const SECCIONES_NAV = [
     { href: '/productos#domicilios', ico: '🛵', txt: 'Domicilios', perm: ['configuracion'] },
     { href: '/productos#qr', ico: '📲', txt: 'QR de pago', perm: ['configuracion'] },
     { href: '/usuarios', ico: '👥', txt: 'Usuarios y roles', perm: ['usuarios'] },
+    { href: '/usuarios#sedes', ico: '🏢', txt: 'Sedes', perm: ['sedes'] },
   ] },
 ];
 
 export const permitido = (i) => !i.perm || puede(...i.perm);
+// ---------- Sedes ----------
+export const sedeActual = () => (yoActual.sedes || []).find((x) => x.id === yoActual.sede) || null;
+export const variasSedes = () => (yoActual.sedes || []).length > 1;
+export function cambiarSede(id) {
+  document.cookie = `sede=${encodeURIComponent(id)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+  location.reload();
+}
+function htmlSede(clase) {
+  if (!variasSedes()) return '';
+  if (yoActual.sedeFija) return `<div class="${clase} fija">🏢 <b>${esc(sedeActual()?.nombre || '')}</b></div>`;
+  return `<label class="${clase}"><span>🏢</span><select aria-label="Sede">${yoActual.sedes.map((x) => `<option value="${esc(x.id)}" ${x.id === yoActual.sede ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select></label>`;
+}
+// Aviso arriba de cada página: en qué sede se está trabajando (y cambiarla)
+function montarSede() {
+  if (!variasSedes() || document.querySelector('.sede-actual')) return;
+  const m = document.querySelector('main'); if (!m) return;
+  const d = document.createElement('div');
+  d.className = 'sede-actual-wrap';
+  d.innerHTML = htmlSede('sede-actual');
+  m.prepend(d);
+}
+
 function montarNav({ usuario }) {
   if (document.querySelector('.nav-lateral')) return;
+  montarSede();
   const ruta = location.pathname.replace(/\.html$/, '') || '/';
   const activo = (href) => {
     const [h, hash] = href.split('#');
@@ -189,7 +213,7 @@ function montarNav({ usuario }) {
   // Lateral (computador)
   const lateral = document.createElement('nav');
   lateral.className = 'nav-lateral';
-  lateral.innerHTML = `<a href="/" class="nl-logo"><img src="/img/logo.png" alt="Enclocha 2"></a>` +
+  lateral.innerHTML = `<a href="/" class="nl-logo"><img src="/img/logo.png" alt="Enclocha 2"></a>` + htmlSede('sede-sel') +
     secciones.map((g) => `<div class="nl-grupo"><span>${g.grupo}</span>${g.items.map((i) => link(i)).join('')}</div>`).join('') +
     `<div class="nl-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Salir</button></div>`;
 
@@ -214,6 +238,7 @@ function montarNav({ usuario }) {
   inferior.querySelector('.ni-mas').addEventListener('click', () => hoja.classList.add('show'));
   hoja.addEventListener('click', (e) => { if (e.target === hoja) hoja.classList.remove('show'); });
   document.querySelectorAll('.nl-salir').forEach((b) => b.addEventListener('click', salir));
+  document.querySelectorAll('.sede-sel select, .sede-actual select').forEach((sel) => sel.addEventListener('change', () => cambiarSede(sel.value)));
   window.addEventListener('hashchange', () => {
     document.querySelectorAll('.nav-lateral a, .nh-item').forEach((a) => a.classList.toggle('activo', activo(a.getAttribute('href'))));
     hoja.classList.remove('show');

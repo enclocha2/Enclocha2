@@ -1,5 +1,6 @@
 import { validar, firmar, sesion, cookieSesion, leerUsuarios, guardarUsuarios } from './_lib/auth.js';
 import { limitar } from './_lib/store.js';
+import { sedesCache, resolverSede } from './_lib/sede.js';
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 const ip = (req) => String(req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || 'x').split(',')[0].trim();
@@ -12,9 +13,10 @@ export default async function handler(req, res) {
     // Botones del login: solo los nombres de usuario activos
     if (q.lista) return res.status(200).json({ usuarios: (await leerUsuarios()).filter((u) => u.activo !== false).map((u) => u.usuario) });
     const yo = await sesion(req);
-    return yo
-      ? res.status(200).json({ usuario: yo.usuario, nombre: yo.nombre, rol: yo.rol, permisos: yo.permisos, admin: yo.rol === 'admin' })
-      : res.status(401).json({ error: 'Sin sesión' });
+    if (!yo) return res.status(401).json({ error: 'Sin sesión' });
+    const sedes = (await sedesCache()).filter((s) => s.activa !== false || s.id === yo.sede).map(({ id, nombre, principal }) => ({ id, nombre, principal: !!principal }));
+    return res.status(200).json({ usuario: yo.usuario, nombre: yo.nombre, rol: yo.rol, permisos: yo.permisos, admin: yo.rol === 'admin',
+      sede: await resolverSede(req), sedeFija: !!yo.sede, sedes });
   }
 
   if (req.method === 'POST') {

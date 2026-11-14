@@ -175,7 +175,7 @@
 
   <script type="module">
     import { GRUPOS, SECCIONES, pesos, slug } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, htmlQR, puede } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, htmlQR, puede, sedeActual } from '/sesion.js';
     import { jornadaActual, horarioDe, horaJornada, textoHora } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -490,7 +490,8 @@
       { enableHighAccuracy: true, timeout: 15000 });
     });
 
-    const link = `${location.origin}/domicilio`;
+    const sedeAqui = sedeActual();
+    const link = `${location.origin}/domicilio${sedeAqui && !sedeAqui.principal ? '?sede=' + sedeAqui.id : ''}`;
     $('#linkDom').textContent = link; $('#abrirLink').href = link;
     $('#copiarLink').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(link); toast('✅ Link copiado. Compártelo por WhatsApp o Instagram'); }

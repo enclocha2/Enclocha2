@@ -73,7 +73,7 @@ export async function guardarRoles(roles) {
 }
 export const publico = (u, roles) => ({
   id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, permisos: u.permisos ?? null,
-  efectivos: permisosDe(u, roles), activo: u.activo !== false, ultimoIngreso: u.ultimoIngreso || null, creado: u.creado || null,
+  efectivos: permisosDe(u, roles), sede: u.sede || '', activo: u.activo !== false, ultimoIngreso: u.ultimoIngreso || null, creado: u.creado || null,
 });
 
 // ---------- Sesión ----------
@@ -90,7 +90,7 @@ function leerToken(tok) {
   if (firma.length !== esperada.length || !crypto.timingSafeEqual(Buffer.from(firma), Buffer.from(esperada))) return null;
   try { const d = JSON.parse(Buffer.from(datos, 'base64url').toString()); return Date.now() > d.exp ? null : d; } catch { return null; }
 }
-function leerCookie(req, nombre) {
+export function leerCookie(req, nombre) {
   for (const parte of (req.headers?.cookie || '').split(';')) {
     const [k, ...v] = parte.trim().split('=');
     if (k === nombre) return decodeURIComponent(v.join('='));
@@ -107,7 +107,7 @@ export async function sesion(req) {
   const u = lista.find((x) => x.id === d.i);
   if (!u || u.activo === false || (u.ver || 1) !== d.v) return null;
   const permisos = permisosDe(u, roles);
-  return { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, permisos, puede: (...ps) => ps.some((p) => permisos.includes(p)) };
+  return { id: u.id, usuario: u.usuario, nombre: u.nombre, rol: u.rol, sede: u.sede || '', permisos, puede: (...ps) => ps.some((p) => permisos.includes(p)) };
 }
 
 export function cookieSesion(req, tok) {

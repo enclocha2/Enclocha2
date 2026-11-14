@@ -19,13 +19,14 @@
 </head>
 <body style="visibility:hidden">
   <header class="top">
-    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>👥 Usuarios y roles</h1></div>
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>👥 Usuarios, roles y sedes</h1></div>
   </header>
 
   <main class="admin" style="max-width:1100px">
     <nav class="tabs" id="tabs">
       <button data-tab="usuarios" class="on">👥 Usuarios</button>
       <button data-tab="roles">🎭 Roles y permisos</button>
+      <button data-tab="sedes">🏢 Sedes</button>
     </nav>
 
     <section id="tabUsuarios">
@@ -34,6 +35,24 @@
         <button class="btn alt" id="uNuevo" style="width:auto;padding:10px 16px">+ Nuevo usuario</button>
       </div>
       <div class="card" style="margin-top:10px"><div class="tabla-wrap"><table class="tabla" id="uTabla"></table></div></div>
+    </section>
+
+    <section id="tabSedes" hidden>
+      <div class="card ayuda-roles">
+        <b>¿Cómo funcionan las sedes?</b>
+        <p class="hint" style="margin:6px 0 0">Todas las sedes comparten el <b>menú, los precios y los usuarios</b>. Cada sede lleva por aparte sus
+        <b>pedidos, ventas, cierre de caja, inventario, compras, gastos, presupuesto y domicilios</b>.
+        A un usuario lo puedes dejar fijo en una sede (solo trabaja ahí) o en "Todas" (escoge la sede arriba, en el menú).</p>
+      </div>
+      <div class="card" id="sNuevoCard" style="margin-top:12px">
+        <h3 class="sub" style="margin-top:0">➕ Nueva sede</h3>
+        <div class="form-compra" style="grid-template-columns:1fr 1fr">
+          <label class="campo"><span>Nombre</span><input class="field" id="sNombre" maxlength="50" placeholder="Ej: Enclocha 2 Envigado"></label>
+          <label class="campo"><span>Dirección (opcional)</span><input class="field" id="sDir" maxlength="120" placeholder="Ej: Cra 43 # 30-12"></label>
+        </div>
+        <button class="btn" id="sCrear" style="width:auto;padding:10px 18px">+ Crear sede</button>
+      </div>
+      <div class="card" style="margin-top:12px"><h3 class="sub" style="margin-top:0">🏢 Sedes</h3><div id="sLista"></div></div>
     </section>
 
     <section id="tabRoles" hidden>
@@ -60,6 +79,7 @@
       <div class="form-compra" style="grid-template-columns:1fr 1fr">
         <label class="campo"><span>Usuario (para entrar)</span><input class="field" id="uUsuario" maxlength="30" autocomplete="off" placeholder="ej: Laura"></label>
         <label class="campo"><span>Nombre</span><input class="field" id="uNombre" maxlength="50" placeholder="Nombre para mostrar"></label>
+        <label class="campo ancho" id="uSedeBox"><span>Sede donde trabaja</span><select class="field" id="uSede"></select></label>
         <label class="campo ancho"><span id="uClaveLbl">Contraseña</span><input class="field" id="uClave" type="text" autocomplete="new-password" maxlength="60" placeholder="Mínimo 4 caracteres"></label>
       </div>
       <div class="campo"><span>Rol</span><div class="roles-grid" id="uRolesSel"></div></div>
@@ -102,25 +122,30 @@
 
   <script type="module">
     import { PERMISOS, ROLES, TODOS_PERMISOS } from '/catalog.js';
-    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, puede, cambiarSede } from '/sesion.js';
     import { fechaHora } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
-    await requerirSesion('usuarios');
+    const yoSesion = await requerirSesion('usuarios', 'sedes');
+    if (!puede('usuarios')) { $('#tabs [data-tab="usuarios"]').remove(); $('#tabs [data-tab="roles"]').remove(); }
+    if (!puede('sedes')) $('#tabs [data-tab="sedes"]').remove();
 
     // ---------- Pestañas ----------
     function verTab(t) {
-      if (!['usuarios', 'roles'].includes(t)) t = 'usuarios';
+      const hay = [...document.querySelectorAll('#tabs [data-tab]')].map((b) => b.dataset.tab);
+      if (!hay.includes(t)) t = hay[0];
       document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
-      $('#tabUsuarios').hidden = t !== 'usuarios'; $('#tabRoles').hidden = t !== 'roles';
+      $('#tabUsuarios').hidden = t !== 'usuarios'; $('#tabRoles').hidden = t !== 'roles'; $('#tabSedes').hidden = t !== 'sedes';
       history.replaceState(null, '', '#' + t);
     }
     $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) verTab(b.dataset.tab); });
     verTab(location.hash.slice(1));
+    window.addEventListener('hashchange', () => verTab(location.hash.slice(1)));
 
     // USUARIOS, ROLES Y PERMISOS
     // =====================================================================
-    let usuarios = [], yoId = null, editando = null, form = null;
+    let usuarios = [], yoId = null, editando = null, form = null, sedes = [];
+    const nombreSede = (id) => (id ? sedes.find((x) => x.id === id)?.nombre || '¿?' : 'Todas');
     let roles = ROLES, ROL = {};
     const fijarRoles = (lista) => { roles = lista; ROL = Object.fromEntries(roles.map((r) => [r.id, r])); };
     fijarRoles(ROLES);
@@ -128,15 +153,17 @@
     const NOMBRE_PERM = Object.fromEntries(PERMISOS.flatMap((g) => g.items));
 
     async function cargarUsuarios() {
+      if (!puede('usuarios')) return;
       try {
         const r = await api('/api/usuarios');
-        usuarios = r.usuarios; yoId = r.yo; fijarRoles(r.roles);
+        usuarios = r.usuarios; yoId = r.yo; fijarRoles(r.roles); sedes = r.sedes || [];
         pintarUsuarios();
+        if (puede('sedes') && $('#sLista').innerHTML) pintarSedes(yoSesion.sede);
       } catch (e) { toast(e.message, true); }
     }
 
     function pintarUsuarios() {
-      $('#uTabla').innerHTML = `<thead><tr><th>Usuario</th><th>Rol</th><th>Permisos</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody>` +
+      $('#uTabla').innerHTML = `<thead><tr><th>Usuario</th><th>Rol</th>${sedes.length > 1 ? '<th>Sede</th>' : ''}<th>Permisos</th><th>Estado</th><th>Último ingreso</th><th></th></tr></thead><tbody>` +
         usuarios.map((u) => {
           const r = rolDeU(u.rol);
           const personal = Array.isArray(u.permisos);
@@ -144,6 +171,7 @@
             <td><div class="u-cel"><span class="avatar">${esc(u.nombre.slice(0, 1).toUpperCase())}</span>
               <span><b>${esc(u.nombre)}</b>${u.id === yoId ? ' <span class="tag-yo">tú</span>' : ''}<br><span class="hint">@${esc(u.usuario)}</span></span></div></td>
             <td><span class="rol-tag rol-${r.id}">${r.icono} ${r.nombre}</span></td>
+            ${sedes.length > 1 ? `<td><span class="tag-sede">🏢 ${esc(nombreSede(u.sede))}</span></td>` : ''}
             <td><span title="${esc(u.efectivos.map((p) => NOMBRE_PERM[p]).join('\n'))}">${u.efectivos.length} de ${TODOS_PERMISOS.length}</span>${personal ? ' <span class="tag-personal">personalizados</span>' : ''}</td>
             <td>${u.activo ? '<span class="estado-pago ok">🟢 Activo</span>' : '<span class="estado-pago pend">⚪ Inactivo</span>'}</td>
             <td class="hint">${u.ultimoIngreso ? fechaHora(u.ultimoIngreso) : 'Nunca'}</td>
@@ -252,6 +280,9 @@
       $('#uClaveLbl').textContent = u ? 'Nueva contraseña (déjala vacía para no cambiarla)' : 'Contraseña';
       $('#uActivoBox').hidden = !u; $('#uBorrar').hidden = !u || u.id === yoId;
       $('#uActivo').checked = form.activo;
+      $('#uSedeBox').hidden = sedes.length < 2;
+      $('#uSede').innerHTML = `<option value="">🏢 Todas las sedes (escoge en el menú)</option>` + sedes.map((x) => `<option value="${esc(x.id)}">${esc(x.nombre)}${x.activa === false ? ' (inactiva)' : ''}</option>`).join('');
+      $('#uSede').value = u?.sede || '';
       $('#uError').textContent = '';
       pintarForm();
       $('#uModal').classList.add('show');
@@ -279,7 +310,7 @@
     $('#uTabla').addEventListener('click', (e) => { const b = e.target.closest('[data-uedit]'); if (b) abrirUsuario(usuarios.find((u) => u.id === b.dataset.uedit)); });
     $('#uCancelar').addEventListener('click', () => $('#uModal').classList.remove('show'));
     $('#uGuardar').addEventListener('click', async () => {
-      const datos = { nombre: $('#uNombre').value, rol: form.rol, permisos: form.personal ? form.permisos : null };
+      const datos = { nombre: $('#uNombre').value, rol: form.rol, permisos: form.personal ? form.permisos : null, sede: $('#uSede').value };
       if ($('#uClave').value) datos.clave = $('#uClave').value;
       try {
         if (editando) await api('/api/usuarios', { method: 'PUT', body: JSON.stringify({ id: editando.id, ...datos, activo: $('#uActivo').checked }) });
@@ -299,6 +330,63 @@
     });
 
     cargarUsuarios();
+
+    // =====================================================================
+    // SEDES
+    // =====================================================================
+    async function cargarSedes() {
+      try {
+        const r = await api('/api/usuarios?r=sedes');
+        sedes = r.sedes; pintarSedes(r.actual);
+        if (puede('usuarios')) pintarUsuarios();
+      } catch (e) { toast(e.message, true); }
+    }
+    function pintarSedes(actual) {
+      const base = `${location.origin}/domicilio`;
+      $('#sLista').innerHTML = sedes.map((x) => {
+        const link = x.principal ? base : `${base}?sede=${x.id}`;
+        const n = usuarios.filter((u) => u.sede === x.id).length;
+        return `<div class="sede-fila ${x.activa === false ? 'inactiva' : ''}">
+          <div><b>🏢 ${esc(x.nombre)}</b> ${x.principal ? '<span class="tag-yo">principal</span>' : ''} ${x.id === actual ? '<span class="tag-sede">estás aquí</span>' : ''} ${x.activa === false ? '<span class="tag-personal">inactiva</span>' : ''}
+            ${x.direccion ? `<br><span class="hint">📍 ${esc(x.direccion)}</span>` : ''}
+            <br><span class="hint">🛵 Domicilios: </span><code>${esc(link)}</code>
+            ${puede('usuarios') ? `<br><span class="hint">👥 ${n} ${n === 1 ? 'usuario fijo' : 'usuarios fijos'} aquí</span>` : ''}</div>
+          <div class="acc">
+            ${x.id !== actual && x.activa !== false && !yoSesion.sedeFija ? `<button class="mini" data-sir="${x.id}">➡️ Trabajar aquí</button>` : ''}
+            <button class="mini" data-scopiar="${esc(link)}">📋 Link</button>
+            <button class="mini" data-snombre="${x.id}">✏️ Nombre</button>
+            ${x.principal ? '' : `<button class="mini" data-sactiva="${x.id}">${x.activa === false ? '✅ Activar' : '⏸️ Desactivar'}</button>`}
+          </div></div>`;
+      }).join('');
+    }
+    $('#sCrear').addEventListener('click', async () => {
+      try {
+        const r = await api('/api/usuarios?r=sedes', { method: 'POST', body: JSON.stringify({ nombre: $('#sNombre').value, direccion: $('#sDir').value }) });
+        $('#sNombre').value = ''; $('#sDir').value = '';
+        toast(`✅ Sede "${r.sede.nombre}" creada. Arranca vacía: carga su inventario, presupuesto y domicilios.`);
+        sedes = r.sedes; cargarSedes();
+      } catch (e) { toast(e.message, true); }
+    });
+    $('#sLista').addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      try {
+        if (b.dataset.sir) return cambiarSede(b.dataset.sir);
+        if (b.dataset.scopiar) { await navigator.clipboard.writeText(b.dataset.scopiar).catch(() => {}); return toast('📋 Link copiado: ' + b.dataset.scopiar); }
+        if (b.dataset.snombre) {
+          const x = sedes.find((y) => y.id === b.dataset.snombre);
+          const nombre = prompt('Nuevo nombre de la sede', x.nombre); if (!nombre) return;
+          const direccion = prompt('Dirección (opcional)', x.direccion || '') ?? x.direccion;
+          await api('/api/usuarios?r=sedes', { method: 'PUT', body: JSON.stringify({ id: x.id, nombre, direccion }) });
+          toast('✅ Sede actualizada'); return cargarSedes();
+        }
+        if (b.dataset.sactiva) {
+          const x = sedes.find((y) => y.id === b.dataset.sactiva);
+          await api('/api/usuarios?r=sedes', { method: 'PUT', body: JSON.stringify({ id: x.id, activa: x.activa === false }) });
+          toast(x.activa === false ? '✅ Sede activada' : '⏸️ Sede desactivada (sus datos se guardan)'); return cargarSedes();
+        }
+      } catch (err) { toast(err.message, true); }
+    });
+    if (puede('sedes')) cargarSedes();
   </script>
 </body>
 </html>

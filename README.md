@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v20)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v21)
 
 | Ruta | Qué es |
 |---|---|
@@ -132,6 +132,15 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 - **Los gastos fijos NO usan el presupuesto**: siempre se pagan con las ventas del mes (aparecen en la lista, pero no descuentan el presupuesto).
 - Cuando se agota, lo demás se marca como "pagado con las ventas del mes" y se muestra desde qué gasto/fecha pasó.
 - Compras e Inicio muestran cuánto queda; al registrar una compra que no alcanza, avisa cuánto sale de las ventas.
+
+## Sedes (v21)
+- La sede principal es **Enclocha 2 San Pío** y conserva todo lo que ya existía (usa las mismas llaves de la base de datos).
+- Se crean en **Usuarios → 🏢 Sedes** (permiso "Crear y editar sedes"). Una sede nueva arranca vacía.
+- **Compartido** entre sedes: menú, precios, sabores, usuarios y roles.
+- **Separado** por sede: pedidos, ventas, cierre de caja, inventario, compras, gastos fijos, presupuesto y domicilios (cada sede tiene su link `/domicilio?sede=<id>`; la principal es `/domicilio`). Si una sede no tiene QR propio usa el de San Pío.
+- Usuario con sede asignada: solo trabaja en esa sede. Usuario en "Todas": escoge la sede en el menú (se guarda en la cookie `sede`).
+- Reportes → Mensual muestra la comparación por sede (para quien no está fijo en una sede).
+- En la base de datos, las sedes nuevas usan llaves con prefijo `s:<sede>:`.
 
 ## Límite de funciones de Vercel (plan Hobby: máximo 12)
 Cada archivo dentro de `api/` (menos `api/_lib/`) cuenta como una función. La app usa **10**:

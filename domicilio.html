@@ -26,6 +26,7 @@
     <div class="hero dom-hero">
       <img src="/img/logo.png" alt="Enclocha 2 Granizados" />
       <h1>Pide tu granizado a domicilio 🛵</h1>
+      <p class="hint" id="sedeNombre" hidden style="margin:2px 0 0;font-size:1rem"></p>
       <div id="estadoTienda" class="estado-tienda">Cargando...</div>
     </div>
 
@@ -113,6 +114,10 @@
   <script type="module">
     import { GRUPOS, SECCIONES, pesos, armarItem } from '/catalog.js';
     import { enHorarioOperacion } from '/fechas.js';
+    // Link de una sede: /domicilio?sede=<id> (sin ?sede = sede principal)
+    const SEDE = new URLSearchParams(location.search).get('sede') || '';
+    const LS_PED = 'dom-pedido' + (SEDE ? ':' + SEDE : '');
+    const conSede = (u) => (SEDE ? u + (u.includes('?') ? '&' : '?') + 'sede=' + encodeURIComponent(SEDE) : u);
 
     const $ = (s) => document.querySelector(s);
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -128,10 +133,11 @@
 
     // ---------- Cargar ----------
     async function cargar() {
-      const r = await fetch('/api/publico', { cache: 'no-store' });
+      const r = await fetch(conSede('/api/publico'), { cache: 'no-store' });
       info = await r.json();
       // cfg mínimo para armarItem
       cfg = { tamanos: info.menu.tamanos, sabores: info.menu.sabores, toppings: info.menu.toppings, productos: [], categorias: [] };
+      if (info.sede && !info.sede.principal) { $('#sedeNombre').hidden = false; $('#sedeNombre').textContent = `🏢 ${info.sede.nombre}${info.sede.direccion ? ' · ' + info.sede.direccion : ''}`; }
       $('#estadoTienda').className = 'estado-tienda ' + (info.abierto ? 'abierta' : 'cerrada');
       $('#estadoTienda').innerHTML = info.abierto
         ? `🟢 Estamos recibiendo pedidos${info.horario ? ` · hoy ${info.horario}` : ''}${info.domicilio.maxKm ? ` · llevamos hasta ${info.domicilio.maxKm.toLocaleString('es-CO')} km` : ''}`
@@ -160,7 +166,7 @@
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const u = { lat: pos.coords.latitude, lng: pos.coords.longitude, precision: pos.coords.accuracy };
         try {
-          const r = await fetch(`/api/publico?lat=${u.lat}&lng=${u.lng}`, { cache: 'no-store' });
+          const r = await fetch(conSede(`/api/publico?lat=${u.lat}&lng=${u.lng}`), { cache: 'no-store' });
           const c = await r.json();
           if (!r.ok) { envio = null; pintarUbi(esc(c.error), 'mal'); }
           else {
@@ -284,7 +290,7 @@
       if (datos.direccion.length < 5) return ($('#error').textContent = 'Escribe tu dirección completa');
       const btn = $('#pedir'); btn.disabled = true; btn.textContent = 'Enviando...';
       try {
-        const r = await fetch('/api/publico', {
+        const r = await fetch(conSede('/api/publico'), {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...datos, nota: $('#notaPedido').value, items: carrito, web: $('#web').value,
             ubicacion: envio?.ubicacion || null, zona: envio?.zona || null,
@@ -293,7 +299,7 @@
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'No se pudo enviar el pedido');
         guardarLS('dom-cliente', datos);
-        guardarLS('dom-pedido', { id: d.id, t: d.token, numero: d.numero, total: d.total });
+        guardarLS(LS_PED, { id: d.id, t: d.token, numero: d.numero, total: d.total });
         carrito = []; item = nuevo(); envio = null; pintarUbi(''); $('#selZona').value = ''; $('#btnUbi').textContent = '📍 Usar mi ubicación'; render();
         window.scrollTo({ top: 0, behavior: 'smooth' });
         seguir();
@@ -304,11 +310,11 @@
     const PASOS = [['nuevo', '📥', 'Recibido'], ['preparando', '🍧', 'Preparando'], ['encamino', '🛵', 'En camino'], ['entregado', '✅', 'Entregado']];
     let timer = null;
     async function seguir() {
-      const p = leerLS('dom-pedido');
+      const p = leerLS(LS_PED);
       if (!p) { $('#seguimiento').hidden = true; return; }
       try {
-        const r = await fetch(`/api/publico?seguir=${encodeURIComponent(p.id)}&t=${encodeURIComponent(p.t)}`, { cache: 'no-store' });
-        if (r.status === 404) { localStorage.removeItem('dom-pedido'); $('#seguimiento').hidden = true; return; }
+        const r = await fetch(conSede(`/api/publico?seguir=${encodeURIComponent(p.id)}&t=${encodeURIComponent(p.t)}`), { cache: 'no-store' });
+        if (r.status === 404) { localStorage.removeItem(LS_PED); $('#seguimiento').hidden = true; return; }
         const d = await r.json();
         if (!r.ok) return;
         const idx = PASOS.findIndex((x) => x[0] === d.estado);
@@ -323,7 +329,7 @@
             : enHorarioOperacion() ? '<p class="hint" style="text-align:center">Esta página se actualiza sola.</p>'
             : '<button class="btn ghost" id="actualizarSeg">🔄 Ver estado</button>'}`;
         $('#actualizarSeg')?.addEventListener('click', seguir);
-        $('#otroPedido')?.addEventListener('click', () => { localStorage.removeItem('dom-pedido'); $('#seguimiento').hidden = true; });
+        $('#otroPedido')?.addEventListener('click', () => { localStorage.removeItem(LS_PED); $('#seguimiento').hidden = true; });
         clearTimeout(timer);
         if (!terminado && enHorarioOperacion()) timer = setTimeout(() => { if (!document.hidden) seguir(); else document.addEventListener('visibilitychange', seguir, { once: true }); }, 20000);
       } catch {}

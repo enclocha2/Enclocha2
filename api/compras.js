@@ -4,6 +4,7 @@ import gastosFijos from './_lib/gastosfijos.js';
 import presupuesto from './_lib/presupuesto.js';
 import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, moverStock } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '../catalog.js';
+import { conSede } from './_lib/sede.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
@@ -43,7 +44,7 @@ const entrada = (inv, signo, extra) => inv && moverStock({ [inv.id]: signo * inv
 // Vercel Hobby permite máximo 12 funciones: /api/compras?r=gastosfijos y ?r=presupuesto se atienden aquí
 const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   const r = ruta(req);
   if (r === 'gastosfijos') return gastosFijos(req, res);
   if (r === 'presupuesto') return presupuesto(req, res);
@@ -99,3 +100,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler);

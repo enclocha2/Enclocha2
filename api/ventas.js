@@ -2,6 +2,7 @@ import { sesion } from './_lib/auth.js';
 import estadisticas from './_lib/estadisticas.js';
 import { ventasEntre, leerResumen, migrarVentas, recalcularResumenJornadas } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
+import { conSede } from './_lib/sede.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const DIA_MS = 86400000;
@@ -11,7 +12,7 @@ const DIA_MS = 86400000;
 // Vercel Hobby permite máximo 12 funciones: /api/ventas?r=estadisticas atiende las estadísticas mensuales
 const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (ruta(req) === 'estadisticas') return estadisticas(req, res);
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
@@ -38,3 +39,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Error del servidor' });
   }
 }
+
+export default conSede(handler);

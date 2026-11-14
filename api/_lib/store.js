@@ -4,6 +4,7 @@
 import { Redis } from '@upstash/redis';
 import { CONFIG_INICIAL, migrar } from '../../catalog.js';
 import { jornadaDe } from '../../fechas.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -11,34 +12,58 @@ const redis = url && token ? new Redis({ url, token }) : null;
 
 const mem = globalThis.__granizadosMem || (globalThis.__granizadosMem = { seq: 0, rev: 0, pedidos: new Map(), ventas: [], resumen: {} });
 
-const IDX = 'pedidos:idx';
-const key = (id) => `pedido:${id}`;
+// ---------- Sedes ----------
+// Cada sede tiene sus propios pedidos, ventas, caja, inventario, compras, gastos, presupuesto
+// y ajustes de domicilio. La sede principal (San Pío) usa las llaves de siempre (no se pierde
+// nada de lo que ya había); las demás usan llaves con prefijo "s:<sede>:".
+// El catálogo (productos y precios), los usuarios y los roles son de todas las sedes.
+export const SEDE_PRINCIPAL = 'san-pio';
+export const SEDES_INICIALES = [{ id: SEDE_PRINCIPAL, nombre: 'Enclocha 2 San Pío', principal: true, activa: true }];
+const ctx = new AsyncLocalStorage();
+export const enSede = (sede, fn) => ctx.run({ sede: sede || SEDE_PRINCIPAL }, fn);
+export const sedeActual = () => ctx.getStore()?.sede || SEDE_PRINCIPAL;
+const K = (nombre) => (sedeActual() === SEDE_PRINCIPAL ? nombre : `s:${sedeActual()}:${nombre}`);
+// memoria (solo pruebas locales) separada por sede
+const M = () => (sedeActual() === SEDE_PRINCIPAL ? mem
+  : ((mem.sedesMem ||= {})[sedeActual()] ||= { seq: 0, rev: 0, pedidos: new Map(), ventas: [], resumen: {} }));
+
+export async function leerSedes() {
+  const l = redis ? await redis.get('sedes') : mem.sedes;
+  return l?.length ? l : structuredClone(SEDES_INICIALES);
+}
+export async function guardarSedes(lista) {
+  if (redis) await redis.set('sedes', lista); else mem.sedes = structuredClone(lista);
+  return lista;
+}
+
+const IDX = () => K('pedidos:idx');
+const key = (id) => K(`pedido:${id}`);
 const TTL = 60 * 60 * 24 * 120; // los pedidos se guardan 120 días (las ventas quedan para siempre)
 
 export const usandoRedis = !!redis;
 
 export async function siguienteNumero() {
-  if (redis) return await redis.incr('pedidos:seq');
-  return ++mem.seq;
+  if (redis) return await redis.incr(K('pedidos:seq'));
+  return ++M().seq;
 }
 
 // "Revisión": número que sube con cada cambio. Las pantallas preguntan solo esto
 // (1 operación) y descargan la lista completa únicamente si cambió.
 export async function leerRev() {
-  if (redis) return Number(await redis.get('pedidos:rev')) || 0;
-  return mem.rev;
+  if (redis) return Number(await redis.get(K('pedidos:rev'))) || 0;
+  return M().rev;
 }
 async function subirRev() {
-  if (redis) await redis.incr('pedidos:rev');
-  else mem.rev++;
+  if (redis) await redis.incr(K('pedidos:rev'));
+  else M().rev++;
 }
 
 export async function guardar(pedido) {
   if (redis) {
     await redis.set(key(pedido.id), pedido, { ex: TTL });
-    await redis.zadd(IDX, { score: pedido.creado, member: pedido.id });
+    await redis.zadd(IDX(), { score: pedido.creado, member: pedido.id });
   } else {
-    mem.pedidos.set(pedido.id, pedido);
+    M().pedidos.set(pedido.id, pedido);
   }
   await subirRev();
   return pedido;
@@ -46,29 +71,29 @@ export async function guardar(pedido) {
 
 export async function obtener(id) {
   if (redis) return await redis.get(key(id));
-  return mem.pedidos.get(id) || null;
+  return M().pedidos.get(id) || null;
 }
 
 export async function listar(limite = 150) {
   if (redis) {
-    const ids = await redis.zrange(IDX, 0, limite - 1, { rev: true });
+    const ids = await redis.zrange(IDX(), 0, limite - 1, { rev: true });
     if (!ids.length) return [];
     const datos = await redis.mget(...ids.map(key));
     const vivos = datos.filter(Boolean);
     // limpiar índices de pedidos expirados
     const muertos = ids.filter((_, i) => !datos[i]);
-    if (muertos.length) await redis.zrem(IDX, ...muertos);
+    if (muertos.length) await redis.zrem(IDX(), ...muertos);
     return vivos;
   }
-  return [...mem.pedidos.values()].sort((a, b) => b.creado - a.creado).slice(0, limite);
+  return [...M().pedidos.values()].sort((a, b) => b.creado - a.creado).slice(0, limite);
 }
 
 export async function borrar(id) {
   if (redis) {
     await redis.del(key(id));
-    await redis.zrem(IDX, id);
+    await redis.zrem(IDX(), id);
   } else {
-    mem.pedidos.delete(id);
+    M().pedidos.delete(id);
   }
   await subirRev();
 }
@@ -117,9 +142,9 @@ function resumenVenta(p) {
 
 function sumarResumen(dia, metodo, total, signo) {
   const k = (x) => `${dia}|${x}`;
-  mem.resumen[k('total')] = (mem.resumen[k('total')] || 0) + signo * total;
-  mem.resumen[k(metodo)] = (mem.resumen[k(metodo)] || 0) + signo * total;
-  mem.resumen[k('n')] = (mem.resumen[k('n')] || 0) + signo;
+  M().resumen[k('total')] = (M().resumen[k('total')] || 0) + signo * total;
+  M().resumen[k(metodo)] = (M().resumen[k(metodo)] || 0) + signo * total;
+  M().resumen[k('n')] = (M().resumen[k('n')] || 0) + signo;
 }
 
 export async function registrarVenta(p) {
@@ -130,13 +155,13 @@ export async function registrarVenta(p) {
   const dia = diaBogota(v.pa);
   if (redis) {
     const pl = redis.pipeline();
-    pl.zadd('ventas', { score: v.pa, member });
-    pl.hincrby('ventas:resumen', `${dia}|total`, v.t);
-    pl.hincrby('ventas:resumen', `${dia}|${v.m}`, v.t);
-    pl.hincrby('ventas:resumen', `${dia}|n`, 1);
+    pl.zadd(K('ventas'), { score: v.pa, member });
+    pl.hincrby(K('ventas:resumen'), `${dia}|total`, v.t);
+    pl.hincrby(K('ventas:resumen'), `${dia}|${v.m}`, v.t);
+    pl.hincrby(K('ventas:resumen'), `${dia}|n`, 1);
     await pl.exec();
   } else {
-    mem.ventas.push({ score: v.pa, member });
+    M().ventas.push({ score: v.pa, member });
     sumarResumen(dia, v.m, v.t, 1);
   }
 }
@@ -148,13 +173,13 @@ export async function anularVenta(p) {
   const dia = diaBogota(v.pa);
   if (redis) {
     const pl = redis.pipeline();
-    pl.zrem('ventas', member);
-    pl.hincrby('ventas:resumen', `${dia}|total`, -v.t);
-    pl.hincrby('ventas:resumen', `${dia}|${v.m}`, -v.t);
-    pl.hincrby('ventas:resumen', `${dia}|n`, -1);
+    pl.zrem(K('ventas'), member);
+    pl.hincrby(K('ventas:resumen'), `${dia}|total`, -v.t);
+    pl.hincrby(K('ventas:resumen'), `${dia}|${v.m}`, -v.t);
+    pl.hincrby(K('ventas:resumen'), `${dia}|n`, -1);
     await pl.exec();
   } else {
-    mem.ventas = mem.ventas.filter((x) => x.member !== member);
+    M().ventas = M().ventas.filter((x) => x.member !== member);
     sumarResumen(dia, v.m, v.t, -1);
   }
   delete p.pago.registro;
@@ -162,13 +187,13 @@ export async function anularVenta(p) {
 
 export async function ventasEntre(ini, fin) {
   let lista;
-  if (redis) lista = await redis.zrange('ventas', ini, fin, { byScore: true });
-  else lista = mem.ventas.filter((x) => x.score >= ini && x.score <= fin).sort((a, b) => a.score - b.score).map((x) => x.member);
+  if (redis) lista = await redis.zrange(K('ventas'), ini, fin, { byScore: true });
+  else lista = M().ventas.filter((x) => x.score >= ini && x.score <= fin).sort((a, b) => a.score - b.score).map((x) => x.member);
   return lista.map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
 }
 
 export async function leerResumen() {
-  const raw = redis ? (await redis.hgetall('ventas:resumen')) || {} : mem.resumen;
+  const raw = redis ? (await redis.hgetall(K('ventas:resumen'))) || {} : M().resumen;
   const dias = {};
   for (const [k, val] of Object.entries(raw)) {
     const [dia, campo] = k.split('|');
@@ -179,7 +204,7 @@ export async function leerResumen() {
 
 // Una sola vez: pasa a "ventas" los pedidos ya cobrados antes de esta versión
 export async function migrarVentas() {
-  const hecho = redis ? await redis.get('ventas:migrado') : mem.ventasMigrado;
+  const hecho = redis ? await redis.get(K('ventas:migrado')) : M().ventasMigrado;
   if (hecho) return;
   for (const p of await listar(1000)) {
     if (p.pago?.pagado && p.estado !== 'cancelado' && !p.pago.registro) {
@@ -187,12 +212,12 @@ export async function migrarVentas() {
       await guardar(p);
     }
   }
-  if (redis) await redis.set('ventas:migrado', 1); else mem.ventasMigrado = true;
+  if (redis) await redis.set(K('ventas:migrado'), 1); else M().ventasMigrado = true;
 }
 
 // Una sola vez: recalcula el resumen por día usando jornadas (antes se usaba el día calendario)
 export async function recalcularResumenJornadas() {
-  const hecho = redis ? await redis.get('ventas:jornadas') : mem.ventasJornadas;
+  const hecho = redis ? await redis.get(K('ventas:jornadas')) : M().ventasJornadas;
   if (hecho) return;
   const todas = await ventasEntre(0, Date.now() + 86400000);
   const nuevo = {};
@@ -201,101 +226,106 @@ export async function recalcularResumenJornadas() {
     for (const [campo, val] of [['total', v.t], [v.m, v.t], ['n', 1]]) nuevo[`${dia}|${campo}`] = (nuevo[`${dia}|${campo}`] || 0) + val;
   }
   if (redis) {
-    await redis.del('ventas:resumen');
-    if (Object.keys(nuevo).length) await redis.hset('ventas:resumen', nuevo);
-    await redis.set('ventas:jornadas', 1);
+    await redis.del(K('ventas:resumen'));
+    if (Object.keys(nuevo).length) await redis.hset(K('ventas:resumen'), nuevo);
+    await redis.set(K('ventas:jornadas'), 1);
   } else {
-    mem.resumen = nuevo;
-    mem.ventasJornadas = true;
+    M().resumen = nuevo;
+    M().ventasJornadas = true;
   }
 }
 
 // ---------- Ajustes (QR de transferencia) ----------
-export async function leerAjustes() {
-  if (redis) return (await redis.get('ajustes')) || {};
-  return mem.ajustes || {};
+export async function leerAjustes(conQR = false) {
+  const a = (redis ? await redis.get(K('ajustes')) : M().ajustes) || {};
+  // Una sede sin QR propio usa el QR de la sede principal
+  if (conQR && !a.qr && sedeActual() !== SEDE_PRINCIPAL) {
+    const p = await enSede(SEDE_PRINCIPAL, () => leerAjustes());
+    return { ...a, qr: p.qr || null, qrTexto: a.qrTexto || p.qrTexto || '', qrDePrincipal: !!p.qr };
+  }
+  return a;
 }
 export async function guardarAjustes(a) {
-  if (redis) await redis.set('ajustes', a);
-  else mem.ajustes = a;
+  if (redis) await redis.set(K('ajustes'), a);
+  else M().ajustes = a;
   return a;
 }
 
 // ---------- Cierres de caja (uno por jornada) ----------
 export async function leerCierre(jornada) {
-  if (redis) return (await redis.get(`cierre:${jornada}`)) || null;
-  return (mem.cierres ||= {})[jornada] || null;
+  if (redis) return (await redis.get(K(`cierre:${jornada}`))) || null;
+  return (M().cierres ||= {})[jornada] || null;
 }
 export async function guardarCierre(c) {
   if (redis) {
-    await redis.set(`cierre:${c.jornada}`, c);
-    await redis.zadd('cierres', { score: Date.parse(c.jornada + 'T12:00:00-05:00'), member: c.jornada });
+    await redis.set(K(`cierre:${c.jornada}`), c);
+    await redis.zadd(K('cierres'), { score: Date.parse(c.jornada + 'T12:00:00-05:00'), member: c.jornada });
   } else {
-    (mem.cierres ||= {})[c.jornada] = c;
+    (M().cierres ||= {})[c.jornada] = c;
   }
   return c;
 }
 export async function listarCierres(limite = 60) {
   if (redis) {
-    const js = await redis.zrange('cierres', 0, limite - 1, { rev: true });
+    const js = await redis.zrange(K('cierres'), 0, limite - 1, { rev: true });
     if (!js.length) return [];
-    return (await redis.mget(...js.map((j) => `cierre:${j}`))).filter(Boolean);
+    return (await redis.mget(...js.map((j) => K(`cierre:${j}`)))).filter(Boolean);
   }
-  return Object.values(mem.cierres || {}).sort((a, b) => (a.jornada < b.jornada ? 1 : -1)).slice(0, limite);
+  return Object.values(M().cierres || {}).sort((a, b) => (a.jornada < b.jornada ? 1 : -1)).slice(0, limite);
 }
 
 // ---------- Compras ----------
 const scoreFecha = (f) => Date.parse(f + 'T12:00:00-05:00');
 export async function guardarCompra(c) {
   if (redis) {
-    await redis.set(`compra:${c.id}`, c);
-    await redis.zadd('compras', { score: scoreFecha(c.fecha), member: c.id });
-  } else (mem.compras ||= new Map()).set(c.id, c);
+    await redis.set(K(`compra:${c.id}`), c);
+    await redis.zadd(K('compras'), { score: scoreFecha(c.fecha), member: c.id });
+  } else (M().compras ||= new Map()).set(c.id, c);
   return c;
 }
 export async function leerCompra(id) {
-  if (redis) return (await redis.get(`compra:${id}`)) || null;
-  return (mem.compras ||= new Map()).get(id) || null;
+  if (redis) return (await redis.get(K(`compra:${id}`))) || null;
+  return (M().compras ||= new Map()).get(id) || null;
 }
 export async function borrarCompra(id) {
-  if (redis) { await redis.del(`compra:${id}`); await redis.zrem('compras', id); }
-  else (mem.compras ||= new Map()).delete(id);
+  if (redis) { await redis.del(K(`compra:${id}`)); await redis.zrem(K('compras'), id); }
+  else (M().compras ||= new Map()).delete(id);
 }
 export async function comprasEntre(desde, hasta) {
   const ini = scoreFecha(desde), fin = scoreFecha(hasta);
   if (redis) {
-    const ids = await redis.zrange('compras', ini, fin, { byScore: true });
+    const ids = await redis.zrange(K('compras'), ini, fin, { byScore: true });
     const out = [];
-    for (let i = 0; i < ids.length; i += 200) out.push(...(await redis.mget(...ids.slice(i, i + 200).map((x) => `compra:${x}`))));
+    for (let i = 0; i < ids.length; i += 200) out.push(...(await redis.mget(...ids.slice(i, i + 200).map((x) => K(`compra:${x}`)))));
     return out.filter(Boolean);
   }
-  return [...(mem.compras ||= new Map()).values()].filter((c) => c.fecha >= desde && c.fecha <= hasta);
+  return [...(M().compras ||= new Map()).values()].filter((c) => c.fecha >= desde && c.fecha <= hasta);
 }
 
 // ---------- Gastos fijos ----------
 export async function leerGastosFijos() {
-  if (redis) return (await redis.get('gastosfijos')) || [];
-  return mem.gastosFijos || [];
+  if (redis) return (await redis.get(K('gastosfijos'))) || [];
+  return M().gastosFijos || [];
 }
 export async function guardarGastosFijos(lista) {
-  if (redis) await redis.set('gastosfijos', lista); else mem.gastosFijos = lista;
+  if (redis) await redis.set(K('gastosfijos'), lista); else M().gastosFijos = lista;
   return lista;
 }
 export async function leerPagosFijos(mes) {
-  if (redis) return (await redis.get(`pagosfijos:${mes}`)) || [];
-  return (mem.pagosFijos ||= {})[mes] || [];
+  if (redis) return (await redis.get(K(`pagosfijos:${mes}`))) || [];
+  return (M().pagosFijos ||= {})[mes] || [];
 }
 export async function guardarPagosFijos(mes, pagos) {
-  if (redis) await redis.set(`pagosfijos:${mes}`, pagos); else (mem.pagosFijos ||= {})[mes] = pagos;
+  if (redis) await redis.set(K(`pagosfijos:${mes}`), pagos); else (M().pagosFijos ||= {})[mes] = pagos;
   return pagos;
 }
 export async function pagosFijosAnio(anio) {
   const meses = Array.from({ length: 12 }, (_, i) => `${anio}-${String(i + 1).padStart(2, '0')}`);
   if (redis) {
-    const r = await redis.mget(...meses.map((m) => `pagosfijos:${m}`));
+    const r = await redis.mget(...meses.map((m) => K(`pagosfijos:${m}`)));
     return Object.fromEntries(meses.map((m, i) => [m, r[i] || []]));
   }
-  return Object.fromEntries(meses.map((m) => [m, (mem.pagosFijos ||= {})[m] || []]));
+  return Object.fromEntries(meses.map((m) => [m, (M().pagosFijos ||= {})[m] || []]));
 }
 
 // ---------- Inventario ----------
@@ -303,15 +333,15 @@ export async function pagosFijosAnio(anio) {
 // aparte ("inv:stock") que se suma/resta de forma atómica, para que dos ventas al
 // mismo tiempo no se pisen. Movimientos en una lista (últimos 3000).
 export async function leerInventario() {
-  if (redis) return (await redis.get('inventario')) || [];
-  return mem.inventario || [];
+  if (redis) return (await redis.get(K('inventario'))) || [];
+  return M().inventario || [];
 }
 export async function guardarInventario(lista) {
-  if (redis) await redis.set('inventario', lista); else mem.inventario = lista;
+  if (redis) await redis.set(K('inventario'), lista); else M().inventario = lista;
   return lista;
 }
 export async function leerStock() {
-  const raw = redis ? (await redis.hgetall('inv:stock')) || {} : (mem.stock ||= {});
+  const raw = redis ? (await redis.hgetall(K('inv:stock'))) || {} : (M().stock ||= {});
   return Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, Math.round(Number(v) * 1000) / 1000]));
 }
 // deltas = { id: +n / -n }; mov = descripción del movimiento (se guarda con los deltas)
@@ -321,18 +351,18 @@ export async function moverStock(deltas, mov) {
   const registro = { ...mov, deltas, en: Date.now() };
   if (redis) {
     const pl = redis.pipeline();
-    for (const id of ids) pl.hincrbyfloat('inv:stock', id, deltas[id]);
-    pl.lpush('inv:movs', JSON.stringify(registro));
-    pl.ltrim('inv:movs', 0, 2999);
+    for (const id of ids) pl.hincrbyfloat(K('inv:stock'), id, deltas[id]);
+    pl.lpush(K('inv:movs'), JSON.stringify(registro));
+    pl.ltrim(K('inv:movs'), 0, 2999);
     await pl.exec();
   } else {
-    mem.stock ||= {};
-    for (const id of ids) mem.stock[id] = (mem.stock[id] || 0) + deltas[id];
-    (mem.movs ||= []).unshift(registro);
+    M().stock ||= {};
+    for (const id of ids) M().stock[id] = (M().stock[id] || 0) + deltas[id];
+    (M().movs ||= []).unshift(registro);
   }
 }
 export async function listarMovs(n = 300) {
-  const raw = redis ? await redis.lrange('inv:movs', 0, n - 1) : (mem.movs || []).slice(0, n);
+  const raw = redis ? await redis.lrange(K('inv:movs'), 0, n - 1) : (M().movs || []).slice(0, n);
   return raw.map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
 }
 export const invertir = (d) => Object.fromEntries(Object.entries(d || {}).map(([k, v]) => [k, -v]));
@@ -351,26 +381,26 @@ export async function limitar(clave, max, segundos) {
 
 // Devuelve true solo la primera vez que se llama con esa clave (para migraciones únicas)
 export async function marcaUnaVez(clave) {
-  if (redis) return (await redis.set(`hecho:${clave}`, 1, { nx: true })) === 'OK';
-  mem.hecho ||= {};
-  if (mem.hecho[clave]) return false;
-  return (mem.hecho[clave] = true);
+  if (redis) return (await redis.set(K(`hecho:${clave}`), 1, { nx: true })) === 'OK';
+  M().hecho ||= {};
+  if (M().hecho[clave]) return false;
+  return (M().hecho[clave] = true);
 }
 
 // ---------- Presupuesto mensual ----------
 export async function leerPresupuesto(mes) {
-  if (redis) return (await redis.get(`presupuesto:${mes}`)) || null;
-  return (mem.presupuestos ||= {})[mes] || null;
+  if (redis) return (await redis.get(K(`presupuesto:${mes}`))) || null;
+  return (M().presupuestos ||= {})[mes] || null;
 }
 export async function guardarPresupuesto(mes, p) {
-  if (redis) await redis.set(`presupuesto:${mes}`, p); else (mem.presupuestos ||= {})[mes] = p;
+  if (redis) await redis.set(K(`presupuesto:${mes}`), p); else (M().presupuestos ||= {})[mes] = p;
   return p;
 }
 export async function leerPresupuestoBase() {
-  if (redis) return (await redis.get('presupuesto:base')) || null;
-  return mem.presupuestoBase || null;
+  if (redis) return (await redis.get(K('presupuesto:base'))) || null;
+  return M().presupuestoBase || null;
 }
 export async function guardarPresupuestoBase(p) {
-  if (redis) await redis.set('presupuesto:base', p); else mem.presupuestoBase = p;
+  if (redis) await redis.set(K('presupuesto:base'), p); else M().presupuestoBase = p;
   return p;
 }
