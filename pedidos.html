@@ -48,6 +48,17 @@
     </div>
   </div>
 
+  <!-- Cobro por transferencia: primero el QR -->
+  <div class="modal" id="modalQR">
+    <div class="box">
+      <h3>📲 Cobrar por transferencia · <span id="mqNombre"></span></h3>
+      <p class="hint" id="mqDet" style="margin:0"></p>
+      <div id="mqQR"></div>
+      <button class="btn" id="mqSi">✅ Ya transfirió · marcar pagado</button>
+      <button class="btn ghost" id="mqNo">Cancelar</button>
+    </div>
+  </div>
+
   <!-- Confirmación de cancelar (sin alert del navegador) -->
   <div class="modal" id="modalCancelar">
     <div class="box">
@@ -61,7 +72,7 @@
 
   <script type="module">
     import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe } from '/catalog.js';
-    import { requerirSesion, api, traerPedidos } from '/sesion.js';
+    import { requerirSesion, api, traerPedidos, leerQR, htmlQR } from '/sesion.js';
     import { hoy, inicioJornada } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -268,6 +279,21 @@
       cargar();
     }
 
+    // Transferencia: mostrar el QR con el valor de la cuenta y confirmar cuando llegue
+    let aCobrarQR = null;
+    async function abrirQR(p) {
+      aCobrarQR = cuentaDe(p);
+      const c = cuentasMap.get(aCobrarQR);
+      const monto = c ? c.pendiente : p.total;
+      $('#mqNombre').textContent = p.cliente;
+      $('#mqDet').textContent = c && c.abiertos.length > 1 ? `Cuenta con ${c.abiertos.length} pedidos: ${c.abiertos.map((x) => '#' + x.numero).join(', ')}` : `Pedido #${p.numero}`;
+      $('#mqQR').innerHTML = '<p class="hint">Cargando QR...</p>';
+      $('#modalQR').classList.add('show');
+      $('#mqQR').innerHTML = htmlQR(await leerQR(), pesos(monto));
+    }
+    $('#mqNo').addEventListener('click', () => $('#modalQR').classList.remove('show'));
+    $('#mqSi').addEventListener('click', () => { $('#modalQR').classList.remove('show'); if (aCobrarQR) cobrarCuenta(aCobrarQR, 'transferencia'); });
+
     let aCancelar = null;
     document.querySelector('main').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-id]');
@@ -276,6 +302,7 @@
       if (b.dataset.e) return actualizar(id, { estado: b.dataset.e });
       if (b.dataset.cobrar) {
         const p = pedidos.find((x) => x.id === id);
+        if (b.dataset.cobrar === 'transferencia') return abrirQR(p);
         return cobrarCuenta(cuentaDe(p), b.dataset.cobrar);
       }
       if (b.dataset.despagar) return actualizar(id, { pago: { pagado: false } });

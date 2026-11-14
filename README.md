@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v11)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v12)
 
 | Ruta | Qué es |
 |---|---|
@@ -101,7 +101,9 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 - "✨ Crear inventario base" arma los ítems desde los productos (cervezas/licor, vasos por tamaño, toppings, pitillos, hielo). Luego haz un **📋 Conteo físico** para poner el stock real.
 - **Reglas**: qué se descuenta solo al vender (producto, tamaño de granizado, topping o cualquier granizado) y cuánto.
 - Al cancelar un pedido, lo descontado vuelve. Las compras pueden sumar al inventario (campo "¿Entra al inventario?").
-- Tomar pedido muestra "Quedan N" / "Agotado" (avisa, no bloquea la venta).
+- **Lo agotado no se puede vender**: Tomar pedido lo bloquea (contando lo que ya está en el carrito) y el servidor también lo rechaza. La página de domicilios lo oculta.
+- **Empaques**: cada ítem puede tener empaques (bolsa x100, caja x30, media caja x15...). Al comprar, registrar entradas o hacer conteo físico se escoge el empaque y se convierte a unidades.
+  Sugeridos: aros/gusanos bolsa 100 · paleta sandía 50 · paleta chamoy 40 · bandera 520 · pitillos 250 · cervezas caja 30 / media 15 · Corona y Coronita caja 24 · sodas paca 24 / 48.
 
 ## Domicilios (clientes)
 - Actívalos en Productos → 🛵 Domicilios: valor del domicilio, pedido mínimo, solo en horario, WhatsApp y mensaje. Ahí está el link para compartir.

@@ -816,3 +816,5 @@ body.con-nav.con-barra .toast { bottom: calc(160px + env(safe-area-inset-bottom)
 @media (min-width: 1000px) { body.con-nav.con-barra .toast { bottom: 90px; } }
 .admin .tabs { flex-wrap: wrap; overflow: visible; }
 .campo.row { display: flex; grid-template-columns: none; }
+.seg button:disabled, .qty button:disabled { opacity: .35; cursor: not-allowed; }
+.seg button.agot { text-decoration: line-through; }

@@ -1,6 +1,6 @@
 import { usuarioDe, esAdmin } from './_lib/auth.js';
-import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs } from './_lib/store.js';
-import { UNIDADES_INV, CATEGORIAS_COMPRA, slug } from '../catalog.js';
+import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez } from './_lib/store.js';
+import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos } from '../catalog.js';
 
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const num = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
@@ -15,7 +15,15 @@ export default async function handler(req, res) {
   try {
     // GET → ítems con su stock + últimos movimientos
     if (req.method === 'GET') {
-      const [items, stock, movs] = await Promise.all([leerInventario(), leerStock(), listarMovs(300)]);
+      const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+      let items = await leerInventario();
+      // Una sola vez: ponerle empaques sugeridos (bolsa x100, caja x30...) a los ítems que no tengan
+      if (items.length && (await marcaUnaVez('inv:empaques-v1'))) {
+        let cambio = false;
+        items = items.map((it) => { if (it.empaques?.length) return it; const e = empaquesSugeridos(it.nombre); if (e.length) cambio = true; return { ...it, empaques: e }; });
+        if (cambio) await guardarInventario(items);
+      }
+      const [stock, movs] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300)]);
       return res.status(200).json({ items, stock, movs, admin: esAdmin(usuario) });
     }
 
@@ -41,6 +49,9 @@ export default async function handler(req, res) {
             .filter((r) => TIPOS_REGLA.includes(r.tipo) && (r.tipo === 'granizado' || r.id))
             .map((r) => ({ tipo: r.tipo, id: r.tipo === 'granizado' ? null : txt(r.id, 48), cantidad: Math.max(0, num(r.cantidad)) || 1 })),
           activo: it.activo !== false,
+          empaques: (Array.isArray(it.empaques) ? it.empaques : []).slice(0, 6)
+            .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)) }))
+            .filter((e) => e.nombre && e.unidades > 0),
         });
       }
       await guardarInventario(items);

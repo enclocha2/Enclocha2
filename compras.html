@@ -49,10 +49,11 @@
           <span>📦 ¿Entra al inventario?</span>
           <div class="row" style="gap:8px;flex-wrap:wrap">
             <select class="field" name="invId" id="selInv" style="flex:1;min-width:200px"><option value="">No, no se suma al inventario</option></select>
-            <input class="field" name="invCant" type="number" min="0" step="any" placeholder="Cantidad" style="max-width:130px" hidden>
-            <span class="hint" id="invUni"></span>
+            <input class="field" name="invCant" type="number" min="0" step="any" placeholder="Cantidad" style="max-width:110px" hidden>
+            <select class="field" name="invEmp" id="selEmp" style="max-width:170px" hidden></select>
+            <b class="hint" id="invUni"></b>
           </div>
-          <span class="hint" id="invAyuda" hidden>Ej: compraste 2 paquetes de 50 vasos → entran 100 vasos.</span>
+          <span class="hint" id="invAyuda" hidden>Ej: 2 bolsas de aros (x100) → entran 200 und al inventario.</span>
         </div>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
@@ -121,12 +122,25 @@
     let inventario = [];
     try { ({ items: inventario } = await api('/api/inventario')); } catch {}
     $('#selInv').innerHTML += inventario.filter((i) => i.activo !== false).map((i) => `<option value="${i.id}">${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('');
+    let fijarUnidad = false; // al editar: la cantidad guardada ya está en unidades
     const pintarInv = () => {
       const it = inventario.find((i) => i.id === form.invId.value);
-      form.invCant.hidden = !it; $('#invAyuda').hidden = !it; $('#invUni').textContent = it ? it.unidad : '';
-      if (it && !form.invCant.value) form.invCant.value = form.cantidad.value || '';
+      form.invCant.hidden = !it; form.invEmp.hidden = !it; $('#invAyuda').hidden = !it;
+      if (!it) { $('#invUni').textContent = ''; return; }
+      const previo = form.invEmp.value;
+      form.invEmp.innerHTML = `<option value="1">${esc(it.unidad)}</option>` + (it.empaques || []).map((e) => `<option value="${e.unidades}" data-n="${esc(e.nombre)}">${esc(e.nombre)} (x${e.unidades})</option>`).join('');
+      // si la compra dice "bolsa"/"caja"... escoger ese empaque
+      const match = [...form.invEmp.options].find((o) => o.dataset.n && o.dataset.n === form.unidad.value);
+      form.invEmp.value = fijarUnidad ? '1' : match ? match.value : (previo && [...form.invEmp.options].some((o) => o.value === previo) ? previo : '1');
+      if (!form.invCant.value) form.invCant.value = form.cantidad.value || '';
+      const total = (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1);
+      $('#invUni').textContent = total ? `= ${total.toLocaleString('es-CO')} ${it.unidad}` : '';
     };
     form.invId.addEventListener('change', pintarInv);
+    form.invEmp.addEventListener('change', () => { fijarUnidad = false; pintarInv(); });
+    form.invCant.addEventListener('input', pintarInv);
+    form.unidad.addEventListener('change', () => { fijarUnidad = false; pintarInv(); });
+    form.cantidad.addEventListener('input', () => { if (form.invId.value) { fijarUnidad = false; form.invCant.value = form.cantidad.value; pintarInv(); } });
     // sugerir el ítem de inventario según el nombre de la compra
     form.insumo.addEventListener('change', () => {
       if (form.invId.value) return;
@@ -136,7 +150,7 @@
     });
 
     function limpiarForm() {
-      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; pintarInv();
+      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; fijarUnidad = false; pintarInv();
       $('#formTitulo').textContent = '➕ Registrar compra';
       $('#btnGuardar').textContent = '💾 Guardar compra';
       $('#btnCancelarEdicion').hidden = true;
@@ -148,7 +162,8 @@
       if (conFecha) {
         form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago;
         form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? '';
-      } else { form.invId.value = c.inventario?.id || ''; form.invCant.value = ''; }
+        fijarUnidad = !!c.inventario;
+      } else { form.invId.value = c.inventario?.id || ''; form.invCant.value = ''; fijarUnidad = false; }
       pintarInv(); pintarPagos();
     }
     $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
@@ -159,7 +174,7 @@
         insumo: form.insumo.value, categoria: form.categoria.value, fecha: form.fecha.value,
         cantidad: form.cantidad.value, unidad: form.unidad.value, valor: form.valor.value,
         pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
-        inventario: form.invId.value ? { id: form.invId.value, cantidad: form.invCant.value } : null,
+        inventario: form.invId.value ? { id: form.invId.value, cantidad: (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1) } : null,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       try {

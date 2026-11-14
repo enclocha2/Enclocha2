@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir } from './_lib/store.js';
+import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes } from '../catalog.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock } from './_lib/store.js';
 import { usuarioDe } from './_lib/auth.js';
 
 class ErrorUsuario extends Error {}
@@ -51,6 +51,12 @@ export default async function handler(req, res) {
       const metodo = ahora && metodoValido(body.pago?.metodo) ? body.pago.metodo : null;
       if (ahora && !metodo) throw new ErrorUsuario('Escoge efectivo o transferencia');
 
+      // Inventario: si algo está agotado o no alcanza, no se deja tomar el pedido
+      const inventario = await leerInventario();
+      const consumo = consumoDe(items, inventario);
+      const falta = faltantes(consumo, await leerStock(), inventario);
+      if (falta.length) throw new ErrorUsuario(`No hay suficiente inventario: ${textoFaltantes(falta)}`);
+
       const t = Date.now();
       const id = randomUUID();
       const pedido = {
@@ -68,7 +74,7 @@ export default async function handler(req, res) {
         historial: [{ accion: 'tomado', usuario, en: t }],
       };
       // Inventario: descontar lo que consume este pedido
-      pedido.inventario = consumoDe(items, await leerInventario());
+      pedido.inventario = consumo;
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario });
       const resp = { pedido };

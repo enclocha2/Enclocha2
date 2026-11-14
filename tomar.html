@@ -142,7 +142,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar } from '/catalog.js';
+    import { GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar, consumoDe, faltantes, textoFaltantes } from '/catalog.js';
     import { requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
@@ -152,17 +152,32 @@
     try { ({ config: cfg } = await api('/api/catalogo')); }
     catch (e) { toast('No se pudo cargar el catálogo: ' + e.message, true); throw e; }
 
-    // Stock disponible (inventario) para mostrar "quedan N" / "agotado" (no bloquea la venta)
+    // ---------- Inventario: lo agotado NO se puede vender ----------
+    // Se tiene en cuenta lo que ya está en el carrito (si quedan 3 y ya pusiste 3, se agota).
     let inv = { items: [], stock: {} };
-    try { inv = await api('/api/inventario'); } catch {}
-    function disponible(tipo, id) {
-      let min = null, aviso = 0;
-      for (const it of inv.items) for (const r of it.reglas || []) if (r.tipo === tipo && r.id === id) {
-        const n = Math.floor((inv.stock[it.id] || 0) / (r.cantidad || 1));
-        if (min === null || n < min) { min = n; aviso = Math.max(it.minimo || 0, 5); }
-      }
-      return min === null ? null : { n: min, aviso };
+    async function cargarInv() { try { inv = await api('/api/inventario?lite=1'); } catch {} }
+    await cargarInv();
+    function restante() {
+      const r = { ...inv.stock };
+      const cons = consumoDe(carrito.map((d) => armar(d)).filter(Boolean), inv.items);
+      for (const [id, d] of Object.entries(cons)) r[id] = (r[id] || 0) + d;
+      return r;
     }
+    const faltaPara = (armados) => faltantes(consumoDe(armados, inv.items), restante(), inv.items);
+    // cuántas unidades se pueden vender de algo (null = no se controla con inventario)
+    function disponible(tipo, id) {
+      const r = restante();
+      let min = null, aviso = 0;
+      for (const it of inv.items) {
+        if (it.activo === false) continue;
+        for (const rg of it.reglas || []) if ((rg.tipo === tipo && rg.id === id) || (tipo === 'tamano' && rg.tipo === 'granizado')) {
+          const n = Math.floor((r[it.id] || 0) / (rg.cantidad || 1));
+          if (min === null || n < min) { min = n; aviso = Math.max(it.minimo || 0, 5); }
+        }
+      }
+      return min === null ? null : { n: Math.max(0, min), aviso };
+    }
+    const agotado = (tipo, id) => { const d = disponible(tipo, id); return !!d && d.n <= 0; };
     const tagStock = (tipo, id) => {
       const d = disponible(tipo, id);
       if (!d) return '';
@@ -259,10 +274,12 @@
       $('#tamanos').innerHTML = secciones.map((sec) => {
         const lista = tamanos.filter((t) => (t.seccion || 'Tamaños') === sec);
         if (!lista.length) return '';
-        return `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => t.precio
-          ? `<button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
-              <strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span>${tagStock('tamano', t.id)}</button>`
-          : `<button class="opt off" disabled title="Ponle precio en Productos"><strong class="largo">${esc(t.nombre)}</strong><span>Sin precio</span></button>`).join('')}</div>`;
+        return `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => !t.precio
+          ? `<button class="opt off" disabled title="Ponle precio en Productos"><strong class="largo">${esc(t.nombre)}</strong><span>Sin precio</span></button>`
+          : agotado('tamano', t.id) && item.tamano !== t.id
+          ? `<button class="opt off" disabled title="Agotado en inventario"><strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span>${tagStock('tamano', t.id)}</button>`
+          : `<button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
+              <strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span>${tagStock('tamano', t.id)}</button>`).join('')}</div>`;
       }).join('') || '<div class="empty">No hay presentaciones activas</div>';
 
       $('#sabores').innerHTML = sabores.map((s) => `
@@ -274,26 +291,33 @@
         if (!ops.length) return '';
         const sel = item.incluidos[g.id];
         const botones = ops.length === 1
-          ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}">Sí</button>`
-          : ops.map((t) => `<button class="${sel === t.id ? 'on' : ''}" data-inc="${g.id}" data-val="${t.id}">${esc(t.nombre.replace(/^Paleta de /, ''))}</button>`).join('');
+          ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}" ${agotado('topping', ops[0].id) && sel !== ops[0].id ? 'disabled title="Agotado"' : ''}>${agotado('topping', ops[0].id) && sel !== ops[0].id ? '🔴 Agotado' : 'Sí'}</button>`
+          : ops.map((t) => { const ag = agotado('topping', t.id) && sel !== t.id;
+              return `<button class="${sel === t.id ? 'on' : ''} ${ag ? 'agot' : ''}" data-inc="${g.id}" data-val="${t.id}" ${ag ? 'disabled title="Agotado"' : ''}>${esc(t.nombre.replace(/^Paleta de /, ''))}${ag ? ' 🔴' : ''}</button>`; }).join('');
         return `<div class="grupo"><span class="lbl">${g.nombre}</span>
           <div class="seg">${botones}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">Sin</button></div></div>`;
       }).join('');
 
       $('#adicionales').innerHTML = toppings.map((t) => {
         const n = item.adicionales[t.id] || 0;
-        return `<div class="extra"><div>${esc(t.nombre)}<small>+${pesos(t.precio)} c/u</small></div>
-          <div class="qty ${n ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${n}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
+        // ¿alcanza para uno más? (lo del carrito + lo que ya lleva este granizado)
+        const disp = disponible('topping', t.id);
+        const usados = (Object.values(item.incluidos).filter((x) => x === t.id).length + n) * item.cantidad;
+        const ag = !!disp && disp.n <= usados;
+        return `<div class="extra"><div>${esc(t.nombre)}<small>+${pesos(t.precio)} c/u${ag && !n ? ' · <span class="stock-tag agotado" style="display:inline">🔴 Agotado</span>' : ''}</small></div>
+          <div class="qty ${n ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${n}</b><button data-adi="${t.id}" data-d="1" ${ag ? 'disabled title="No hay más en inventario"' : ''}>+</button></div></div>`;
       }).join('');
 
       $('#cantidad').innerHTML = `<button data-cant="-1">−</button><b>${item.cantidad}</b><button data-cant="1">+</button>`;
 
       const a = armar(item);
+      const falta = a ? faltaPara([a]) : [];
       $('#subtotal').textContent = a ? pesos(a.subtotal) : '$0';
-      $('#agregar').disabled = !a;
+      $('#agregar').disabled = !a || falta.length > 0;
       const para = cliente() ? ` de ${cliente()}` : '';
       $('#agregar').textContent = !item.tamano ? 'Escoge tamaño o presentación'
         : !item.sabores.length ? 'Escoge al menos un sabor'
+        : falta.length ? `🔴 Sin inventario: ${textoFaltantes(falta)}`
         : `+ Agregar granizado #${granizadosEnCarrito() + 1} al pedido${para}`;
     }
 
@@ -305,14 +329,20 @@
       $('#prods').innerHTML = cfg.productos.filter((p) => p.categoria === c.id && p.activo).sort((x, y) => (!x.precio) - (!y.precio)).map((p) => {
         const n = enCarrito(p.id)?.cantidad || 0;
         if (!p.precio) return `<div class="prod off"><div><b>${esc(p.nombre)}</b><span>Sin precio</span></div></div>`;
+        const sinMas = faltaPara([{ tipo: 'producto', productoId: p.id, cantidad: 1 }]).length > 0;
+        if (sinMas && !n) return `<div class="prod off"><div><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span><em class="stock-tag agotado">🔴 Agotado</em></div></div>`;
         return `<div class="prod ${n ? 'has' : ''}">
           <button class="prod-main" data-prod="${p.id}" data-d="1"><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span>${tagStock('producto', p.id)}</button>
-          ${n ? `<div class="qty has"><button data-prod="${p.id}" data-d="-1">−</button><b>${n}</b><button data-prod="${p.id}" data-d="1">+</button></div>` : ''}
+          ${n ? `<div class="qty has"><button data-prod="${p.id}" data-d="-1">−</button><b>${n}</b><button data-prod="${p.id}" data-d="1" ${sinMas ? 'disabled title="No hay más en inventario"' : ''}>+</button></div>` : ''}
         </div>`;
       }).join('');
     }
 
     function cambiarProducto(id, d) {
+      if (d > 0) {
+        const f = faltaPara([{ tipo: 'producto', productoId: id, cantidad: 1 }]);
+        if (f.length) return toast(`🔴 No hay más: ${textoFaltantes(f)}`, true);
+      }
       const linea = enCarrito(id);
       if (linea) {
         linea.cantidad += d;
@@ -331,7 +361,7 @@
         if (!a) return `<div class="cart-item"><div class="det">⚠️ Ítem ya no disponible</div><button class="x" data-del="${i}">✕</button></div>`;
         if (a.tipo === 'producto') {
           return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b></div>
-            <div class="qty has"><button data-prod="${a.productoId}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-d="1">+</button></div></div>`;
+            <div class="qty has"><button data-prod="${a.productoId}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-d="1" ${faltaPara([{ tipo: 'producto', productoId: a.productoId, cantidad: 1 }]).length ? 'disabled' : ''}>+</button></div></div>`;
         }
         ng++;
         return `<div class="cart-item"><div class="det">
@@ -452,7 +482,7 @@
         mostrarOk(pedido);
         carrito = []; item = nuevo(); tab = 'granizados';
         $('#cliente').value = ''; $('#nota').value = '';
-        render(); renderSugerencias(); cargarCuentas();
+        await cargarInv(); render(); renderSugerencias(); cargarCuentas();
       } catch (err) {
         $('#mpError').textContent = err.message;
         btn.disabled = false;
@@ -475,7 +505,7 @@
         $('#okQR').innerHTML = '';
         $('#modalOk').classList.add('show');
         carrito = []; item = nuevo(); tab = 'granizados'; $('#nota').value = '';
-        salirCuenta(true);
+        await cargarInv(); salirCuenta(true);
         cargarCuentas();
       } catch (err) {
         toast(err.message, true);
@@ -514,6 +544,7 @@
     }
     cadaTanto(() => { if (!modoCuenta) cargarCuentas().then(renderSugerencias); }, 20000);
     leerQR(); // precarga el QR
+    cadaTanto(() => cargarInv().then(render), 60000);
   </script>
 </body>
 </html>

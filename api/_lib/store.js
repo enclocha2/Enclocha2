@@ -348,3 +348,11 @@ export async function limitar(clave, max, segundos) {
   if (!m[clave] || m[clave].hasta < ahora) m[clave] = { n: 0, hasta: ahora + segundos * 1000 };
   return ++m[clave].n <= max;
 }
+
+// Devuelve true solo la primera vez que se llama con esa clave (para migraciones únicas)
+export async function marcaUnaVez(clave) {
+  if (redis) return (await redis.set(`hecho:${clave}`, 1, { nx: true })) === 'OK';
+  mem.hecho ||= {};
+  if (mem.hecho[clave]) return false;
+  return (mem.hecho[clave] = true);
+}

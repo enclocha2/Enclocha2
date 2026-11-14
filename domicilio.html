@@ -131,18 +131,20 @@
     }
 
     // ---------- Armar granizado ----------
+    const AG = () => info.agotados || { tamanos: [], toppings: [] };
     function render() {
       const n = carrito.length + 1;
       $('#numG').textContent = '#' + n;
       const secciones = [...new Set([...SECCIONES, ...cfg.tamanos.map((t) => t.seccion || 'Tamaños')])];
       $('#tamanos').innerHTML = secciones.map((sec) => {
         const lista = cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === sec);
-        return lista.length ? `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => `
-          <button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}"><strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span></button>`).join('')}</div>` : '';
+        return lista.length ? `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => AG().tamanos.includes(t.id)
+          ? `<button class="opt off" disabled><strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>Agotado</span></button>`
+          : `<button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}"><strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span></button>`).join('')}</div>` : '';
       }).join('');
       $('#sabores').innerHTML = cfg.sabores.map((s) => `<button class="chip ${item.sabores.includes(s.id) ? 'on' : ''}" data-sabor="${s.id}">${esc(s.nombre)}</button>`).join('');
       $('#incluidos').innerHTML = GRUPOS.map((g) => {
-        const ops = cfg.toppings.filter((t) => t.grupo === g.id);
+        const ops = cfg.toppings.filter((t) => t.grupo === g.id && !AG().toppings.includes(t.id));
         if (!ops.length) return '';
         const sel = item.incluidos[g.id];
         const bs = ops.length === 1
@@ -150,7 +152,7 @@
           : ops.map((t) => `<button class="${sel === t.id ? 'on' : ''}" data-inc="${g.id}" data-val="${t.id}">${esc(t.nombre.replace(/^Paleta de /, ''))}</button>`).join('');
         return `<div class="grupo"><span class="lbl">${g.nombre}</span><div class="seg">${bs}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">No</button></div></div>`;
       }).join('');
-      $('#adicionales').innerHTML = cfg.toppings.map((t) => {
+      $('#adicionales').innerHTML = cfg.toppings.filter((t) => !AG().toppings.includes(t.id)).map((t) => {
         const q = item.adicionales[t.id] || 0;
         return `<div class="extra"><div>${esc(t.nombre)}<small>+${pesos(t.precio)} c/u</small></div><div class="qty ${q ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${q}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
       }).join('');

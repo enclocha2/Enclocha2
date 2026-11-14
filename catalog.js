@@ -261,7 +261,7 @@ export const CATEGORIAS_COMPRA = [
   { id: 'limpieza', nombre: 'Aseo y limpieza', icono: '🧽' },
   { id: 'otros', nombre: 'Otros', icono: '📦' },
 ];
-export const UNIDADES = ['und', 'bolsa', 'paca', 'caja', 'kg', 'lb', 'litro', 'botella', 'paquete'];
+export const UNIDADES = ['und', 'bolsa', 'paca', 'caja', 'media caja', 'kg', 'lb', 'litro', 'botella', 'paquete'];
 export const PAGOS_COMPRA = [
   { id: 'caja', nombre: 'Plata de la caja', icono: '💵' },
   { id: 'transferencia', nombre: 'Transferencia', icono: '📲' },
@@ -322,3 +322,43 @@ export function estadoStock(item, stock) {
   if (item.minimo && stock <= item.minimo) return { clase: 'bajo', txt: 'Bajo', icono: '🟠' };
   return { clase: 'ok', txt: 'OK', icono: '🟢' };
 }
+
+// ---------- Empaques (cómo viene cada cosa al comprarla) ----------
+// Ej: bolsa de aros = 100 und. Sirve para comprar/contar "2 bolsas" y que entren 200.
+const EMPAQUES_SUGERIDOS = [
+  [/^aros?$/, [['bolsa', 100]]],
+  [/^gusanos?$/, [['bolsa', 100]]],
+  [/paleta de sandia/, [['bolsa', 50]]],
+  [/paleta de chamoy/, [['bolsa', 40]]],
+  [/bandera/, [['bolsa', 520]]],
+  [/pitillo/, [['paquete', 250]]],
+  [/coron/, [['caja', 24]]],
+  [/aguila|pilsen|poker|club colombia|costenita|cordilleras|cerveza/, [['caja', 30], ['media caja', 15]]],
+  [/soda/, [['paca 24', 24], ['paca 48', 48]]],
+];
+export function empaquesSugeridos(nombre) {
+  const n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  for (const [re, lista] of EMPAQUES_SUGERIDOS) if (re.test(n)) return lista.map(([nombre, unidades]) => ({ nombre, unidades }));
+  return [];
+}
+// "250 und" → "1 paquete" / "42 und" → "1 caja + 12"
+export function enEmpaques(cantidad, item) {
+  const e = [...(item.empaques || [])].sort((a, b) => b.unidades - a.unidades)[0];
+  if (!e || cantidad < e.unidades) return '';
+  const n = Math.floor(cantidad / e.unidades), resto = Math.round((cantidad - n * e.unidades) * 100) / 100;
+  return `≈ ${n} × ${e.nombre}${resto ? ` + ${resto}` : ''}`;
+}
+
+// Revisa si alcanza el inventario para unos descuentos. Devuelve lista de faltantes.
+export function faltantes(deltas, stock, inventario) {
+  const out = [];
+  for (const [id, d] of Object.entries(deltas || {})) {
+    if (d >= 0) continue;
+    const it = (inventario || []).find((x) => x.id === id);
+    if (!it || it.activo === false) continue;
+    const hay = Number(stock[id] || 0);
+    if (hay + d < 0) out.push({ id, nombre: it.nombre, hay: Math.max(0, hay), unidad: it.unidad });
+  }
+  return out;
+}
+export const textoFaltantes = (f) => f.map((x) => x.hay > 0 ? `${x.nombre} (solo quedan ${x.hay})` : `${x.nombre} (agotado)`).join(', ');

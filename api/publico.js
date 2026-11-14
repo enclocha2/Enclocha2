@@ -3,8 +3,8 @@
 // GET  /api/publico?seguir=ID&t=TOKEN → estado de un pedido
 // POST /api/publico            → crear pedido a domicilio
 import { randomUUID, randomBytes } from 'node:crypto';
-import { armarItem, consumoDe, SECCIONES } from '../catalog.js';
-import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar } from './_lib/store.js';
+import { armarItem, consumoDe, SECCIONES, faltantes, textoFaltantes } from '../catalog.js';
+import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock } from './_lib/store.js';
 import { horarioDe, jornadaActual, horaJornada, textoHorario, hoy } from '../fechas.js';
 import { DOM_DEFECTO } from './ajustes.js';
 
@@ -38,9 +38,18 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const cfg = await configActual();
       const tamanos = cfg.tamanos.filter((t) => t.activo && t.precio && SECCIONES_DOMICILIO.includes(t.seccion || 'Tamaños'));
+      // Lo que está agotado según el inventario (para mostrarlo bloqueado)
+      const [inventario, stock] = await Promise.all([leerInventario(), leerStock()]);
+      const agotado = (tipo, id) => inventario.some((it) => it.activo !== false && (it.reglas || []).some((r) => r.tipo === tipo && r.id === id && (stock[it.id] || 0) < (r.cantidad || 1)));
+      const granizadoAgotado = inventario.some((it) => it.activo !== false && (it.reglas || []).some((r) => r.tipo === 'granizado' && (stock[it.id] || 0) < (r.cantidad || 1)));
+      const agotados = {
+        tamanos: granizadoAgotado ? tamanos.map((t) => t.id) : tamanos.filter((t) => agotado('tamano', t.id)).map((t) => t.id),
+        toppings: cfg.toppings.filter((t) => t.activo && agotado('topping', t.id)).map((t) => t.id),
+      };
       return res.status(200).json({
         ...estadoAbierto(dom),
         menu: { tamanos, sabores: cfg.sabores.filter((s) => s.activo), toppings: cfg.toppings.filter((t) => t.activo) },
+        agotados,
         domicilio: { costo: dom.costo, minimo: dom.minimo, mensaje: dom.mensaje, whatsapp: dom.whatsapp },
         qr: ajustes.qr || null, qrTexto: ajustes.qrTexto || '',
       });
@@ -81,6 +90,11 @@ export default async function handler(req, res) {
       const pagaCon = metodo === 'efectivo' ? Math.max(0, Math.round(Number(b.pago?.pagaCon) || 0)) : 0;
       if (pagaCon && pagaCon < total) return res.status(400).json({ error: 'El valor con el que pagas es menor que el total' });
 
+      const inventario = await leerInventario();
+      const consumo = consumoDe(items, inventario);
+      const falta = faltantes(consumo, await leerStock(), inventario);
+      if (falta.length) return res.status(400).json({ error: `Lo sentimos, se nos acabó: ${falta.map((x) => x.nombre).join(', ')}. Cambia tu pedido.` });
+
       const t = Date.now(), id = randomUUID();
       const pedido = {
         id, cuenta: id, tipo: 'domicilio',
@@ -94,7 +108,7 @@ export default async function handler(req, res) {
         tomadoPor: '🛵 Web', creado: t,
         historial: [{ accion: 'tomado', usuario: '🛵 Cliente (web)', en: t }],
       };
-      pedido.inventario = consumoDe(items, await leerInventario());
+      pedido.inventario = consumo;
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario: '🛵 Web' });
       return res.status(201).json({ id, token: pedido.domicilio.token, numero: pedido.numero, total });
