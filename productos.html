@@ -17,7 +17,7 @@
     <nav class="tabs" id="tabs">
       <button data-tab="sabores">🍧 Sabores</button>
       <button data-tab="productos">🍺 Productos</button>
-      <button data-tab="granizado">📏 Tamaños y toppings</button>
+      <button data-tab="granizado">📏 Presentaciones y toppings</button>
       <button data-tab="categorias">🗂️ Categorías</button>
     </nav>
 
@@ -55,8 +55,16 @@
     <!-- TAMAÑOS Y TOPPINGS -->
     <section id="t-granizado" hidden>
       <div class="card">
-        <h2>Tamaños y precios del granizado</h2>
+        <h2>Tamaños y presentaciones del granizado</h2>
+        <p class="hint">Las que estén en $0 salen como "Sin precio" y no se pueden vender. La sección es el grupo en que aparecen al tomar el pedido.</p>
         <div id="lTamanos"></div>
+        <form class="add" id="fTamano">
+          <input class="field" name="nombre" placeholder="Nueva presentación, ej: Promoción 2x1" maxlength="40" required />
+          <input class="field" name="seccion" list="dlSecciones" placeholder="Sección" maxlength="30" style="max-width:150px" />
+          <input class="field" name="precio" type="number" min="0" step="100" placeholder="Precio" style="max-width:120px" required />
+          <button class="btn alt">+ Agregar</button>
+        </form>
+        <datalist id="dlSecciones"></datalist>
       </div>
       <div class="card">
         <h2>Toppings <span class="hint">(el precio aplica cuando es adicional)</span></h2>
@@ -88,7 +96,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, pesos, slug } from '/catalog.js';
+    import { GRUPOS, SECCIONES, pesos, slug } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
@@ -164,8 +172,16 @@
     }
 
     function renderGranizado() {
-      $('#lTamanos').innerHTML = cfg.tamanos.map((t) => `<div class="fila ${t.activo ? '' : 'apagado'}">
-        ${sw('tamanos', t.id, t.activo)}${inp('tamanos', t.id, 'nombre', t.nombre, 'maxlength="30"')}${precio('tamanos', t.id, t.precio)}</div>`).join('');
+      const secs = [...new Set([...SECCIONES, ...cfg.tamanos.map((t) => t.seccion || 'Tamaños')])];
+      $('#dlSecciones').innerHTML = secs.map((x) => `<option value="${esc(x)}">`).join('');
+      $('#lTamanos').innerHTML = secs.map((sec) => {
+        const lista = cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === sec);
+        if (!lista.length) return '';
+        return `<h3 class="sub">${esc(sec)}</h3>` + lista.map((t) => `<div class="fila ${t.activo ? '' : 'apagado'} ${t.precio ? '' : 'sinprecio'}">
+          ${sw('tamanos', t.id, t.activo)}${inp('tamanos', t.id, 'nombre', t.nombre, 'maxlength="40"')}
+          <input class="field seccion" list="dlSecciones" data-l="tamanos" data-id="${t.id}" data-k="seccion" value="${esc(t.seccion || 'Tamaños')}" maxlength="30">
+          ${precio('tamanos', t.id, t.precio)}${borrar('tamanos', t.id)}</div>`).join('');
+      }).join('');
       $('#lToppings').innerHTML = GRUPOS.map((g) => `<h3 class="sub">${g.nombre}</h3>` +
         cfg.toppings.filter((t) => t.grupo === g.id).map((t) => `<div class="fila ${t.activo ? '' : 'apagado'}">
           ${sw('toppings', t.id, t.activo)}${inp('toppings', t.id, 'nombre', t.nombre, 'maxlength="40"')}${precio('toppings', t.id, t.precio)}</div>`).join('')).join('');
@@ -198,9 +214,10 @@
       marcar();
       const fila = el.closest('.fila');
       if (k === 'activo') fila?.classList.toggle('apagado', !el.checked);
-      if (k === 'precio') fila?.classList.toggle('sinprecio', el.dataset.l === 'productos' && !obj.precio);
+      if (k === 'precio') fila?.classList.toggle('sinprecio', ['productos', 'tamanos'].includes(el.dataset.l) && !obj.precio);
       if (k === 'activo' && el.dataset.l === 'sabores') renderSabores();
       if (k === 'categoria') renderProductos();
+      if (k === 'seccion' && e.type === 'change') renderGranizado();
     });
 
     document.querySelector('main').addEventListener('click', (e) => {
@@ -238,6 +255,20 @@
       cfg.productos.push({ id: nuevoId(cfg.productos, nombre), nombre, categoria: f.categoria.value, precio: Math.max(0, Math.round(Number(f.precio.value) || 0)), activo: true });
       f.nombre.value = ''; f.precio.value = ''; marcar(); renderProductos(); renderCategorias();
       toast(`"${nombre}" agregado (guarda para confirmar)`);
+    });
+
+    // la sección se reagrupa al salir del campo
+    document.querySelector('main').addEventListener('change', (e) => {
+      if (e.target.dataset?.k === 'seccion') { const o = buscarEn('tamanos', e.target.dataset.id); if (o) o.seccion = e.target.value.trim() || 'Tamaños'; renderGranizado(); }
+    });
+
+    $('#fTamano').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = e.target, nombre = f.nombre.value.trim();
+      if (cfg.tamanos.some((t) => t.nombre.toLowerCase() === nombre.toLowerCase())) return toast('Esa presentación ya existe', true);
+      cfg.tamanos.push({ id: nuevoId(cfg.tamanos, nombre), nombre, seccion: f.seccion.value.trim() || 'Tamaños', precio: Math.max(0, Math.round(Number(f.precio.value) || 0)), activo: true });
+      f.reset(); marcar(); renderGranizado();
+      toast(`"${nombre}" agregada (guarda para confirmar)`);
     });
 
     $('#fCategoria').addEventListener('submit', (e) => {

@@ -33,8 +33,8 @@
         </div>
 
         <div class="card">
-          <h2><span class="n">1</span> Tamaño</h2>
-          <div class="grid g4" id="tamanos"></div>
+          <h2><span class="n">1</span> Tamaño o presentación</h2>
+          <div id="tamanos"></div>
         </div>
 
         <div class="card">
@@ -127,7 +127,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, METODOS_PAGO, pesos, armarItem } from '/catalog.js';
+    import { GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
@@ -177,10 +177,15 @@
     // ---------- Granizado ----------
     function renderGranizado() {
       $('#numGranizado').textContent = '#' + (granizadosEnCarrito() + 1);
-      $('#tamanos').innerHTML = tamanos.map((t) => `
-        <button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
-          <strong>${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span>
-        </button>`).join('') || '<div class="empty">No hay tamaños activos</div>';
+      const secciones = [...new Set([...SECCIONES, ...tamanos.map((t) => t.seccion || 'Tamaños')])];
+      $('#tamanos').innerHTML = secciones.map((sec) => {
+        const lista = tamanos.filter((t) => (t.seccion || 'Tamaños') === sec);
+        if (!lista.length) return '';
+        return `<div class="seccion-tit">${esc(sec)}</div><div class="grid g4">${lista.map((t) => t.precio
+          ? `<button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}">
+              <strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span></button>`
+          : `<button class="opt off" disabled title="Ponle precio en Productos"><strong class="largo">${esc(t.nombre)}</strong><span>Sin precio</span></button>`).join('')}</div>`;
+      }).join('') || '<div class="empty">No hay presentaciones activas</div>';
 
       $('#sabores').innerHTML = sabores.map((s) => `
         <button class="chip ${item.sabores.includes(s.id) ? 'on' : ''}" data-sabor="${s.id}">${esc(s.nombre)}</button>`).join('')
@@ -209,7 +214,7 @@
       $('#subtotal').textContent = a ? pesos(a.subtotal) : '$0';
       $('#agregar').disabled = !a;
       const para = cliente() ? ` de ${cliente()}` : '';
-      $('#agregar').textContent = !item.tamano ? 'Escoge un tamaño'
+      $('#agregar').textContent = !item.tamano ? 'Escoge tamaño o presentación'
         : !item.sabores.length ? 'Escoge al menos un sabor'
         : `+ Agregar granizado #${granizadosEnCarrito() + 1} al pedido${para}`;
     }

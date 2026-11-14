@@ -2,6 +2,7 @@
 // En Vercel usa Upstash Redis (Storage > Marketplace). Sin variables de
 // entorno cae a memoria (solo sirve para pruebas locales).
 import { Redis } from '@upstash/redis';
+import { CONFIG_INICIAL, migrar } from '../../catalog.js';
 
 const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -67,5 +68,12 @@ export async function leerConfig() {
 export async function guardarConfig(cfg) {
   if (redis) await redis.set('config', cfg);
   else mem.config = cfg;
+  return cfg;
+}
+
+// Catálogo vigente (aplica migraciones pendientes y las guarda)
+export async function configActual() {
+  const cfg = (await leerConfig()) || structuredClone(CONFIG_INICIAL);
+  if (migrar(cfg)) await guardarConfig(cfg);
   return cfg;
 }

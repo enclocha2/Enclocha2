@@ -72,7 +72,7 @@
         $('#tPedidos').textContent = nuevos || prep ? `${nuevos} nuevos · ${prep} en preparación` : 'Sin pedidos pendientes';
 
         const sab = config.sabores.filter((s) => s.activo).length;
-        const sinPrecio = config.productos.filter((p) => p.activo && !p.precio).length;
+        const sinPrecio = config.productos.filter((p) => p.activo && !p.precio).length + config.tamanos.filter((t) => t.activo && !t.precio).length;
         if ($('#tSabores')) $('#tSabores').textContent = `${sab} de ${config.sabores.length} disponibles`;
         if ($('#tProductos')) $('#tProductos').innerHTML = sinPrecio
           ? `<b class="alerta">⚠️ ${sinPrecio} productos sin precio</b>` : `${config.productos.length} productos`;

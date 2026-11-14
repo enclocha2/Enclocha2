@@ -34,13 +34,27 @@ const LICOR = ['Litro Aguardiente Tetra Verde', 'Litro Aguardiente Tetra Rojo',
 
 const SABORES = ['Mango Loco', 'Smirnoff de Tamarindo', 'Smirnoff de Lulo', 'Limonada de coco SL', 'Strawberry Passion'];
 
+// Presentaciones agregadas en la v4 (arrancan sin precio: se fijan en "Productos")
+const PRESENTACIONES_V4 = [
+  ['Promoción 8 onzas', 'Promociones'], ['Promoción 12 onzas', 'Promociones'],
+  ['Promoción 16 onzas', 'Promociones'], ['Promoción 20 onzas', 'Promociones'],
+  ['Recarga 8 Onzas', 'Recargas'], ['Recarga 12 Onzas', 'Recargas'],
+  ['Recarga 16 Onzas', 'Recargas'], ['Recarga 20 Onzas', 'Recargas'],
+  ['Granizado 20 Onz Jueves', 'Jueves'], ['Granizado 12 * 2 Onz Jueves', 'Jueves'],
+  ['Pecera', 'Especiales'], ['Nevera', 'Especiales'],
+].map(([nombre, seccion]) => ({ id: slug(nombre), nombre, seccion, precio: 0, activo: true }));
+
+export const SECCIONES = ['Tamaños', 'Promociones', 'Recargas', 'Jueves', 'Especiales'];
+
 export const CONFIG_INICIAL = {
   version: 1,
+  migraciones: ['presentaciones-v4'],
   tamanos: [
-    { id: '8', nombre: '8 oz', precio: 8000, activo: true },
-    { id: '12', nombre: '12 oz', precio: 12000, activo: true },
-    { id: '16', nombre: '16 oz', precio: 16000, activo: true },
-    { id: '20', nombre: '20 oz', precio: 20000, activo: true },
+    { id: '8', nombre: '8 oz', seccion: 'Tamaños', precio: 8000, activo: true },
+    { id: '12', nombre: '12 oz', seccion: 'Tamaños', precio: 12000, activo: true },
+    { id: '16', nombre: '16 oz', seccion: 'Tamaños', precio: 16000, activo: true },
+    { id: '20', nombre: '20 oz', seccion: 'Tamaños', precio: 20000, activo: true },
+    ...PRESENTACIONES_V4,
   ],
   sabores: SABORES.map((n) => ({ id: slug(n), nombre: n, activo: true })),
   // precio = valor cuando se pide como ADICIONAL
@@ -62,6 +76,22 @@ export const CONFIG_INICIAL = {
     ...LICOR.map((n) => ({ id: slug(n), nombre: n, categoria: 'licor', precio: 0, activo: true })),
   ],
 };
+
+// ---------- Migraciones: agrega lo nuevo a un catálogo ya guardado ----------
+// Devuelve true si cambió algo (hay que guardarlo).
+export function migrar(cfg) {
+  let cambio = false;
+  cfg.migraciones ||= [];
+  for (const t of cfg.tamanos) if (!t.seccion) { t.seccion = 'Tamaños'; cambio = true; }
+  if (!cfg.migraciones.includes('presentaciones-v4')) {
+    for (const p of PRESENTACIONES_V4) {
+      if (!cfg.tamanos.some((t) => t.id === p.id || t.nombre.toLowerCase() === p.nombre.toLowerCase())) cfg.tamanos.push({ ...p });
+    }
+    cfg.migraciones.push('presentaciones-v4');
+    cambio = true;
+  }
+  return cambio;
+}
 
 // ---------- Validación de la configuración (al guardar desde "Productos") ----------
 const txt = (s, max = 60) => String(s ?? '').trim().slice(0, max);
@@ -94,9 +124,10 @@ export function normalizarConfig(raw) {
   const grupos = new Set(GRUPOS.map((g) => g.id));
 
   const tamanos = lista(raw.tamanos, (t) => ({
-    id: txt(t.id, 48), nombre: txt(t.nombre, 30), precio: precioOk(t.precio, t.nombre), activo: !!t.activo,
-  }), 'tamaños');
-  if (!tamanos.length) throw new Error('Debe haber al menos un tamaño');
+    id: txt(t.id, 48), nombre: txt(t.nombre, 40), seccion: txt(t.seccion, 30) || 'Tamaños',
+    precio: precioOk(t.precio, t.nombre), activo: !!t.activo,
+  }), 'presentaciones');
+  if (!tamanos.length) throw new Error('Debe haber al menos una presentación de granizado');
 
   const sabores = lista(raw.sabores, (s) => ({ id: txt(s.id, 48), nombre: txt(s.nombre, 50), activo: !!s.activo }), 'sabores');
 
@@ -140,7 +171,8 @@ export function armarItem(raw, cfg) {
   }
 
   const tam = cfg.tamanos.find((t) => t.id === String(raw.tamano) && t.activo);
-  if (!tam) throw new Error('Escoge un tamaño disponible');
+  if (!tam) throw new Error('Escoge un tamaño o presentación disponible');
+  if (!tam.precio) throw new Error(`"${tam.nombre}" no tiene precio`);
 
   const ids = [...new Set(raw.sabores || [])];
   const sabores = ids.map((id) => cfg.sabores.find((s) => s.id === id && s.activo));

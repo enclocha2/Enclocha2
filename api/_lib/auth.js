@@ -1,9 +1,9 @@
 // Usuarios y sesiones.
 // Las claves se pueden cambiar SIN tocar código con la variable de entorno
-// USUARIOS en Vercel, con este formato:  Stiv:clave1,Angel:clave2,John:clave3
+// USUARIOS en Vercel, con este formato:  Stiv:clave1,Angel:clave2,John:clave3,Fofi:clave4
 import crypto from 'node:crypto';
 
-const POR_DEFECTO = 'Stiv:Stiv2026*,Angel:Angel2026*,John:John2026*';
+const POR_DEFECTO = 'Stiv:Stiv2026*,Angel:Angel2026*,John:John2026*,Fofi:Fofi2026*';
 const FUENTE = process.env.USUARIOS || POR_DEFECTO;
 const SECRETO = process.env.AUTH_SECRET || crypto.createHash('sha256').update('granizados|' + FUENTE).digest('hex');
 const DURACION = 60 * 60 * 14; // 14 horas (un turno)

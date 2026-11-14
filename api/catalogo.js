@@ -1,5 +1,5 @@
-import { CONFIG_INICIAL, normalizarConfig } from '../catalog.js';
-import { leerConfig, guardarConfig } from './_lib/store.js';
+import { normalizarConfig } from '../catalog.js';
+import { configActual, guardarConfig } from './_lib/store.js';
 import { usuarioDe, esAdmin } from './_lib/auth.js';
 
 export default async function handler(req, res) {
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (!usuario) return res.status(401).json({ error: 'Inicia sesión' });
 
   try {
-    const actual = (await leerConfig()) || CONFIG_INICIAL;
+    const actual = await configActual();
 
     if (req.method === 'GET') {
       return res.status(200).json({ config: actual, admin: esAdmin(usuario) });
@@ -24,6 +24,7 @@ export default async function handler(req, res) {
       try { nueva = normalizarConfig(body.config); }
       catch (e) { return res.status(400).json({ error: e.message }); }
       nueva.version = (actual.version || 1) + 1;
+      nueva.migraciones = actual.migraciones || [];
       nueva.actualizadoPor = usuario;
       nueva.actualizado = Date.now();
       await guardarConfig(nueva);

@@ -1,4 +1,4 @@
-# 🍧 Granizados – Pedidos (v3)
+# 🍧 Granizados – Pedidos (v4)
 
 | Ruta | Qué es |
 |---|---|
@@ -9,14 +9,16 @@
 | `/login` | Ingreso |
 
 ## Usuarios
-Stiv / `Stiv2026*` · Angel / `Angel2026*` · John / `John2026*`
+Stiv / `Stiv2026*` · Angel / `Angel2026*` · John / `John2026*` · Fofi / `Fofi2026*`
 
-Cambiar claves: variable `USUARIOS` en Vercel → `Stiv:clave1,Angel:clave2,John:clave3` y Redeploy.
+Cambiar claves: variable `USUARIOS` en Vercel → `Stiv:clave1,Angel:clave2,John:clave3,Fofi:clave4` y Redeploy.
 
 **¿Quién puede editar productos y precios?** Por defecto todos. Para limitarlo, crea la variable
 `ADMINS` con los nombres, ej: `Stiv` o `Stiv,John`, y haz Redeploy.
 
 ## Productos
+- Granizados: además de 8/12/16/20 oz hay Promociones, Recargas, Jueves, Pecera y Nevera
+  (Productos → Presentaciones y toppings). Arrancan en $0: ponles precio.
 - La primera vez carga los sabores, cervezas y licores de fábrica. **Cervezas y licor arrancan en $0**:
   ponles precio en Productos (salen en amarillo). Los que no tienen precio aparecen en gris y no se pueden vender.
 - Todo cambio se guarda con el botón **💾 Guardar cambios**.

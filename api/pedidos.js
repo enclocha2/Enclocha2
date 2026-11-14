@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, CONFIG_INICIAL } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, leerConfig } from './_lib/store.js';
+import { armarItem, ESTADOS, METODOS_PAGO } from '../catalog.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual } from './_lib/store.js';
 import { usuarioDe } from './_lib/auth.js';
 
 class ErrorUsuario extends Error {}
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
       const cliente = String(body.cliente || '').slice(0, 60).trim();
       if (!cliente) throw new ErrorUsuario('Escribe el nombre de la persona del pedido');
 
-      const cfg = (await leerConfig()) || CONFIG_INICIAL;
+      const cfg = await configActual();
       let items;
       try { items = (body.items || []).map((i) => armarItem(i, cfg)); }
       catch (e) { throw new ErrorUsuario(e.message); }
