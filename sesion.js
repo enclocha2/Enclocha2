@@ -17,6 +17,7 @@ export async function requerirSesion(...permisosPagina) {
     if (r.status === 401) { irALogin(); return new Promise(() => {}); }
     const data = await r.json();
     yoActual = data;
+    fijarDiasCerrados(data.diasCerrados); // días que no se trabaja: no se consulta nada
     if (permisosPagina.length && !puede(...permisosPagina)) {
       document.body.style.visibility = 'visible';
       montarNav(data);
@@ -83,9 +84,9 @@ export function cadaTanto(fn, ms) {
   setInterval(() => { if (!document.hidden && enHorarioOperacion()) fn(); }, ms);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && enHorarioOperacion()) fn(); });
 }
-import { enHorarioOperacion, textoPausa } from '/fechas.js';
+import { enHorarioOperacion, textoPausa, fijarDiasCerrados } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '43';
+export const VERSION = '44';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.

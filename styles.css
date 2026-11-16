@@ -1147,3 +1147,13 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .prod-sin-item { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .rep-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 0; border-top: 1px dashed var(--line); }
 .rep-grupo .reu { white-space: normal; }
+
+/* Días que no se trabaja (Inicio) */
+.dia-libre { margin: 0 0 16px; }
+.dl-estado { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.03); }
+.dl-estado.no { border-color: rgba(255, 90, 120, .5); background: rgba(255, 90, 120, .1); }
+.mini-btn { width: auto !important; padding: 8px 14px !important; font-size: .9rem !important; margin: 0 !important; }
+.dl-otros { margin-top: 8px; font-size: .9rem; }
+.dl-otros summary { cursor: pointer; color: var(--muted); }
+.dl-dia { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.chip .quedan { display: block; font-size: .7rem; color: #ffcf70; font-weight: 700; }

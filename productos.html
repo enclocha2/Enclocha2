@@ -173,6 +173,7 @@
         <label class="campo"><span>🥤 Vasos</span><input class="field" type="number" min="0" max="20" id="mrVasos"></label>
         <label class="campo"><span>de qué tamaño</span><select class="field" id="mrVaso"></select></label>
         <label class="campo"><span>🥢 Pitillos</span><input class="field" type="number" min="0" max="20" id="mrPitillos"></label>
+        <label class="campo"><span>🧊 Litros de base</span><input class="field" type="number" min="0" max="50" step="0.01" id="mrLitros"><small class="hint" id="mrLitrosTxt"></small></label>
         <label class="campo"><span>🍬 Dulces de cada grupo</span><input class="field" type="number" min="1" max="10" id="mrDulces"><small class="hint" id="mrDulcesTxt"></small></label>
         <label class="campo ancho"><span>🍺 Cerveza o producto que va incluido</span><select class="field" id="mrProducto"></select></label>
         <label class="ancho opcional"><input type="checkbox" id="mrOpcional" style="width:18px;height:18px;accent-color:#ff3fd1"> Es opcional (al vender se pregunta "¿lleva …?")</label>
@@ -410,14 +411,14 @@
     // ---------- Receta de cada presentación ----------
     function textoReceta(t) {
       const r = recetaDe(t, cfg), p = r.producto && cfg.productos.find((x) => x.id === r.producto);
-      return [r.vasos ? `🥤${r.vasos}` : '', `🥢${r.pitillos}`, `🍬${r.dulces * 4}`, p ? `🍺${r.productoOpcional ? '?' : ''}` : ''].filter(Boolean).join(' ');
+      return [r.vasos ? `🥤${r.vasos}` : '', r.litros ? `🧊${r.litros}L` : '', `🥢${r.pitillos}`, `🍬${r.dulces * 4}`, p ? `🍺${r.productoOpcional ? '?' : ''}` : ''].filter(Boolean).join(' ');
     }
     let mrTam = null;
     function abrirReceta(id) {
       mrTam = cfg.tamanos.find((x) => x.id === id); if (!mrTam) return;
       const r = recetaDe(mrTam, cfg);
       $('#mrNombre').textContent = mrTam.nombre;
-      $('#mrVasos').value = r.vasos; $('#mrPitillos').value = r.pitillos; $('#mrDulces').value = r.dulces;
+      $('#mrVasos').value = r.vasos; $('#mrPitillos').value = r.pitillos; $('#mrDulces').value = r.dulces; $('#mrLitros').value = r.litros || 0; litrosTxt();
       $('#mrVaso').innerHTML = '<option value="">—</option>' + cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === 'Tamaños').map((t) => `<option value="${t.id}" ${t.id === r.vaso ? 'selected' : ''}>Vaso ${esc(t.nombre)}</option>`).join('');
       $('#mrProducto').innerHTML = '<option value="">Ninguno</option>' + cfg.categorias.map((c) => {
         const ps = cfg.productos.filter((p) => p.categoria === c.id); if (!ps.length) return '';
@@ -428,11 +429,13 @@
     }
     const dulcesTxt = () => { const n = Math.max(1, Number($('#mrDulces').value) || 1); $('#mrDulcesTxt').textContent = `= ${n * 4} dulces en total (${n} aro/gusano, ${n} chicle/okaloka, ${n} paleta, ${n} bandera)`; };
     $('#mrDulces').addEventListener('input', dulcesTxt);
+    const litrosTxt = () => { const l = Number($('#mrLitros').value) || 0; $('#mrLitrosTxt').textContent = l ? `≈ ${Math.round((6 / l) * 10) / 10} por bolsa de 6 L · con 2 sabores, ${Math.round(l / 2 * 1000) / 1000} L de cada uno` : 'Sin base: no descuenta sabor'; };
+    $('#mrLitros').addEventListener('input', litrosTxt);
     $('#mrCancelar').addEventListener('click', () => $('#modalReceta').classList.remove('show'));
     $('#mrAuto').addEventListener('click', () => { delete mrTam.receta; $('#modalReceta').classList.remove('show'); marcar(); renderGranizado(); toast('Listo · toca Guardar cambios'); });
     $('#mrListo').addEventListener('click', () => {
       mrTam.receta = { vasos: Number($('#mrVasos').value) || 0, vaso: $('#mrVaso').value || null, pitillos: Number($('#mrPitillos').value) || 0,
-        dulces: Math.max(1, Number($('#mrDulces').value) || 1), producto: $('#mrProducto').value || null, productoOpcional: $('#mrOpcional').checked };
+        dulces: Math.max(1, Number($('#mrDulces').value) || 1), litros: Number($('#mrLitros').value) || 0, producto: $('#mrProducto').value || null, productoOpcional: $('#mrOpcional').checked };
       $('#modalReceta').classList.remove('show'); marcar(); renderGranizado(); toast('Listo · toca Guardar cambios');
     });
 

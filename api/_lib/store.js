@@ -451,3 +451,15 @@ export async function guardarPresupuestoBase(p) {
   if (redis) await redis.set(K('presupuesto:base'), p); else M().presupuestoBase = p;
   return p;
 }
+
+// ---------- Días que no se trabaja (para todas las sedes) ----------
+export async function leerDiasCerrados() {
+  const l = redis ? await redis.get('dias:cerrados') : mem.diasCerrados;
+  return Array.isArray(l) ? l : [];
+}
+export async function guardarDiasCerrados(lista) {
+  const hoy = jornadaDe(Date.now());
+  const l = [...new Set(lista)].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= hoy).sort().slice(0, 60); // solo de hoy en adelante
+  if (redis) await redis.set('dias:cerrados', l); else mem.diasCerrados = l;
+  return l;
+}

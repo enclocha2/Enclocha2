@@ -39,6 +39,8 @@
     </section>
 
     <div class="pausa" id="pausa" hidden></div>
+    <!-- ¿Hoy se trabaja? -->
+    <section class="dia-libre" id="diaLibre" hidden></section>
     <!-- Números de la jornada -->
     <section class="numeros" id="numeros"></section>
 
@@ -69,10 +71,42 @@
   <script type="module">
     import { pesos, agruparCuentas, estadoStock, TODOS_PERMISOS, partesDe } from '/catalog.js';
     import { requerirSesion, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, SECCIONES_NAV, puede, permitido } from '/sesion.js';
-    import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo, fechaHora } from '/fechas.js';
+    import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo, fechaHora, diasCerrados, fijarDiasCerrados, cerradoHoy } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const { usuario } = await requerirSesion();
+
+    // ---------- Días que no se trabaja ----------
+    // Con un botón: hoy (o cualquier día) no se trabaja → la app no consulta nada (no gasta créditos)
+    // y la página de domicilios dice que hoy no se atiende. Aplica para todas las sedes.
+    function pintarDiaLibre() {
+      const box = $('#diaLibre');
+      if (!puede('configuracion', 'cierre')) { box.hidden = true; return; }
+      box.hidden = false;
+      const H = hoy(), prox = [...diasCerrados].filter((d) => d > H).sort();
+      box.innerHTML = (cerradoHoy()
+        ? `<div class="dl-estado no">🚫 <b>Hoy no se trabaja.</b> La app está en pausa: no consulta nada y domicilios dice cerrado.<button class="btn mini-btn" data-dia="${H}" data-cerrar="0">✅ Sí se trabaja hoy</button></div>`
+        : `<div class="dl-estado"><span>📅 ¿Hoy no se va a trabajar?</span><button class="btn ghost mini-btn" data-dia="${H}" data-cerrar="1">🚫 Hoy no se trabaja</button></div>`)
+        + `<details class="dl-otros"><summary>Cerrar otro día${prox.length ? ` · ${prox.length} cerrado${prox.length === 1 ? '' : 's'}` : ''}</summary>
+            <div class="row" style="gap:8px;margin:8px 0"><input type="date" class="field" id="dlFecha" min="${sumarDias(H, 1)}" style="max-width:180px"><button class="btn ghost mini-btn" id="dlCerrar">🚫 No se trabaja ese día</button></div>
+            ${prox.map((d) => `<div class="dl-dia">🚫 ${esc(fechaLarga(d))} <button class="mini" data-dia="${d}" data-cerrar="0">Quitar</button></div>`).join('')}
+          </details>`;
+    }
+    async function cambiarDia(dia, cerrar) {
+      if (cerrar && dia === hoy() && !confirm('¿Seguro que hoy no se trabaja? La app deja de consultar y domicilios queda cerrado hasta que lo reabras.')) return;
+      try {
+        const r = await api('/api/ajustes?r=dias', { method: 'PUT', body: JSON.stringify({ dia, cerrado: cerrar }) });
+        fijarDiasCerrados(r.dias); pintarDiaLibre();
+        toast(cerrar ? (dia === hoy() ? '🚫 Listo: hoy no se trabaja' : '🚫 Día cerrado') : '✅ Listo: ese día sí se trabaja');
+        if (dia === hoy()) location.reload();
+      } catch (e) { toast(e.message, true); }
+    }
+    $('#diaLibre').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cerrar]');
+      if (b) return cambiarDia(b.dataset.dia, b.dataset.cerrar === '1');
+      if (e.target.id === 'dlCerrar') { const d = $('#dlFecha').value; if (!d) return toast('Escoge la fecha', true); cambiarDia(d, true); }
+    });
+    pintarDiaLibre();
     if (!puede('tomar')) document.querySelector('.a-tomar').remove();
     if (!puede('pedidos', 'cobrar')) document.querySelector('.a-pedidos').remove();
     if (!puede('ventas', 'cierre', 'reportes')) $('#numeros').remove();

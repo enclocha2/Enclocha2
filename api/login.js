@@ -1,5 +1,5 @@
 import { validar, firmar, sesion, cookieSesion, leerUsuarios, guardarUsuarios } from './_lib/auth.js';
-import { limitar } from './_lib/store.js';
+import { limitar, leerDiasCerrados } from './_lib/store.js';
 import { sedesCache, resolverSede } from './_lib/sede.js';
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     if (!yo) return res.status(401).json({ error: 'Sin sesión' });
     const sedes = (await sedesCache()).filter((s) => s.activa !== false || s.id === yo.sede).map(({ id, nombre, principal }) => ({ id, nombre, principal: !!principal }));
     return res.status(200).json({ usuario: yo.usuario, nombre: yo.nombre, rol: yo.rol, permisos: yo.permisos, admin: yo.rol === 'admin',
-      sede: await resolverSede(req), sedeFija: !!yo.sede, sedes });
+      sede: await resolverSede(req), sedeFija: !!yo.sede, sedes, diasCerrados: await leerDiasCerrados() });
   }
 
   if (req.method === 'POST') {

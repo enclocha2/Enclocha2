@@ -159,6 +159,7 @@
       if (r.tipo === 'producto') return '🍺 ' + (cfg?.productos.find((p) => p.id === r.id)?.nombre || r.id);
       if (r.tipo === 'tamano') return '🥤 Granizado ' + (cfg?.tamanos.find((t) => t.id === r.id)?.nombre || r.id);
       if (r.tipo === 'topping') return '🍬 ' + (cfg?.toppings.find((t) => t.id === r.id)?.nombre || r.id);
+      if (r.tipo === 'sabor') return '🧊 Base de ' + (cfg?.sabores.find((t) => t.id === r.id)?.nombre || r.id) + ' (litros según el tamaño)';
       if (r.tipo === 'tapa') return '🧢 Tapa de vaso ' + (cfg?.tamanos.find((t) => t.id === r.id)?.nombre || r.id) + ' (para llevar/domicilio)';
       return r.tipo;
     }
@@ -352,6 +353,19 @@
             <button class="mini" data-unir="${k}">🧩 Unir</button></div>`;
         }).join('')}</div>`;
     }
+    // Bases de granizado: una por sabor, en litros (bolsa de 6 L). Cada granizado descuenta según su tamaño
+    // (8 oz 0,24 L · 12 oz 0,375 L · 16 oz 0,5 L · 20 oz 0,6 L) repartido entre los sabores que lleva.
+    function saboresSinBase() {
+      if (!cfg) return [];
+      return cfg.sabores.filter((s) => s.activo && !items.some((i) => i.reglas?.some((r) => r.tipo === 'sabor' && r.id === s.id)));
+    }
+    function sugerirBases() {
+      const l = saboresSinBase();
+      return l.length ? `<div class="card aviso-sobran"><b>🧊 Agregar las bases de granizado</b>
+        <p class="hint" style="margin:4px 0 8px">Un ítem por sabor (${l.map((s) => esc(s.nombre)).join(', ')}), contado en <b>litros</b>, con la bolsa de 6 litros como empaque.
+        Cada granizado descuenta la base según su tamaño (de una bolsa salen 25 de 8 oz, 16 de 12 oz, 12 de 16 oz y 10 de 20 oz) y, si mezcla sabores, se reparte por partes iguales entre ellos.</p>
+        <button class="btn" id="crearBases" style="width:auto;padding:8px 16px">Agregar bases</button></div>` : '';
+    }
     function sugerirUnidades() {
       const l = unidadesMal();
       return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos se están contando con la unidad equivocada</b>
@@ -363,9 +377,19 @@
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
-      $('#sobran').insertAdjacentHTML('beforeend', sugerirRepetidos() + sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirBases() + sugerirRepetidos() + sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
       $('#organizarDulces')?.addEventListener('click', organizarDulces);
       $('#copasSinInv')?.addEventListener('click', copasSinInventario);
+      $('#crearBases')?.addEventListener('click', () => {
+        for (const sb of saboresSinBase()) {
+          const nombre = 'Base ' + sb.nombre;
+          const ya = items.find((i) => !i.reutilizable && claveNombre(i.nombre) === claveNombre(nombre));
+          if (ya) { ya.reglas = [...(ya.reglas || []), { tipo: 'sabor', id: sb.id, cantidad: 1 }]; ya.unidad = 'litro'; continue; }
+          let id = slug(nombre); while (items.some((i) => i.id === id)) id += '-2';
+          items.push({ id, nombre, categoria: 'sabores', unidad: 'litro', minimo: 6, activo: true, empaques: [{ nombre: 'bolsa', unidades: 6 }], reglas: [{ tipo: 'sabor', id: sb.id, cantidad: 1 }] });
+        }
+        marcar(); pintar(); toast('🧊 Bases agregadas · toca Guardar cambios y haz el conteo (en bolsas o litros)');
+      });
       document.querySelectorAll('[data-unir]').forEach((b) => b.addEventListener('click', async () => {
         const g = gruposRepetidos(items)[Number(b.dataset.unir)]; if (!g) return;
         const queda = document.querySelector(`input[name="rep${b.dataset.unir}"]:checked`)?.value;
@@ -613,7 +637,7 @@
 
     // ---------- Reglas ----------
     function opcionesRegla(tipo, sel) {
-      const lista = tipo === 'producto' ? cfg.productos : tipo === 'tamano' ? cfg.tamanos : tipo === 'tapa' ? cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === 'Tamaños') : tipo === 'topping' ? cfg.toppings : [];
+      const lista = tipo === 'producto' ? cfg.productos : tipo === 'tamano' ? cfg.tamanos : tipo === 'tapa' ? cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === 'Tamaños') : tipo === 'sabor' ? cfg.sabores : tipo === 'topping' ? cfg.toppings : [];
       return lista.map((x) => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
     }
     function abrirReglas(id) { enReglas = items.find((i) => i.id === id); enReglas.reglas ||= []; $('#mrNombre').textContent = enReglas.nombre; pintarReglas(); $('#modalReglas').classList.add('show'); }
@@ -626,6 +650,7 @@
             <option value="topping" ${r.tipo === 'topping' ? 'selected' : ''}>🍬 Topping</option>
             <option value="granizado" ${r.tipo === 'granizado' ? 'selected' : ''}>🍧 Cualquier granizado</option>
             <option value="tapa" ${r.tipo === 'tapa' ? 'selected' : ''}>🧢 Tapa (para llevar/domicilio)</option>
+            <option value="sabor" ${r.tipo === 'sabor' ? 'selected' : ''}>🧊 Base del sabor (litros)</option>
           </select>
           ${r.tipo !== 'granizado' ? `<select class="field" data-rk="${k}" data-rc="id">${opcionesRegla(r.tipo, r.id)}</select>` : '<span style="flex:1"></span>'}
           <span class="hint">×</span><input class="field dia" type="number" min="0" step="any" data-rk="${k}" data-rc="cantidad" value="${r.cantidad}">

@@ -4,7 +4,7 @@
 // POST /api/publico            → crear pedido a domicilio
 import { randomUUID, randomBytes } from 'node:crypto';
 import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida, itemBase, recetaDe, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
-import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock, leerPrestados, moverPrestados } from './_lib/store.js';
+import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock, leerPrestados, moverPrestados, leerDiasCerrados } from './_lib/store.js';
 import { horarioDe, jornadaActual, horaJornada, textoHorario, hoy } from '../fechas.js';
 import { DOM_DEFECTO } from './ajustes.js';
 import { conSede, sedesCache } from './_lib/sede.js';
@@ -36,7 +36,8 @@ function cotizar(dom, { ubicacion, zona }) {
 }
 const configurado = (dom) => (dom.local && dom.tarifas?.length) || dom.zonas?.length;
 
-function estadoAbierto(dom) {
+function estadoAbierto(dom, cerrados = []) {
+  if (dom.activo && cerrados.includes(jornadaActual())) return { abierto: false, motivo: dom.mensajeCerrado || 'Hoy no estamos atendiendo. ¡Te esperamos en la próxima jornada!' };
   if (!dom.activo) return { abierto: false, motivo: dom.mensaje || 'Por ahora no estamos recibiendo domicilios.' };
   if (!configurado(dom)) return { abierto: false, motivo: 'Estamos configurando los domicilios. Vuelve pronto.' };
   if (!dom.soloEnHorario) return { abierto: true };
@@ -80,7 +81,7 @@ async function handler(req, res) {
         toppings: cfg.toppings.filter((t) => t.activo && agotado('topping', t.id)).map((t) => t.id),
       };
       return res.status(200).json({
-        ...estadoAbierto(dom),
+        ...estadoAbierto(dom, await leerDiasCerrados()),
         // las cervezas que van incluidas (Coronita de la pecera, Corona de la nevera)
         menu: { tamanos, sabores: cfg.sabores.filter((s) => s.activo), toppings: cfg.toppings.filter((t) => t.activo),
           productos: cfg.productos.filter((p) => tamanos.some((t) => recetaDe(t, cfg).producto === p.id)).map(({ id, nombre, categoria, usa, sinInventario }) => ({ id, nombre, categoria, activo: true, precio: 1, ...(usa ? { usa } : {}), ...(sinInventario ? { sinInventario } : {}) })) },
@@ -100,7 +101,7 @@ async function handler(req, res) {
       const b = leer(req);
       if (b.web) return res.status(201).json({ ok: true }); // campo trampa para robots
       if (!(await limitar(`dom:${ip(req)}`, 5, 1800))) return res.status(429).json({ error: 'Ya enviaste varios pedidos. Si necesitas algo más, escríbenos.' });
-      const est = estadoAbierto(dom);
+      const est = estadoAbierto(dom, await leerDiasCerrados());
       if (!est.abierto) return res.status(400).json({ error: est.motivo });
 
       const cliente = txt(b.cliente, 60);

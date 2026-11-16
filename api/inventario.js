@@ -6,7 +6,7 @@ import { conSede } from './_lib/sede.js';
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const num = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
-const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado', 'tapa'];
+const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado', 'tapa', 'sabor'];
 
 async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');

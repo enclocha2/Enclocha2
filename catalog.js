@@ -175,18 +175,24 @@ function limpiarReceta(r) {
   return {
     vasos: ent(r.vasos, 20), vaso: r.vaso ? txt(r.vaso, 48) : null, pitillos: ent(r.pitillos, 20), dulces: Math.max(1, ent(r.dulces, 10)),
     producto: r.producto ? txt(r.producto, 48) : null, productoOpcional: !!r.productoOpcional,
+    ...(r.litros !== undefined && r.litros !== null && r.litros !== '' ? { litros: Math.min(50, Math.max(0, Math.round(Number(r.litros) * 1000) / 1000 || 0)) } : {}),
   };
 }
+// Base de granizado: cada bolsa trae 6 litros y rinde (en promedio) 25 de 8 oz, 16 de 12, 12 de 16 y 10 de 20
+export const LITROS_BOLSA = 6;
+export const RINDE_BOLSA = { 8: 25, 12: 16, 16: 12, 20: 10 };
+const litrosOz = (oz) => (RINDE_BOLSA[oz] ? Math.round((LITROS_BOLSA / RINDE_BOLSA[oz]) * 1000) / 1000 : 0);
 export function recetaAuto(t, cfg) {
   const n = normalizar(t.nombre);
   const buscarProd = (re) => cfg.productos.find((p) => re.test(normalizar(p.nombre)))?.id || null;
   const oz = (n.match(/\b(8|12|16|20)\b/) || [])[1];
   const vasoDe = (o) => o && (cfg.tamanos.find((x) => (x.seccion || 'Tamaños') === 'Tamaños' && new RegExp(`\\b${o}\\b`).test(normalizar(x.nombre)))?.id || null);
-  if (/pecera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 2, producto: buscarProd(/^coronita/), productoOpcional: false };
-  if (/nevera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 4, producto: buscarProd(/^corona(?!ita)/), productoOpcional: true };
-  if (/recarga/.test(n)) return { vasos: 0, vaso: null, pitillos: 1, dulces: 1, producto: null, productoOpcional: false };
+  const litrosNombre = Number((n.match(/(\d+(?:[.,]\d+)?)\s*(l|lt|litro)/) || [])[1]?.replace(',', '.')) || 0; // "Nevera 3 litros"
+  if (/pecera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 2, producto: buscarProd(/^coronita/), productoOpcional: false, litros: litrosNombre };
+  if (/nevera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 4, producto: buscarProd(/^corona(?!ita)/), productoOpcional: true, litros: litrosNombre };
+  if (/recarga/.test(n)) return { vasos: 0, vaso: null, pitillos: 1, dulces: 1, producto: null, productoOpcional: false, litros: litrosOz(oz) };
   const doble = /(\*|x)\s*2\b|\b2\s*(\*|x)|2\s*granizados/.test(n);
-  return { vasos: doble ? 2 : oz ? 1 : 0, vaso: vasoDe(oz), pitillos: doble ? 2 : 1, dulces: doble ? 2 : 1, producto: null, productoOpcional: false };
+  return { vasos: doble ? 2 : oz ? 1 : 0, vaso: vasoDe(oz), pitillos: doble ? 2 : 1, dulces: doble ? 2 : 1, producto: null, productoOpcional: false, litros: litrosOz(oz) * (doble ? 2 : 1) };
 }
 export const recetaDe = (t, cfg) => (t.receta ? { ...recetaAuto(t, cfg), ...t.receta } : recetaAuto(t, cfg));
 
@@ -276,7 +282,7 @@ export function armarItem(raw, cfg) {
     tipo: 'granizado', tamano: tam.id, tamanoNombre: tam.nombre,
     sabores: sabores.map((s) => ({ id: s.id, nombre: s.nombre })),
     incluidos, adicionales, precioUnit, cantidad, nota, subtotal: precioUnit * cantidad,
-    receta: { vaso: receta.vaso, vasos: receta.vasos, pitillos: receta.pitillos }, ...(producto ? { producto } : {}),
+    receta: { vaso: receta.vaso, vasos: receta.vasos, pitillos: receta.pitillos, litros: receta.litros || 0 }, ...(producto ? { producto } : {}),
   };
 }
 
@@ -390,6 +396,8 @@ export function consumoDe(items, inventario, ctx = {}) {
           const n = (it.tamano === r.id && rc?.vaso !== it.tamano ? 1 : 0) + (rc && rc.vaso === r.id ? rc.vasos : 0);
           if (n) sumar(inv.id, q * k * n);
         }
+        // Base del sabor: los litros de la presentación se reparten entre los sabores que lleva
+        if (r.tipo === 'sabor' && rc?.litros && (it.sabores || []).some((x) => x.id === r.id)) sumar(inv.id, (q * k * rc.litros) / it.sabores.length);
         if (r.tipo === 'tapa' && ctx.llevar) {
           const n = rc ? (rc.vaso === r.id ? rc.vasos : 0) : it.tamano === r.id ? 1 : 0;
           if (n) sumar(inv.id, q * k * n);
@@ -603,7 +611,7 @@ export function itemBase(t, cfg) {
   const p = rc.producto && !rc.productoOpcional && cfg.productos.find((x) => x.id === rc.producto);
   let producto = null;
   if (p) { try { const a = armarItem({ tipo: 'producto', productoId: p.id }, { ...cfg, productos: cfg.productos.map((x) => (x.id === p.id ? { ...x, activo: true, precio: x.precio || 1 } : x)) }); producto = { id: p.id, nombre: p.nombre, inv: a.inv }; } catch { /* sin inventario */ } }
-  return { tipo: 'granizado', tamano: t.id, cantidad: 1, incluidos: [], adicionales: [], receta: { vaso: rc.vaso, vasos: rc.vasos, pitillos: rc.pitillos }, ...(producto ? { producto } : {}) };
+  return { tipo: 'granizado', tamano: t.id, cantidad: 1, sabores: [], incluidos: [], adicionales: [], receta: { vaso: rc.vaso, vasos: rc.vasos, pitillos: rc.pitillos, litros: rc.litros || 0 }, ...(producto ? { producto } : {}) };
 }
 
 // ---------- Ítems reutilizables (ej. peceras de vidrio: se lavan y vuelven) ----------

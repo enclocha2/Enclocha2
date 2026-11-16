@@ -85,13 +85,19 @@ export const textoHorario = (s) => {
 // La app solo consulta sola desde la hora de abrir hasta 2 h después de cerrar
 // (para cobros tarde y el cierre de caja). Fuera de eso no gasta nada.
 export const MARGEN_ANTES = 0, MARGEN_DESPUES = 2;
+// Días que se decidió no trabajar (aunque sean de jornada): la app no consulta nada esos días
+export const diasCerrados = new Set();
+export const fijarDiasCerrados = (l) => { diasCerrados.clear(); for (const d of l || []) diasCerrados.add(d); };
+export const cerradoHoy = (t = Date.now()) => diasCerrados.has(jornadaDe(t));
 export function enHorarioOperacion(t = Date.now()) {
   const j = jornadaDe(t), h = horarioDe(j);
+  if (diasCerrados.has(j)) return false;
   if (!h) return false;
   const x = horaJornada(t) + new Date(t).getMinutes() / 60; // hora con minutos (0-5 a. m. = 24-29)
   return x >= h.abre - MARGEN_ANTES && x < h.cierra + MARGEN_DESPUES;
 }
 export function textoPausa() {
+  if (diasCerrados.has(jornadaActual())) return 'Hoy no se trabaja';
   const h = horarioDe(jornadaActual());
   return h ? `Hoy se activa a las ${textoHora(h.abre - MARGEN_ANTES)}` : 'Hoy no hay jornada';
 }

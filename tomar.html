@@ -190,6 +190,16 @@
       return min === null ? null : { n: Math.max(0, min), aviso };
     }
     const agotado = (tipo, id) => { const d = disponible(tipo, id); return !!d && d.n <= 0; };
+    // Base del sabor (litros): ¿cuántos granizados de este tamaño alcanzan? (null = no se controla)
+    function quedaSabor(id) {
+      const its = inv.items.filter((i) => i.activo !== false && i.reglas?.some((r) => r.tipo === 'sabor' && r.id === id));
+      if (!its.length) return null;
+      const t = item.tamano && cfg.tamanos.find((x) => x.id === item.tamano);
+      const litros = (t ? recetaDe(t, cfg).litros : 0) || 0.24; // sin tamaño: el más pequeño (8 oz)
+      const n = Math.max(1, item.sabores.includes(id) ? item.sabores.length : item.sabores.length + 1);
+      const r = restante();
+      return Math.min(...its.map((i) => Math.floor(((r[i.id] || 0) + 1e-9) / (litros / n))));
+    }
     const tagStock = (tipo, id) => {
       const d = disponible(tipo, id);
       if (!d) return '';
@@ -317,8 +327,10 @@
       const sinPrecio = tamanos.filter((t) => !t.precio).length;
       if (sinPrecio && puede('productos')) $('#tamanos').insertAdjacentHTML('beforeend', `<a class="hint aviso-ocultos" href="/productos#granizado">🙈 ${sinPrecio} presentaciones sin precio no se muestran · ponles precio →</a>`);
 
-      $('#sabores').innerHTML = sabores.map((s) => `
-        <button class="chip ${item.sabores.includes(s.id) ? 'on' : ''}" data-sabor="${s.id}">${esc(s.nombre)}</button>`).join('')
+      $('#sabores').innerHTML = sabores.map((s) => {
+        const q = quedaSabor(s.id), sel = item.sabores.includes(s.id), ag = q !== null && q <= 0 && !sel;
+        return `<button class="chip ${sel ? 'on' : ''} ${ag ? 'agot' : ''}" data-sabor="${s.id}" ${ag ? 'disabled title="No hay base de este sabor"' : ''}>${esc(s.nombre)}${ag ? ' 🔴' : q !== null && q <= 10 ? ` <small class="quedan">quedan ~${q}</small>` : ''}</button>`;
+      }).join('')
         || '<div class="empty">No hay sabores disponibles. Actívalos en el menú → Sabores.</div>';
 
       // Pecera, nevera, 2×12: varios dulces por grupo y, si aplica, la cerveza que va incluida
