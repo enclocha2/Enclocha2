@@ -11,7 +11,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     // Botones del login: solo los nombres de usuario activos
-    if (q.lista) return res.status(200).json({ usuarios: (await leerUsuarios()).filter((u) => u.activo !== false).map((u) => u.usuario) });
+    // Ya no se muestra la lista de usuarios en el login (por seguridad no se publica)
+    if (q.lista) return res.status(200).json({ usuarios: [] });
     const yo = await sesion(req);
     if (!yo) return res.status(401).json({ error: 'Sin sesión' });
     const sedes = (await sedesCache()).filter((s) => s.activa !== false || s.id === yo.sede).map(({ id, nombre, principal }) => ({ id, nombre, principal: !!principal }));
