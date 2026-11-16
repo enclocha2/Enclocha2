@@ -56,7 +56,7 @@ async function handler(req, res) {
           ...(it.soloCompras ? { soloCompras: true } : {}), // insumo que se compra pero no se le lleva stock (gas, bolsas de basura...)
           ...(it.tapa ? { tapa: txt(it.tapa, 48) } : {}), // vasos: ítem de las tapas que a veces vienen con ellos
           empaques: (Array.isArray(it.empaques) ? it.empaques : []).slice(0, 6)
-            .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)), ...(e.conTapa ? { conTapa: true } : {}) }))
+            .map((e) => ({ nombre: txt(e.nombre, 30), unidades: Math.max(0, num(e.unidades)), ...(e.conTapa ? { conTapa: true } : {}) }))
             .filter((e) => e.nombre && e.unidades > 0),
         });
       }

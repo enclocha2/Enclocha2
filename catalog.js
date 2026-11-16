@@ -407,7 +407,7 @@ const EMPAQUES_SUGERIDOS = [
   [/paleta de chamoy/, [['bolsa', 40]]],
   [/bandera/, [['bolsa', 520]]],
   [/pitillo/, [['paquete', 250]]],
-  [/vaso/, [['paquete con tapa', 20, true], ['paquete sin tapa', 20]]], // con tapa: 20 vasos + 20 tapas
+  [/vaso/, [['paquete de vasos con tapa', 20, true], ['paquete de vasos', 20]]], // con tapa: 20 vasos + 20 tapas
   [/coron/, [['caja', 24]]],
   [/aguila|pilsen|poker|club colombia|costenita|cordilleras|cerveza/, [['caja', 30], ['media caja', 15]]],
   [/soda/, [['paca 24', 24], ['paca 48', 48]]],

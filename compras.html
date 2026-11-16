@@ -144,6 +144,7 @@
     async function cargarInsumos() { try { ({ items: inventario } = await api('/api/inventario?lite=1')); } catch {} }
     await cargarInsumos();
     const fmt = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 2 });
+    const pl = (n, u) => (n === 1 || ['und', 'kg', 'g', 'ml'].includes(u) || /s$/.test(u) ? u : u + 's'); // vaso → vasos
     const tapaDe = (it) => it?.tapa && inventario.find((x) => x.id === it.tapa);
 
     function pintarInsumos() {
@@ -167,7 +168,10 @@
     function pintarPres() {
       if (!insumo) return;
       const t = tapaDe(insumo);
-      const ops = [['', `${insumo.unidad} suelto${insumo.unidad === 'und' ? 's' : ''}`], ...(insumo.empaques || []).map((e) => [e.nombre, `${e.nombre} · ${fmt(e.unidades)} ${insumo.unidad}${e.conTapa && t ? ` + ${fmt(e.unidades)} tapas` : ''}`])];
+      // los vasos solo se compran por paquete (con o sin tapa); lo demás también se puede por unidad suelta
+      const soloPaquete = !!insumo.tapa && (insumo.empaques || []).length;
+      const ops = [...(soloPaquete ? [] : [['', `${insumo.unidad === 'und' ? 'Por unidad' : pl(1, insumo.unidad) + ' suelto'}`]]), ...(insumo.empaques || []).map((e) => [e.nombre, `${e.nombre[0].toUpperCase() + e.nombre.slice(1)} · ${fmt(e.unidades)} ${pl(e.unidades, insumo.unidad)}${e.conTapa && t ? ` + ${fmt(e.unidades)} tapas` : ''}`])];
+      if (!ops.some(([v]) => v === presSel)) presSel = ops[0]?.[0] ?? '';
       $('#presentaciones').innerHTML = ops.map(([v, txt]) => `<button type="button" class="opt ${presSel === v ? 'on' : ''}" data-pres="${esc(v)}">${esc(txt)}</button>`).join('');
       calcular();
     }
@@ -175,7 +179,7 @@
       if (!insumo) return;
       const emp = (insumo.empaques || []).find((e) => e.nombre === presSel);
       const n = Number(form.cantidad.value) || 0, u = n * (emp ? emp.unidades : 1), t = emp?.conTapa && tapaDe(insumo);
-      $('#cantInfo').innerHTML = n ? `= <b>${fmt(u)} ${esc(insumo.unidad)}</b>${t ? ` + <b>${fmt(u)}</b> ${esc(t.nombre)}` : ''}${insumo.soloCompras ? '' : ' al inventario'}` : '';
+      $('#cantInfo').innerHTML = n ? `= <b>${fmt(u)} ${esc(pl(u, insumo.unidad))}</b>${t ? ` + <b>${fmt(u)}</b> ${esc(t.nombre)}` : ''}${insumo.soloCompras ? '' : ' al inventario'}` : '';
       const v = Number(form.valor.value) || 0;
       $('#valorInfo').innerHTML = v && u ? `≈ <b>${pesos(Math.round(v / u))}</b> por ${esc(insumo.unidad)}${emp ? ` · ${pesos(Math.round(v / n))} por ${esc(emp.nombre)}` : ''}` : '';
     }

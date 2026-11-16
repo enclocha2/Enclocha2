@@ -41,6 +41,7 @@ async function estandarizar(b, datos) {
   if (!it) throw new Error('Ese insumo ya no existe. Escoge otro de la lista.');
   const emp = b.presentacion ? (it.empaques || []).find((e) => e.nombre === b.presentacion) : null;
   if (b.presentacion && !emp) throw new Error('Esa presentación ya no existe para este insumo');
+  if (!emp && it.tapa && it.empaques?.length) throw new Error('Los vasos se compran por paquete: escoge "paquete de vasos" o "paquete de vasos con tapa"');
   const cantidad = Math.round((Number(b.cantidad) || 0) * 1000) / 1000;
   if (!(cantidad > 0)) throw new Error('Escribe la cantidad que se compró');
   const unidades = Math.round(cantidad * (emp ? emp.unidades : 1) * 1000) / 1000;
@@ -62,7 +63,7 @@ async function crearInsumo(b) {
   if (items.some((x) => normalizar(x.nombre) === normalizar(nombre))) throw new Error('Ya existe un insumo con ese nombre');
   let id = slug(nombre) || 'insumo'; while (items.some((x) => x.id === id)) id += '-2';
   const empaques = (Array.isArray(b.empaques) ? b.empaques : empaquesSugeridos(nombre)).slice(0, 6)
-    .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, Number(e.unidades) || 0), ...(e.conTapa ? { conTapa: true } : {}) })).filter((e) => e.nombre && e.unidades > 0);
+    .map((e) => ({ nombre: txt(e.nombre, 30), unidades: Math.max(0, Number(e.unidades) || 0), ...(e.conTapa ? { conTapa: true } : {}) })).filter((e) => e.nombre && e.unidades > 0);
   const it = {
     id, nombre, categoria: CATEGORIAS_COMPRA.some((c) => c.id === b.categoria) ? b.categoria : 'otros',
     unidad: UNIDADES_INV.includes(b.unidad) ? b.unidad : 'und', minimo: 0, reglas: [], activo: true, empaques,

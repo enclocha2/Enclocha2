@@ -187,14 +187,15 @@
     function vasosOrganizados() {
       return tamVasos().every((t) => {
         const v = items.find((i) => i.reglas?.some((r) => r.tipo === 'tamano' && r.id === t.id) && !i.reutilizable);
-        return v && v.tapa && items.some((x) => x.id === v.tapa) && v.empaques?.some((e) => e.conTapa) && v.empaques?.some((e) => !e.conTapa);
+        // solo dos formas de comprarlos: paquete de vasos (20) o paquete de vasos con tapa (20 + 20 tapas)
+        return v && v.tapa && items.some((x) => x.id === v.tapa) && v.empaques?.length === 2 && v.empaques.some((e) => e.nombre === 'paquete de vasos con tapa' && e.conTapa) && v.empaques.some((e) => e.nombre === 'paquete de vasos' && !e.conTapa);
       });
     }
     function sugerirTapas() {
       if (!cfg || !tamVasos().length || vasosOrganizados()) return '';
       return `<div class="card aviso-sobran"><b>🥤 Organizar vasos y tapas</b>
         <p class="hint" style="margin:4px 0 8px">Deja por cada tamaño (${tamVasos().map((t) => esc(t.nombre)).join(', ')}):
-        <b>Vasos icopor</b> con dos empaques — <b>paquete con tapa</b> (20 vasos + 20 tapas) y <b>paquete sin tapa</b> (20 vasos) — y sus <b>Tapas</b> aparte
+        <b>Vasos icopor</b> que se compran solo de dos formas — <b>paquete de vasos</b> (20 vasos) o <b>paquete de vasos con tapa</b> (20 vasos + 20 tapas) — y sus <b>Tapas</b> aparte
         (las sueltas se cuentan por unidad). Las tapas se descuentan solo en pedidos para llevar y domicilios. No se pierde el stock que ya tengas.</p>
         <button class="btn" id="crearTapas" style="width:auto;padding:8px 16px">Organizar vasos y tapas</button></div>`;
     }
@@ -241,8 +242,8 @@
           }
           vaso.nombre = `Vasos icopor ${t.nombre}`;
           vaso.tapa = tapa.id;
-          const otros = (vaso.empaques || []).filter((e) => !/paquete (con|sin) tapa/.test(e.nombre));
-          vaso.empaques = [{ nombre: 'paquete con tapa', unidades: 20, conTapa: true }, { nombre: 'paquete sin tapa', unidades: 20 }, ...otros].slice(0, 6);
+          vaso.unidad = 'vaso';
+          vaso.empaques = [{ nombre: 'paquete de vasos con tapa', unidades: 20, conTapa: true }, { nombre: 'paquete de vasos', unidades: 20 }];
         }
         marcar(); pintar(); toast('🥤 Vasos y tapas organizados · toca Guardar cambios y haz el conteo de las tapas');
       });
@@ -431,7 +432,7 @@
     function abrirEmp(id) { enEmp = items.find((i) => i.id === id); enEmp.empaques ||= []; $('#meNombre').textContent = enEmp.nombre; pintarEmp(); $('#modalEmp').classList.add('show'); }
     function pintarEmp() {
       $('#meLista').innerHTML = enEmp.empaques.map((e, k) => `<div class="fila">
-          <input class="field" data-ek="${k}" data-ec="nombre" value="${esc(e.nombre)}" maxlength="20" placeholder="bolsa, caja, paca...">
+          <input class="field" data-ek="${k}" data-ec="nombre" value="${esc(e.nombre)}" maxlength="30" placeholder="bolsa, caja, paca...">
           <span class="hint">=</span><input class="field dia" style="max-width:100px" type="number" min="0" step="any" data-ek="${k}" data-ec="unidades" value="${e.unidades}">
           <span class="hint">${esc(enEmp.unidad)}</span>${enEmp.tapa ? `<label class="reu"><input type="checkbox" data-ek="${k}" data-ec="conTapa" ${e.conTapa ? 'checked' : ''}> 🧢 trae tapas</label>` : ''}<button class="del" data-edel="${k}">🗑</button></div>`).join('') || '<p class="hint">Sin empaques: se cuenta solo por unidad.</p>';
     }
