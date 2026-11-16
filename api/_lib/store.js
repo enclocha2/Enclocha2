@@ -365,6 +365,17 @@ export async function listarMovs(n = 300) {
   const raw = redis ? await redis.lrange(K('inv:movs'), 0, n - 1) : (M().movs || []).slice(0, n);
   return raw.map((x) => (typeof x === 'string' ? JSON.parse(x) : x));
 }
+// Reutilizables prestados (peceras que están con clientes): { idItem: cantidad }
+export async function leerPrestados() {
+  const h = redis ? await redis.hgetall(K('inv:prestados')) : M().prestados;
+  return Object.fromEntries(Object.entries(h || {}).map(([k, v]) => [k, Number(v) || 0]).filter(([, v]) => v > 0));
+}
+export async function moverPrestados(deltas) {
+  const ids = Object.keys(deltas || {}).filter((k) => deltas[k]);
+  if (!ids.length) return;
+  if (redis) { const pl = redis.pipeline(); for (const id of ids) pl.hincrby(K('inv:prestados'), id, deltas[id]); await pl.exec(); }
+  else { M().prestados ||= {}; for (const id of ids) M().prestados[id] = Math.max(0, (M().prestados[id] || 0) + deltas[id]); }
+}
 export const invertir = (d) => Object.fromEntries(Object.entries(d || {}).map(([k, v]) => [k, -v]));
 
 // ---------- Límite de intentos (para la página pública) ----------

@@ -55,6 +55,7 @@
             <b class="hint" id="invUni"></b>
           </div>
           <span class="hint" id="invAyuda" hidden>Ej: 2 bolsas de aros (x100) → entran 200 und al inventario.</span>
+          <label class="con-tapas" id="invTapasBox" hidden><input type="checkbox" name="invTapas"> 🧢 Los vasos vienen con tapa (también entran las tapas)</label>
         </div>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
@@ -130,6 +131,7 @@
     const pintarInv = () => {
       const it = inventario.find((i) => i.id === form.invId.value);
       form.invCant.hidden = !it; form.invEmp.hidden = !it; $('#invAyuda').hidden = !it;
+      $('#invTapasBox').hidden = !it?.tapa;
       if (!it) { $('#invUni').textContent = ''; return; }
       const previo = form.invEmp.value;
       form.invEmp.innerHTML = `<option value="1">${esc(it.unidad)}</option>` + (it.empaques || []).map((e) => `<option value="${e.unidades}" data-n="${esc(e.nombre)}">${esc(e.nombre)} (x${e.unidades})</option>`).join('');
@@ -165,7 +167,7 @@
       form.proveedor.value = c.proveedor || '';
       if (conFecha) {
         form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago;
-        form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? '';
+        form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? ''; form.invTapas.checked = !!c.inventario?.tapa;
         fijarUnidad = !!c.inventario;
       } else { form.invId.value = c.inventario?.id || ''; form.invCant.value = ''; fijarUnidad = false; }
       pintarInv(); pintarPagos();
@@ -178,7 +180,7 @@
         insumo: form.insumo.value, categoria: form.categoria.value, fecha: form.fecha.value,
         cantidad: form.cantidad.value, unidad: form.unidad.value, valor: form.valor.value,
         pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
-        inventario: form.invId.value ? { id: form.invId.value, cantidad: (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1) } : null,
+        inventario: form.invId.value ? { id: form.invId.value, cantidad: (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1), conTapas: !$('#invTapasBox').hidden && form.invTapas.checked } : null,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       const antes = presu?.resumen.deVentas ?? null;

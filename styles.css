@@ -1118,3 +1118,14 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .reu { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); white-space: nowrap; cursor: pointer; }
 .reu input { accent-color: #33e1ff; width: 16px; height: 16px; }
 .tag-reu { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; color: #9ff0ff; background: rgba(51,225,255,.12); border: 1px solid rgba(51,225,255,.35); }
+/* Para llevar / para tomar aquí */
+.llevar-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.llevar-sel button { padding: 10px; border-radius: 12px; border: 1.5px solid var(--line); background: rgba(255,255,255,.04); color: inherit; font: 700 .92rem 'Nunito', sans-serif; cursor: pointer; }
+.llevar-sel button small { display: block; font-weight: 600; color: var(--muted); font-size: .75rem; }
+.llevar-sel button.on { border-color: transparent; background: var(--grad); color: #fff; }
+.llevar-sel button.on small { color: rgba(255,255,255,.85); }
+.tag-llevar { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; font-weight: 800; background: rgba(255, 207, 112, .15); border: 1px solid rgba(255, 207, 112, .45); color: #ffd98a; }
+.pecera-prestada { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: rgba(51,225,255,.08); border: 1px solid rgba(51,225,255,.35); font-size: .9rem; }
+.pecera-prestada.ok { opacity: .7; }
+.con-tapas { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(51,225,255,.08); border: 1px solid rgba(51,225,255,.35); cursor: pointer; font-weight: 700; }
+.con-tapas input { width: 18px; height: 18px; accent-color: #33e1ff; }

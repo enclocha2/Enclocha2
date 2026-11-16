@@ -351,7 +351,8 @@ export const PERIODOS_FIJO = [
 // cantidad = cuánto se descuenta por cada uno.
 export const UNIDADES_INV = ['und', 'vaso', 'bolsa', 'kg', 'g', 'litro', 'ml', 'botella', 'lata', 'paquete'];
 
-export function consumoDe(items, inventario) {
+// ctx.llevar: pedido para llevar o a domicilio → también se gastan las tapas (una por vaso, según su tamaño)
+export function consumoDe(items, inventario, ctx = {}) {
   const deltas = {};
   const sumar = (id, n) => { deltas[id] = Math.round(((deltas[id] || 0) - n) * 1000) / 1000; };
   for (const inv of inventario || []) {
@@ -368,6 +369,10 @@ export function consumoDe(items, inventario) {
         if (r.tipo === 'granizado') sumar(inv.id, q * k * (rc ? rc.pitillos : 1));
         if (r.tipo === 'tamano') {
           const n = (it.tamano === r.id && rc?.vaso !== it.tamano ? 1 : 0) + (rc && rc.vaso === r.id ? rc.vasos : 0);
+          if (n) sumar(inv.id, q * k * n);
+        }
+        if (r.tipo === 'tapa' && ctx.llevar) {
+          const n = rc ? (rc.vaso === r.id ? rc.vasos : 0) : it.tamano === r.id ? 1 : 0;
           if (n) sumar(inv.id, q * k * n);
         }
         if (r.tipo === 'topping') {
@@ -396,6 +401,8 @@ const EMPAQUES_SUGERIDOS = [
   [/paleta de chamoy/, [['bolsa', 40]]],
   [/bandera/, [['bolsa', 520]]],
   [/pitillo/, [['paquete', 250]]],
+  [/tapa/, [['paquete', 50]]],
+  [/vaso/, [['paquete', 20]]],
   [/coron/, [['caja', 24]]],
   [/aguila|pilsen|poker|club colombia|costenita|cordilleras|cerveza/, [['caja', 30], ['media caja', 15]]],
   [/soda/, [['paca 24', 24], ['paca 48', 48]]],
@@ -421,11 +428,11 @@ export function faltantes(deltas, stock, inventario) {
     const it = (inventario || []).find((x) => x.id === id);
     if (!it || it.activo === false) continue;
     const hay = Number(stock[id] || 0);
-    if (hay + d < 0) out.push({ id, nombre: it.nombre, hay: Math.max(0, hay), unidad: it.unidad });
+    if (hay + d < 0) out.push({ id, nombre: it.nombre, hay: Math.max(0, hay), unidad: it.unidad, ...(it.reutilizable ? { reu: true } : {}) });
   }
   return out;
 }
-export const textoFaltantes = (f) => f.map((x) => x.hay > 0 ? `${x.nombre} (solo quedan ${x.hay})` : `${x.nombre} (agotado)`).join(', ');
+export const textoFaltantes = (f) => f.map((x) => x.reu ? `${x.nombre} (${x.hay > 0 ? `solo hay ${x.hay} libre${x.hay === 1 ? '' : 's'}` : 'todas están prestadas: marca las devueltas en Pedidos'})` : x.hay > 0 ? `${x.nombre} (solo quedan ${x.hay})` : `${x.nombre} (agotado)`).join(', ');
 
 // ---------- Domicilios: distancia y tarifa ----------
 // Distancia en línea recta (km) entre dos puntos {lat, lng}
@@ -586,4 +593,16 @@ export function itemBase(t, cfg) {
 export function sinReutilizables(consumo, inventario) {
   const reu = new Set((inventario || []).filter((i) => i.reutilizable).map((i) => i.id));
   return Object.fromEntries(Object.entries(consumo).filter(([id]) => !reu.has(id)));
+}
+
+// Disponibles de verdad: a los reutilizables (peceras) se les restan los que están prestados
+export function stockDisponible(stock, inventario, prestados = {}) {
+  const r = { ...stock };
+  for (const i of inventario || []) if (i.reutilizable) r[i.id] = (r[i.id] || 0) - (prestados[i.id] || 0);
+  return r;
+}
+// Lo que queda prestado con un pedido (solo los reutilizables): { idItem: cantidad }
+export function prestamoDe(consumo, inventario) {
+  const reu = new Set((inventario || []).filter((i) => i.reutilizable).map((i) => i.id));
+  return Object.fromEntries(Object.entries(consumo).filter(([id, d]) => reu.has(id) && d < 0).map(([id, d]) => [id, -d]));
 }

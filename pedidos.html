@@ -175,7 +175,7 @@
     const ACCIONES = {
       encamino: 'Despachó',
       preparando: 'Preparó', entregado: 'Entregó', cancelado: 'Canceló', nuevo: 'Devolvió',
-      pagado: 'Cobró', 'pago-deshecho': 'Deshizo cobro',
+      pagado: 'Cobró', 'pago-deshecho': 'Deshizo cobro', devuelto: '🐟 Recibió la pecera',
     };
 
     let cuentasMap = new Map();
@@ -237,11 +237,14 @@
       if (!puede('cancelar')) acts = acts.replace(/<button[^>]*data-cancelar[^>]*>.*?<\/button>/g, '');
       return `<div class="ped ${flash ? 'flash' : ''} ${p.estado === 'encamino' ? 'encamino' : ''}">
         <div class="head"><span class="num">#${p.numero}</span><span class="hora">${hora(p.creado)}</span></div>
-        <div class="cli">👤 ${esc(p.cliente)}${esDom ? '<span class="dom-tag">🛵 DOMICILIO</span>' : ''} <span class="hint">· ${n} producto${n === 1 ? '' : 's'}</span>${p.estado === 'encamino' ? ' <span class="dom-tag">EN CAMINO</span>' : ''}</div>
+        <div class="cli">👤 ${esc(p.cliente)}${esDom ? '<span class="dom-tag">🛵 DOMICILIO</span>' : p.llevar ? ' <span class="tag-llevar">🥡 PARA LLEVAR</span>' : ''} <span class="hint">· ${n} producto${n === 1 ? '' : 's'}</span>${p.estado === 'encamino' ? ' <span class="dom-tag">EN CAMINO</span>' : ''}</div>
         ${domBox}
         <div class="meta">✍️ Tomó: <b>${esc(p.tomadoPor || '—')}</b></div>
         ${bloquePago(p)}
         ${grs}${bebidas}${d.costo ? `<div class="gr">🛵 Domicilio · ${pesos(d.costo)}</div>` : ''}
+        ${p.prestamo && p.estado !== 'cancelado' ? (p.devuelto
+          ? `<div class="pecera-prestada ok">🐟 Pecera devuelta ${hora(p.devuelto)}</div>`
+          : `<div class="pecera-prestada"><span>🐟 <b>${Object.values(p.prestamo).reduce((a, b) => a + b, 0)} pecera(s) prestada(s)</b> · cuando la devuelvan, márcala</span>${puede('pedidos') || puede('cobrar') ? `<button class="ok" data-id="${p.id}" data-devolver="1">✅ Devuelta</button>` : ''}</div>`) : ''}
         <div class="total" style="font-size:1.1rem;margin:8px 0 0"><span>Total</span><span>${pesos(p.total)}</span></div>
         <div class="acts">${acts}</div>
         ${hist ? `<div class="hist">${hist}</div>` : ''}
@@ -334,6 +337,7 @@
         return cobrarCuenta(cuentaDe(p), b.dataset.cobrar);
       }
       if (b.dataset.despagar) return actualizar(id, { pago: { pagado: false } });
+      if (b.dataset.devolver) { const p = pedidos.find((x) => x.id === id); if (p) p.devuelto = Date.now(); render(); try { await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ id, devolver: true }) }); } catch (err) { toast(err.message, true); } estado.rev = null; return cargar(); }
       if (b.dataset.cancelar) {
         aCancelar = id;
         $('#mcNum').textContent = '#' + (pedidos.find((p) => p.id === id)?.numero ?? '');

@@ -37,9 +37,10 @@ async function validarInventario(b) {
   const cantidad = Math.round((Number(b.inventario.cantidad) || 0) * 1000) / 1000;
   if (!it) throw new Error('El ítem de inventario no existe');
   if (!(cantidad > 0)) throw new Error('Escribe cuánto entra al inventario');
-  return { id: it.id, nombre: it.nombre, unidad: it.unidad, cantidad };
+  const tapa = b.inventario.conTapas && it.tapa && items.some((x) => x.id === it.tapa) ? it.tapa : null; // vasos con tapa
+  return { id: it.id, nombre: it.nombre, unidad: it.unidad, cantidad, ...(tapa ? { tapa } : {}) };
 }
-const entrada = (inv, signo, extra) => inv && moverStock({ [inv.id]: signo * inv.cantidad }, extra);
+const entrada = (inv, signo, extra) => inv && moverStock({ [inv.id]: signo * inv.cantidad, ...(inv.tapa ? { [inv.tapa]: signo * inv.cantidad } : {}) }, extra);
 
 // Vercel Hobby permite máximo 12 funciones: /api/compras?r=gastosfijos y ?r=presupuesto se atienden aquí
 const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');

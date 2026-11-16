@@ -3,8 +3,8 @@
 // GET  /api/publico?seguir=ID&t=TOKEN → estado de un pedido
 // POST /api/publico            → crear pedido a domicilio
 import { randomUUID, randomBytes } from 'node:crypto';
-import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida, itemBase, recetaDe, sinReutilizables } from '../catalog.js';
-import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock } from './_lib/store.js';
+import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida, itemBase, recetaDe, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
+import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock, leerPrestados, moverPrestados } from './_lib/store.js';
 import { horarioDe, jornadaActual, horaJornada, textoHorario, hoy } from '../fechas.js';
 import { DOM_DEFECTO } from './ajustes.js';
 import { conSede, sedesCache } from './_lib/sede.js';
@@ -70,10 +70,11 @@ async function handler(req, res) {
       const cfg = await configActual();
       const tamanos = cfg.tamanos.filter((t) => t.activo && t.precio && SECCIONES_DOMICILIO.includes(t.seccion || 'Tamaños'));
       // Lo que está agotado según el inventario (para mostrarlo bloqueado)
-      const [inventario, stock] = await Promise.all([leerInventario(), leerStock()]);
+      const [inventario, stockBruto, prestados] = await Promise.all([leerInventario(), leerStock(), leerPrestados()]);
+      const stock = stockDisponible(stockBruto, inventario, prestados);
       const agotado = (tipo, id) => inventario.some((it) => it.activo !== false && (it.reglas || []).some((r) => r.tipo === tipo && r.id === id && (stock[it.id] || 0) < (r.cantidad || 1)));
       const granizadoAgotado = inventario.some((it) => it.activo !== false && (it.reglas || []).some((r) => r.tipo === 'granizado' && (stock[it.id] || 0) < (r.cantidad || 1)));
-      const sinStock = (t) => faltantes(consumoDe([itemBase(t, cfg)], inventario), stock, inventario).length > 0; // vasos, pitillos, cerveza incluida
+      const sinStock = (t) => faltantes(consumoDe([itemBase(t, cfg)], inventario, { llevar: true }), stock, inventario).length > 0; // vasos, pitillos, cerveza incluida
       const agotados = {
         tamanos: granizadoAgotado ? tamanos.map((t) => t.id) : tamanos.filter((t) => agotado('tamano', t.id) || sinStock(t)).map((t) => t.id),
         toppings: cfg.toppings.filter((t) => t.activo && agotado('topping', t.id)).map((t) => t.id),
@@ -134,8 +135,9 @@ async function handler(req, res) {
       if (pagaCon && pagaCon < total) return res.status(400).json({ error: 'El valor con el que pagas es menor que el total' });
 
       const inventario = await leerInventario();
-      const consumo = consumoDe(items, inventario);
-      const falta = faltantes(consumo, await leerStock(), inventario);
+      const consumo = consumoDe(items, inventario, { llevar: true }); // a domicilio: lleva tapas
+      const [stockAct, prestados] = await Promise.all([leerStock(), leerPrestados()]);
+      const falta = faltantes(consumo, stockDisponible(stockAct, inventario, prestados), inventario);
       if (falta.length) return res.status(400).json({ error: `Lo sentimos, se nos acabó: ${falta.map((x) => x.nombre).join(', ')}. Cambia tu pedido.` });
 
       const t = Date.now(), id = randomUUID();
@@ -153,7 +155,10 @@ async function handler(req, res) {
         tomadoPor: '🛵 Web', creado: t,
         historial: [{ accion: 'tomado', usuario: '🛵 Cliente (web)', en: t }],
       };
-      pedido.inventario = sinReutilizables(consumo, inventario); // las peceras de vidrio no se descuentan
+      pedido.inventario = sinReutilizables(consumo, inventario); // las peceras de vidrio no se descuentan…
+      const prestamo = prestamoDe(consumo, inventario);           // …quedan prestadas hasta que vuelvan
+      if (Object.keys(prestamo).length) { pedido.prestamo = prestamo; await moverPrestados(prestamo); }
+      pedido.llevar = true;
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario: '🛵 Web' });
       return res.status(201).json({ id, token: pedido.domicilio.token, numero: pedido.numero, total });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock } from './_lib/store.js';
+import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
 
@@ -58,8 +58,10 @@ async function handler(req, res) {
 
       // Inventario: si algo está agotado o no alcanza, no se deja tomar el pedido
       const inventario = await leerInventario();
-      const consumo = consumoDe(items, inventario);
-      const falta = faltantes(consumo, await leerStock(), inventario);
+      const llevar = !!body.llevar;
+      const consumo = consumoDe(items, inventario, { llevar });
+      const [stockAct, prestados] = await Promise.all([leerStock(), leerPrestados()]);
+      const falta = faltantes(consumo, stockDisponible(stockAct, inventario, prestados), inventario);
       if (falta.length) throw new ErrorUsuario(`No hay suficiente inventario: ${textoFaltantes(falta)}`);
 
       const t = Date.now();
@@ -79,7 +81,10 @@ async function handler(req, res) {
         historial: [{ accion: 'tomado', usuario, en: t }],
       };
       // Inventario: descontar lo que consume este pedido
-      pedido.inventario = sinReutilizables(consumo, inventario); // las peceras de vidrio no se descuentan
+      pedido.inventario = sinReutilizables(consumo, inventario); // las peceras de vidrio no se descuentan…
+      const prestamo = prestamoDe(consumo, inventario);           // …quedan prestadas hasta que vuelvan
+      if (Object.keys(prestamo).length) { pedido.prestamo = prestamo; await moverPrestados(prestamo); }
+      if (llevar) pedido.llevar = true;
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario });
       const resp = { pedido };
@@ -129,12 +134,23 @@ async function handler(req, res) {
       if (body.estado === 'cancelado' && !yo.puede('cancelar')) return prohibido('No tienes permiso para cancelar pedidos');
       if (body.estado !== undefined && body.estado !== 'cancelado' && !yo.puede('pedidos')) return prohibido('No tienes permiso para despachar pedidos');
       if (body.pago !== undefined && !yo.puede('cobrar')) return prohibido('No tienes permiso para cobrar');
+      // Pecera devuelta (se lavó y queda disponible otra vez)
+      if (body.devolver) {
+        if (!yo.puede('pedidos', 'cobrar')) return prohibido('No tienes permiso');
+        if (pedido.prestamo && !pedido.devuelto) {
+          await moverPrestados(invertir(pedido.prestamo));
+          pedido.devuelto = t; pedido.historial.push({ accion: 'devuelto', usuario, en: t });
+          await guardar(pedido);
+        }
+        return res.status(200).json({ pedido });
+      }
       if (body.estado !== undefined) {
         if (!ESTADOS.includes(body.estado)) throw new ErrorUsuario('Estado inválido');
         pedido.estado = body.estado;
         pedido.historial.push({ accion: body.estado, usuario, en: t });
         if (body.estado === 'cancelado') {
           await anularVenta(pedido); // un pedido cancelado no cuenta como venta
+          if (pedido.prestamo && !pedido.devuelto) { await moverPrestados(invertir(pedido.prestamo)); pedido.devuelto = t; } // la pecera queda libre
           if (pedido.inventario && !pedido.inventarioDevuelto) { // y lo que consumió vuelve al inventario
             await moverStock(invertir(pedido.inventario), { tipo: 'cancelado', pedido: pedido.numero, cliente: pedido.cliente, usuario });
             pedido.inventarioDevuelto = true;

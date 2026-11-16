@@ -34,6 +34,10 @@
         <input class="field" id="cliente" maxlength="60" placeholder="Nombre de la persona" autocomplete="off" />
         <div id="sugCuentas"></div>
         <div class="cuenta-banner" id="bannerCuenta" hidden></div>
+        <div class="llevar-sel" id="llevarSel">
+          <button type="button" class="on" data-llevar="0">🍹 Para tomar aquí</button>
+          <button type="button" data-llevar="1">🥡 Para llevar <small>(lleva tapa)</small></button>
+        </div>
       </div>
 
       <nav class="tabs" id="tabs"></nav>
@@ -166,11 +170,12 @@
     await cargarInv();
     function restante() {
       const r = { ...inv.stock };
-      const cons = consumoDe(carrito.map((d) => armar(d)).filter(Boolean), inv.items);
+      const cons = consumoDe(carrito.map((d) => armar(d)).filter(Boolean), inv.items, { llevar });
       for (const [id, d] of Object.entries(cons)) r[id] = (r[id] || 0) + d;
       return r;
     }
-    const faltaPara = (armados) => faltantes(consumoDe(armados, inv.items), restante(), inv.items);
+    let llevar = false; // para llevar: también se gastan las tapas
+    const faltaPara = (armados) => faltantes(consumoDe(armados, inv.items, { llevar }), restante(), inv.items);
     // cuántas unidades se pueden vender de algo (null = no se controla con inventario)
     function disponible(tipo, id) {
       const r = restante();
@@ -485,6 +490,8 @@
     $('#bbAgregar').addEventListener('click', () => $('#agregar').click());
     $('#bbEnviar').addEventListener('click', () => $('#enviar').click());
     $('#vaciar').addEventListener('click', () => { carrito = []; render(); });
+    function ponerLlevar(v) { llevar = v; document.querySelectorAll('#llevarSel [data-llevar]').forEach((b) => b.classList.toggle('on', (b.dataset.llevar === '1') === v)); }
+    $('#llevarSel').addEventListener('click', (e) => { const b = e.target.closest('[data-llevar]'); if (!b) return; ponerLlevar(b.dataset.llevar === '1'); render(); });
 
     $('#agregar').addEventListener('click', () => {
       carrito.push(structuredClone(item));
@@ -544,11 +551,11 @@
       try {
         const { pedido } = await api('/api/pedidos', {
           method: 'POST',
-          body: JSON.stringify({ cliente: cliente(), items: carrito, pago }),
+          body: JSON.stringify({ cliente: cliente(), items: carrito, pago, llevar }),
         });
         $('#modalPago').classList.remove('show');
         mostrarOk(pedido);
-        carrito = []; item = nuevo(); tab = 'granizados';
+        carrito = []; item = nuevo(); tab = 'granizados'; ponerLlevar(false);
         $('#cliente').value = ''; $('#nota').value = '';
         await cargarInv(); render(); renderSugerencias(); cargarCuentas();
       } catch (err) {
@@ -565,7 +572,7 @@
       btn.disabled = true; btn.textContent = 'Agregando...';
       try {
         const ultimo = modoCuenta.abiertos[modoCuenta.abiertos.length - 1];
-        const r = await api('/api/pedidos', { method: 'POST', body: JSON.stringify({ cuenta: ultimo.id, items: carrito }) });
+        const r = await api('/api/pedidos', { method: 'POST', body: JSON.stringify({ cuenta: ultimo.id, items: carrito, llevar }) });
         $('#okTitulo').textContent = `✅ Pedido #${r.pedido.numero} agregado a la cuenta`;
         $('#okAviso').innerHTML = `Se sumó <b>${pesos(r.pedido.total)}</b> a la cuenta de
           <span class="nom">${esc(r.pedido.cliente)}</span>
@@ -573,7 +580,7 @@
           (${r.cuentaPedidos} pedidos). Paga en la barra con ese nombre.`;
         $('#okQR').innerHTML = '';
         $('#modalOk').classList.add('show');
-        carrito = []; item = nuevo(); tab = 'granizados'; $('#nota').value = '';
+        carrito = []; item = nuevo(); tab = 'granizados'; $('#nota').value = ''; ponerLlevar(false);
         await cargarInv(); salirCuenta(true);
         cargarCuentas();
       } catch (err) {

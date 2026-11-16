@@ -1,12 +1,12 @@
 import { sesion } from './_lib/auth.js';
-import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez } from './_lib/store.js';
-import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos } from '../catalog.js';
+import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez, leerPrestados } from './_lib/store.js';
+import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos, stockDisponible } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const num = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
-const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado'];
+const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado', 'tapa'];
 
 async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -25,8 +25,9 @@ async function handler(req, res) {
         items = items.map((it) => { if (it.empaques?.length) return it; const e = empaquesSugeridos(it.nombre); if (e.length) cambio = true; return { ...it, empaques: e }; });
         if (cambio) await guardarInventario(items);
       }
-      const [stock, movs] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300)]);
-      return res.status(200).json({ items, stock, movs, admin: yo.puede('inventario_config') });
+      const [stock, movs, prestados] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300), leerPrestados()]);
+      // lite (tomar pedido): el stock de los reutilizables ya viene sin los prestados
+      return res.status(200).json({ items, stock: q.lite ? stockDisponible(stock, items, prestados) : stock, prestados, movs, admin: yo.puede('inventario_config') });
     }
 
     // PUT { items } → guardar definiciones (solo administradores)
@@ -52,6 +53,7 @@ async function handler(req, res) {
             .map((r) => ({ tipo: r.tipo, id: r.tipo === 'granizado' ? null : txt(r.id, 48), cantidad: Math.max(0, num(r.cantidad)) || 1 })),
           activo: it.activo !== false,
           ...(it.reutilizable ? { reutilizable: true } : {}),
+          ...(it.tapa ? { tapa: txt(it.tapa, 48) } : {}), // vasos: ítem de las tapas que a veces vienen con ellos
           empaques: (Array.isArray(it.empaques) ? it.empaques : []).slice(0, 6)
             .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)) }))
             .filter((e) => e.nombre && e.unidades > 0),
@@ -79,7 +81,10 @@ async function handler(req, res) {
         delta = num(cantidad - actual);
         if (!delta) return res.status(200).json({ ok: true, sinCambio: true });
       }
-      await moverStock({ [it.id]: delta }, { tipo: b.tipo, nota: txt(b.nota, 120), usuario, nombre: it.nombre });
+      const deltas = { [it.id]: delta };
+      // Vasos que vienen con tapa: entran también las tapas
+      if (b.tipo === 'entrada' && b.conTapas && it.tapa && items.some((x) => x.id === it.tapa)) deltas[it.tapa] = (deltas[it.tapa] || 0) + delta;
+      await moverStock(deltas, { tipo: b.tipo, nota: txt(b.nota, 120) + (deltas[it.tapa] && it.tapa !== it.id ? ' (con tapas)' : ''), usuario, nombre: it.nombre });
       return res.status(200).json({ ok: true, delta });
     }
 
