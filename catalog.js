@@ -635,3 +635,21 @@ export function baseMichelada(prod, productos) {
     || cands.filter((x) => normalizar(x.nombre).startsWith(resto) || resto.startsWith(normalizar(x.nombre))).sort((a, b) => Math.abs(a.nombre.length - resto.length) - Math.abs(b.nombre.length - resto.length))[0]
     || null;
 }
+
+// ---------- Ítems repetidos del inventario ----------
+// Mismo nombre (sin importar plurales, "de", tildes) o la misma regla de descuento → probablemente repetidos.
+export const claveNombre = (n) => normalizar(n).replace(/\b(de|del|la|el|los|las|y)\b/g, ' ').split(/[^a-z0-9]+/).filter(Boolean).map((w) => w.replace(/(es|s)$/, '')).join(' ');
+export function gruposRepetidos(items) {
+  const padre = new Map(items.map((i) => [i.id, i.id]));
+  const raiz = (x) => (padre.get(x) === x ? x : raiz(padre.get(x)));
+  const unir = (a, b) => padre.set(raiz(a), raiz(b));
+  const porClave = new Map();
+  for (const i of items) {
+    if (i.reutilizable) continue;
+    const claves = [`n:${claveNombre(i.nombre)}`, ...(i.reglas || []).filter((r) => r.tipo !== 'granizado').map((r) => `r:${r.tipo}:${r.id}`)];
+    for (const k of claves) { if (porClave.has(k)) unir(i.id, porClave.get(k)); else porClave.set(k, i.id); }
+  }
+  const g = new Map();
+  for (const i of items) { if (i.reutilizable) continue; const r = raiz(i.id); g.set(r, [...(g.get(r) || []), i]); }
+  return [...g.values()].filter((l) => l.length > 1);
+}

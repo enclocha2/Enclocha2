@@ -1145,3 +1145,5 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .emp-res { font-size: .78rem; color: var(--muted); width: 100%; }
 .version { font-size: .7rem; color: var(--muted); opacity: .7; text-align: center; padding: 4px 0 8px; }
 .prod-sin-item { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.rep-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.rep-grupo .reu { white-space: normal; }

@@ -1,5 +1,5 @@
 import { sesion } from './_lib/auth.js';
-import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez, leerPrestados } from './_lib/store.js';
+import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez, leerPrestados, configActual, guardarConfig, leerSedes, enSede } from './_lib/store.js';
 import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos, stockDisponible, normalizar } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
@@ -35,6 +35,25 @@ async function handler(req, res) {
           return { ...it, unidad: 'vaso', empaques: [{ nombre: 'paquete de vasos con tapa', unidades: 20, ...(it.tapa ? { conTapa: true } : {}) }, { nombre: 'paquete de vasos', unidades: 20 }].filter((e) => it.tapa || !/con tapa/.test(e.nombre)) };
         });
         if (cambio) await guardarInventario(items);
+      }
+      // Aros y gusanos van en bolsas separadas: si quedaron en un mismo ítem ("Gomitas"), se separan solos
+      const junto = items.find((it) => ['aro', 'gusano'].every((t) => it.reglas?.some((r) => r.tipo === 'topping' && r.id === t)));
+      if (junto) {
+        let gid = 'gusanos'; while (items.some((i) => i.id === gid)) gid += '-2';
+        const gus = { ...structuredClone(junto), id: gid, nombre: 'Gusanos', reglas: junto.reglas.filter((r) => !(r.tipo === 'topping' && r.id === 'aro')) };
+        junto.nombre = 'Aros';
+        junto.reglas = junto.reglas.filter((r) => !(r.tipo === 'topping' && r.id === 'gusano'));
+        items = [...items, gus];
+        await guardarInventario(items);
+        // la "Adición gusano" pasa a descontar de Gusanos
+        const cfg = await configActual();
+        let cambio = false;
+        for (const p of cfg.productos) {
+          if (p.invItem && /gusano/.test(normalizar(p.nombre)) && (p.invItem.ops || [{ id: p.invItem.id }]).some((o) => o.id === junto.id)) {
+            p.invItem = { id: gid, ops: [{ id: gid, nombre: 'Gusanos' }], cantidad: p.invItem.cantidad || 1 }; cambio = true;
+          } else if (p.invItem?.ops?.some((o) => o.id === junto.id)) { p.invItem.ops = p.invItem.ops.map((o) => (o.id === junto.id ? { ...o, nombre: 'Aros' } : o)); cambio = true; }
+        }
+        if (cambio) { cfg.version = (cfg.version || 1) + 1; await guardarConfig(cfg); }
       }
       const [stock, movs, prestados] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300), leerPrestados()]);
       // lite (tomar pedido): el stock de los reutilizables ya viene sin los prestados
@@ -73,6 +92,48 @@ async function handler(req, res) {
       }
       await guardarInventario(items);
       return res.status(200).json({ items });
+    }
+
+    // POST ?r=unir { queda, quitar: [ids] } → une ítems repetidos: el stock de los quitados se suma al que queda
+    // (en TODAS las sedes) y lo que apuntaba a ellos (productos, tapas de vasos) pasa al que queda.
+    const qq = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+    if (req.method === 'POST' && qq.r === 'unir') {
+      if (!yo.puede('inventario_config')) return res.status(403).json({ error: 'No tienes permiso para configurar el inventario' });
+      const b = leer(req);
+      let items = await leerInventario();
+      const queda = items.find((i) => i.id === b.queda);
+      const quitar = items.filter((i) => (b.quitar || []).includes(i.id) && i.id !== b.queda);
+      if (!queda || !quitar.length) return res.status(400).json({ error: 'Escoge qué ítem se queda' });
+      const ids = new Set(quitar.map((i) => i.id));
+      // reglas y empaques: se juntan sin repetir
+      const firma = (r) => `${r.tipo}:${r.id}`;
+      for (const q of quitar) {
+        for (const r of q.reglas || []) if (!queda.reglas.some((x) => firma(x) === firma(r))) queda.reglas.push(r);
+        for (const e of q.empaques || []) if (!(queda.empaques ||= []).some((x) => x.nombre === e.nombre)) queda.empaques.push(e);
+        if (!queda.tapa && q.tapa) queda.tapa = q.tapa;
+      }
+      queda.empaques = queda.empaques.slice(0, 6);
+      items = items.filter((i) => !ids.has(i.id)).map((i) => (ids.has(i.tapa) ? { ...i, tapa: queda.id } : i));
+      await guardarInventario(items);
+      // stock de cada sede
+      for (const sd of await leerSedes()) {
+        await enSede(sd.id, async () => {
+          const st = await leerStock();
+          const deltas = {};
+          for (const id of ids) if (st[id]) { deltas[id] = -st[id]; deltas[queda.id] = (deltas[queda.id] || 0) + st[id]; }
+          if (Object.keys(deltas).length) await moverStock(deltas, { tipo: 'conteo', nota: `Unión de ítems repetidos → ${queda.nombre}`, usuario, nombre: queda.nombre });
+        });
+      }
+      // productos que descontaban de los quitados
+      const cfg = await configActual();
+      let cambio = false;
+      for (const p of cfg.productos) if (p.invItem) {
+        const ops = (p.invItem.ops?.length ? p.invItem.ops : [{ id: p.invItem.id, nombre: '' }]).map((o) => (ids.has(o.id) ? { id: queda.id, nombre: queda.nombre } : o))
+          .filter((o, k, a) => a.findIndex((x) => x.id === o.id) === k);
+        if (JSON.stringify(ops) !== JSON.stringify(p.invItem.ops)) { p.invItem = { ...p.invItem, id: ops[0].id, ops }; cambio = true; }
+      }
+      if (cambio) { cfg.version = (cfg.version || 1) + 1; await guardarConfig(cfg); }
+      return res.status(200).json({ items, queda: queda.id, quitados: [...ids] });
     }
 
     // POST { id, tipo: entrada|salida|merma|conteo, cantidad, nota } → movimiento manual

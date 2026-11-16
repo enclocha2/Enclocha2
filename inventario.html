@@ -122,7 +122,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques, baseMichelada } from '/catalog.js';
+    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques, baseMichelada, gruposRepetidos, claveNombre } from '/catalog.js';
     import { requerirSesion, api, esc, toast, puede } from '/sesion.js';
     import { fechaHora } from '/fechas.js';
 
@@ -225,10 +225,11 @@
       const l = productosSinItem();
       if (!l.length) return '';
       const cat = (p) => cfg.categorias.find((c) => c.id === p.categoria);
+      const mismo = (p) => items.find((i) => !i.reutilizable && claveNombre(i.nombre) === claveNombre(p.nombre));
       return `<div class="card aviso-sobran"><b>📦 ${l.length} productos se venden sin control de inventario</b>
-        <p class="hint" style="margin:4px 0 8px">No tienen ítem en el inventario, así que se venden aunque no haya. Marca los que se deben controlar (ej. vaporizadores) y crea su ítem. Los que no llevan inventario (descorches, decoración…) márcalos en Productos → 📦 como "No lleva inventario" para que no vuelvan a salir aquí.</p>
-        <div class="prod-sin-item">${l.map((p) => `<label class="reu"><input type="checkbox" data-crear-prod="${p.id}" ${pareceServicio(p) ? '' : 'checked'}> ${esc(cat(p)?.icono || '')} ${esc(p.nombre)}</label>`).join('')}</div>
-        <button class="btn" id="crearProdItems" style="width:auto;padding:8px 16px;margin-top:8px">Crear ítems de los marcados</button></div>`;
+        <p class="hint" style="margin:4px 0 8px">No están amarrados a ningún ítem del inventario, así que se venden aunque no haya. Marca los que se deben controlar: si ya existe un ítem con ese nombre se amarran a él; si no, se crea. Los que no llevan inventario (descorches, decoración…) márcalos en Productos → 📦 como "No lleva inventario" para que no vuelvan a salir aquí.</p>
+        <div class="prod-sin-item">${l.map((p) => `<label class="reu"><input type="checkbox" data-crear-prod="${p.id}" ${pareceServicio(p) ? '' : 'checked'}> ${esc(cat(p)?.icono || '')} ${esc(p.nombre)}${mismo(p) ? ` <span class="hint">→ se enlaza con "${esc(mismo(p).nombre)}" (no se crea otro)</span>` : ' <span class="hint">→ ítem nuevo</span>'}</label>`).join('')}</div>
+        <button class="btn" id="crearProdItems" style="width:auto;padding:8px 16px;margin-top:8px">Controlar los marcados</button></div>`;
     }
     // ---------- Dulces, adiciones, jeringas y micheladas ----------
     // · Aros y gusanos salen de la misma bolsa de gomitas (toppings y adiciones descuentan 1 gomita)
@@ -237,6 +238,7 @@
     // · Micheladas: descuentan la cerveza o la soda con que se preparan (no tienen ítem propio)
     const conTopping = (id) => items.find((i) => i.reglas?.some((r) => r.tipo === 'topping' && r.id === id));
     const JERINGAS = ['tequila', 'ginebra', 'whisky', 'vodka'];
+    const buscarJeringa = (l) => items.find((i) => /jeringa/.test(normalizar(i.nombre)) && normalizar(i.nombre).includes(l));
     // "Michelada" o "Soda michelada" (sin decir la cerveza) → se escoge al vender; "Michelada X" → la X
     const michGenerica = (p) => /^(soda\s+)?michelada$/.test(normalizar(p.nombre));
     function planDulces() {
@@ -253,7 +255,7 @@
       if (!aro || !gus) pend.push('Ítems de Aros y de Gusanos (bolsa de 100)');
       if ([chi, oka].some((x) => x && x.unidad !== 'cucharada')) pend.push('Chicles y okaloka por cucharada (bolsa de 120)');
       if (adiciones.length) pend.push(`${adiciones.length} adiciones descontando de su dulce`);
-      if (jeringa.length || (prods.some((p) => /jeringa/.test(n(p))) && !JERINGAS.every((l) => items.some((i) => normalizar(i.nombre) === 'jeringa de ' + l)))) pend.push('Jeringas de tequila, ginebra, whisky y vodka');
+      if (jeringa.length || (prods.some((p) => /jeringa/.test(n(p))) && !JERINGAS.every((l) => buscarJeringa(l)))) pend.push('Jeringas de tequila, ginebra, whisky y vodka');
       if (mich.length) pend.push(`${mich.length} micheladas descontando la cerveza o la soda`);
       return pend.length ? { pend, aro, gus, chi, oka, adiciones, jeringa, mich } : null;
     }
@@ -265,7 +267,7 @@
     }
     async function organizarDulces() {
       const p = planDulces(); if (!p) return;
-      const nuevoItem = (nombre, extra) => { let id = slug(nombre); while (items.some((i) => i.id === id)) id += '-2'; const it = { id, nombre, categoria: 'toppings', unidad: 'und', minimo: 10, activo: true, empaques: [], reglas: [], ...extra }; items.push(it); return it; };
+      const nuevoItem = (nombre, extra) => { const ya = items.find((i) => !i.reutilizable && claveNombre(i.nombre) === claveNombre(nombre)); if (ya) { for (const r of extra.reglas || []) if (!ya.reglas.some((x) => x.tipo === r.tipo && x.id === r.id)) ya.reglas.push(r); return ya; } let id = slug(nombre); while (items.some((i) => i.id === id)) id += '-2'; const it = { id, nombre, categoria: 'toppings', unidad: 'und', minimo: 10, activo: true, empaques: [], reglas: [], ...extra }; items.push(it); return it; };
       // 1) Aros y gusanos: cada uno en su bolsa de 100 (si quedaron juntos, se separan)
       let aroIt = p.aro, gusIt = p.gus;
       if (aroIt && aroIt === gusIt) {
@@ -279,7 +281,7 @@
       // 2) Chicles y okaloka por cucharada
       for (const it of [p.chi, p.oka].filter(Boolean)) { it.unidad = 'cucharada'; it.empaques = [{ nombre: 'bolsa', unidades: 120 }]; }
       // 3) Jeringas
-      const jer = JERINGAS.map((l) => items.find((i) => normalizar(i.nombre) === 'jeringa de ' + l) || nuevoItem('Jeringa de ' + l, { categoria: 'reventa', minimo: 5 }));
+      const jer = JERINGAS.map((l) => buscarJeringa(l) || nuevoItem('Jeringa de ' + l, { categoria: 'reventa', minimo: 5 }));
       // 4) Productos (se guardan en el catálogo)
       const n = (x) => normalizar(x.nombre);
       for (const prod of cfg.productos) {
@@ -338,6 +340,18 @@
         pintar(); toast('🥃 Listo: las copas ya no se cuentan en el inventario');
       } catch (e) { toast(e.message, true); cfg = (await api('/api/catalogo')).config; }
     }
+    // Ítems repetidos (mismo nombre o misma regla): se escoge cuál queda y se unen
+    function sugerirRepetidos() {
+      const grupos = gruposRepetidos(items);
+      if (!grupos.length || sucio) return '';
+      return `<div class="card aviso-sobran aviso-rep"><b>🧩 ${grupos.length} ${grupos.length === 1 ? 'ítem repetido' : 'ítems repetidos'}</b>
+        <p class="hint" style="margin:4px 0 8px">Escoge en cada grupo cuál se queda y toca Unir. Las cantidades de los otros se suman al que queda (en todas las sedes) y los productos que descontaban de ellos pasan al que queda.</p>
+        ${grupos.map((g, k) => {
+          const mejor = [...g].sort((a, b) => (stock[b.id] || 0) - (stock[a.id] || 0) || (b.reglas?.length || 0) - (a.reglas?.length || 0))[0];
+          return `<div class="rep-grupo">${g.map((i) => `<label class="reu"><input type="radio" name="rep${k}" value="${i.id}" ${i === mejor ? 'checked' : ''}> <b>${esc(i.nombre)}</b> <span class="hint">· ${fmt(stock[i.id] || 0)} ${esc(i.unidad)}${i.reglas?.length ? ' · ' + i.reglas.map(nombreRegla).map(esc).join(', ') : ''}</span></label>`).join('')}
+            <button class="mini" data-unir="${k}">🧩 Unir</button></div>`;
+        }).join('')}</div>`;
+    }
     function sugerirUnidades() {
       const l = unidadesMal();
       return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos se están contando con la unidad equivocada</b>
@@ -349,18 +363,28 @@
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
-      $('#sobran').insertAdjacentHTML('beforeend', sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirRepetidos() + sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
       $('#organizarDulces')?.addEventListener('click', organizarDulces);
       $('#copasSinInv')?.addEventListener('click', copasSinInventario);
+      document.querySelectorAll('[data-unir]').forEach((b) => b.addEventListener('click', async () => {
+        const g = gruposRepetidos(items)[Number(b.dataset.unir)]; if (!g) return;
+        const queda = document.querySelector(`input[name="rep${b.dataset.unir}"]:checked`)?.value;
+        try {
+          await api('/api/inventario?r=unir', { method: 'POST', body: JSON.stringify({ queda, quitar: g.map((i) => i.id).filter((id) => id !== queda) }) });
+          toast('🧩 Ítems unidos'); cfg = null; await cargar();
+        } catch (e) { toast(e.message, true); }
+      }));
       $('#crearProdItems')?.addEventListener('click', () => {
         const ids = [...document.querySelectorAll('[data-crear-prod]:checked')].map((x) => x.dataset.crearProd);
         if (!ids.length) return toast('Marca al menos un producto', true);
         for (const pid of ids) {
           const p = cfg.productos.find((x) => x.id === pid); if (!p) continue;
+          const mismo = items.find((i) => !i.reutilizable && claveNombre(i.nombre) === claveNombre(p.nombre));
+          if (mismo) { mismo.reglas = [...(mismo.reglas || []), { tipo: 'producto', id: p.id, cantidad: 1 }]; continue; }
           let id = slug(p.nombre); while (items.some((i) => i.id === id)) id += '-2';
           items.push({ id, nombre: p.nombre, categoria: 'reventa', unidad: unidadDe(p), minimo: 2, activo: true, empaques: empaquesSugeridos(p.nombre), reglas: [{ tipo: 'producto', id: p.id, cantidad: 1 }], _stockInicial: 0 });
         }
-        marcar(); pintar(); toast(`📦 ${ids.length} ítems creados · toca Guardar cambios y haz su conteo`);
+        marcar(); pintar(); toast(`📦 ${ids.length} productos controlados · toca Guardar cambios`);
       });
       $('#corregirUnidades')?.addEventListener('click', () => { for (const { i, u } of unidadesMal()) i.unidad = u; marcar(); pintar(); toast('📏 Unidades corregidas · toca Guardar cambios'); });
       $('#crearTapas')?.addEventListener('click', () => {

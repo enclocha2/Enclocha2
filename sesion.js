@@ -85,7 +85,7 @@ export function cadaTanto(fn, ms) {
 }
 import { enHorarioOperacion, textoPausa } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '40';
+export const VERSION = '43';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
