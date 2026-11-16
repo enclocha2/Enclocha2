@@ -112,7 +112,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, SECCIONES, pesos, armarItem } from '/catalog.js';
+    import { GRUPOS, SECCIONES, pesos, armarItem, recetaDe, htmlIncluidos, ajustarIncluidos, cambiarIncluido } from '/catalog.js';
     import { enHorarioOperacion } from '/fechas.js';
     // Link de una sede: /domicilio?sede=<id> (sin ?sede = sede principal)
     const SEDE = new URLSearchParams(location.search).get('sede') || '';
@@ -136,7 +136,7 @@
       const r = await fetch(conSede('/api/publico'), { cache: 'no-store' });
       info = await r.json();
       // cfg mínimo para armarItem
-      cfg = { tamanos: info.menu.tamanos, sabores: info.menu.sabores, toppings: info.menu.toppings, productos: [], categorias: [] };
+      cfg = { tamanos: info.menu.tamanos, sabores: info.menu.sabores, toppings: info.menu.toppings, productos: info.menu.productos || [], categorias: [] };
       if (info.sede && !info.sede.principal) { $('#sedeNombre').hidden = false; $('#sedeNombre').textContent = `🏢 ${info.sede.nombre}${info.sede.direccion ? ' · ' + info.sede.direccion : ''}`; }
       $('#estadoTienda').className = 'estado-tienda ' + (info.abierto ? 'abierta' : 'cerrada');
       $('#estadoTienda').innerHTML = info.abierto
@@ -204,19 +204,19 @@
           : `<button class="opt ${item.tamano === t.id ? 'on' : ''}" data-tam="${t.id}"><strong class="${t.nombre.length > 10 ? 'largo' : ''}">${esc(t.nombre)}</strong><span>${pesos(t.precio)}</span></button>`).join('')}</div>` : '';
       }).join('');
       $('#sabores').innerHTML = cfg.sabores.map((s) => `<button class="chip ${item.sabores.includes(s.id) ? 'on' : ''}" data-sabor="${s.id}">${esc(s.nombre)}</button>`).join('');
-      $('#incluidos').innerHTML = GRUPOS.map((g) => {
-        const ops = cfg.toppings.filter((t) => t.grupo === g.id && !AG().toppings.includes(t.id));
-        if (!ops.length) return '';
-        const sel = item.incluidos[g.id];
-        const bs = ops.length === 1
-          ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}">Sí</button>`
-          : ops.map((t) => `<button class="${sel === t.id ? 'on' : ''}" data-inc="${g.id}" data-val="${t.id}">${esc(t.nombre.replace(/^Paleta de /, ''))}</button>`).join('');
-        return `<div class="grupo"><span class="lbl">${g.nombre}</span><div class="seg">${bs}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">No</button></div></div>`;
-      }).join('');
+      const tamSel = item.tamano && cfg.tamanos.find((t) => t.id === item.tamano);
+      const rc = tamSel ? recetaDe(tamSel, cfg) : { dulces: 1 };
+      const pInc = rc.producto && cfg.productos?.find((x) => x.id === rc.producto);
+      const lineaProd = !pInc ? '' : rc.productoOpcional
+        ? `<div class="grupo"><span class="lbl">🍺 ¿Con ${esc(pInc.nombre)}?</span><div class="seg"><button class="${item.conProducto ? 'on' : ''}" data-conprod="1">Sí</button><button class="none ${!item.conProducto ? 'on' : ''}" data-conprod="0">No</button></div></div>`
+        : `<div class="grupo"><span class="lbl">🍺 Incluye 1 ${esc(pInc.nombre)}</span></div>`;
+      const disponibles = cfg.toppings.filter((t) => !AG().toppings.includes(t.id));
+      $('#incluidos').innerHTML = (rc.dulces > 1 ? `<p class="hint" style="margin:0 0 8px">Lleva <b>${rc.dulces} de cada dulce</b>: escoge cómo los quieres.</p>` : '') + lineaProd
+        + (htmlIncluidos({ item, toppings: disponibles, dulces: rc.dulces, esc, txtNo: 'No' }) || '<p class="hint" style="margin:4px 0">Por ahora no hay toppings disponibles.</p>');
       $('#adicionales').innerHTML = cfg.toppings.filter((t) => !AG().toppings.includes(t.id)).map((t) => {
         const q = item.adicionales[t.id] || 0;
         return `<div class="extra"><div>${esc(t.nombre)}<small>+${pesos(t.precio)} c/u</small></div><div class="qty ${q ? 'has' : ''}"><button data-adi="${t.id}" data-d="-1">−</button><b>${q}</b><button data-adi="${t.id}" data-d="1">+</button></div></div>`;
-      }).join('');
+      }).join('') || '<p class="hint" style="margin:8px 0 0">Por ahora no hay toppings adicionales disponibles.</p>';
       $('#cantidad').innerHTML = `<button data-cant="-1">−</button><b>${item.cantidad}</b><button data-cant="1">+</button>`;
       const a = armar(item);
       $('#subtotal').textContent = a ? pesos(a.subtotal) : '$0';
@@ -230,7 +230,7 @@
         const a = armar(d);
         return `<div class="cart-item"><div class="det"><b>🍧 ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${pesos(a.subtotal)}<br>
           ${a.sabores.map((s) => esc(s.nombre)).join(' + ')}<br>
-          ${a.incluidos.length ? 'Con: ' + a.incluidos.map((t) => esc(t.nombre)).join(', ') : 'Sin toppings'}
+          ${a.incluidos.length || a.producto ? 'Con: ' + [...a.incluidos.map((t) => (t.cantidad > 1 ? `${t.cantidad}× ` : '') + esc(t.nombre)), ...(a.producto ? ['🍺 ' + esc(a.producto.nombre)] : [])].join(', ') : 'Sin toppings'}
           ${a.adicionales.length ? '<br>Adicionales: ' + a.adicionales.map((x) => `${x.cantidad}× ${esc(x.nombre)}`).join(', ') : ''}
           ${a.nota ? '<br>📝 ' + esc(a.nota) : ''}</div><button class="x" data-del="${i}">✕</button></div>`;
       }).join('') : '<div class="empty">Aún no has agregado granizados</div>';
@@ -266,9 +266,11 @@
       const ds = b.dataset;
       if (ds.metodo) { metodo = ds.metodo; return renderCarrito(); }
       if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
-      if (ds.tam) item.tamano = ds.tam;
+      if (ds.tam) { item.tamano = ds.tam; const t = cfg.tamanos.find((x) => x.id === ds.tam); if (t) ajustarIncluidos(item, recetaDe(t, cfg).dulces); }
       else if (ds.sabor) item.sabores = item.sabores.includes(ds.sabor) ? item.sabores.filter((s) => s !== ds.sabor) : [...item.sabores, ds.sabor];
       else if (ds.inc !== undefined) item.incluidos[ds.inc] = ds.val || null;
+      else if (ds.incq) cambiarIncluido(item, ds.incq, ds.val, Number(ds.d), item.tamano ? recetaDe(cfg.tamanos.find((x) => x.id === item.tamano), cfg).dulces : 1);
+      else if (ds.conprod !== undefined) item.conProducto = ds.conprod === '1';
       else if (ds.adi) { const n = Math.max(0, (item.adicionales[ds.adi] || 0) + Number(ds.d)); if (n) item.adicionales[ds.adi] = n; else delete item.adicionales[ds.adi]; }
       else if (ds.cant) item.cantidad = Math.max(1, Math.min(20, item.cantidad + Number(ds.cant)));
       else return;

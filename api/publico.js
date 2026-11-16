@@ -3,7 +3,7 @@
 // GET  /api/publico?seguir=ID&t=TOKEN → estado de un pedido
 // POST /api/publico            → crear pedido a domicilio
 import { randomUUID, randomBytes } from 'node:crypto';
-import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida } from '../catalog.js';
+import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida, itemBase, recetaDe } from '../catalog.js';
 import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock } from './_lib/store.js';
 import { horarioDe, jornadaActual, horaJornada, textoHorario, hoy } from '../fechas.js';
 import { DOM_DEFECTO } from './ajustes.js';
@@ -73,13 +73,16 @@ async function handler(req, res) {
       const [inventario, stock] = await Promise.all([leerInventario(), leerStock()]);
       const agotado = (tipo, id) => inventario.some((it) => it.activo !== false && (it.reglas || []).some((r) => r.tipo === tipo && r.id === id && (stock[it.id] || 0) < (r.cantidad || 1)));
       const granizadoAgotado = inventario.some((it) => it.activo !== false && (it.reglas || []).some((r) => r.tipo === 'granizado' && (stock[it.id] || 0) < (r.cantidad || 1)));
+      const sinStock = (t) => faltantes(consumoDe([itemBase(t, cfg)], inventario), stock, inventario).length > 0; // vasos, pitillos, cerveza incluida
       const agotados = {
-        tamanos: granizadoAgotado ? tamanos.map((t) => t.id) : tamanos.filter((t) => agotado('tamano', t.id)).map((t) => t.id),
+        tamanos: granizadoAgotado ? tamanos.map((t) => t.id) : tamanos.filter((t) => agotado('tamano', t.id) || sinStock(t)).map((t) => t.id),
         toppings: cfg.toppings.filter((t) => t.activo && agotado('topping', t.id)).map((t) => t.id),
       };
       return res.status(200).json({
         ...estadoAbierto(dom),
-        menu: { tamanos, sabores: cfg.sabores.filter((s) => s.activo), toppings: cfg.toppings.filter((t) => t.activo) },
+        // las cervezas que van incluidas (Coronita de la pecera, Corona de la nevera)
+        menu: { tamanos, sabores: cfg.sabores.filter((s) => s.activo), toppings: cfg.toppings.filter((t) => t.activo),
+          productos: cfg.productos.filter((p) => tamanos.some((t) => recetaDe(t, cfg).producto === p.id)).map(({ id, nombre, categoria, usa, sinInventario }) => ({ id, nombre, categoria, activo: true, precio: 1, ...(usa ? { usa } : {}), ...(sinInventario ? { sinInventario } : {}) })) },
         agotados,
         domicilio: {
           minimo: dom.minimo, mensaje: dom.mensaje, whatsapp: dom.whatsapp,

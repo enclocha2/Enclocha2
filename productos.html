@@ -69,6 +69,7 @@
       <div class="card">
         <h2>Tamaños y presentaciones del granizado</h2>
         <p class="hint">Las que estén en $0 salen como "Sin precio" y no se pueden vender. La sección es el grupo en que aparecen al tomar el pedido.</p>
+        <p class="hint">El botón <b>🥤🥢🍬🍺</b> de cada una dice qué se descuenta del inventario al venderla (vasos, pitillos, dulces y la cerveza incluida). Tócalo para cambiarlo.</p>
         <div id="lTamanos"></div>
         <form class="add" id="fTamano">
           <input class="field" name="nombre" placeholder="Nueva presentación, ej: Promoción 2x1" maxlength="40" required />
@@ -163,6 +164,25 @@
     </section>
   </main>
 
+  <!-- Lo que gasta cada presentación (vasos, pitillos, dulces, cerveza incluida) -->
+  <div class="modal" id="modalReceta">
+    <div class="box">
+      <h3>🥤 ¿Qué lleva <span id="mrNombre"></span>?</h3>
+      <p class="hint" style="margin-top:0">Esto es lo que se descuenta del inventario cada vez que se vende uno.</p>
+      <div class="receta-grid">
+        <label class="campo"><span>🥤 Vasos</span><input class="field" type="number" min="0" max="20" id="mrVasos"></label>
+        <label class="campo"><span>de qué tamaño</span><select class="field" id="mrVaso"></select></label>
+        <label class="campo"><span>🥢 Pitillos</span><input class="field" type="number" min="0" max="20" id="mrPitillos"></label>
+        <label class="campo"><span>🍬 Dulces de cada grupo</span><input class="field" type="number" min="1" max="10" id="mrDulces"><small class="hint" id="mrDulcesTxt"></small></label>
+        <label class="campo ancho"><span>🍺 Cerveza o producto que va incluido</span><select class="field" id="mrProducto"></select></label>
+        <label class="ancho opcional"><input type="checkbox" id="mrOpcional" style="width:18px;height:18px;accent-color:#ff3fd1"> Es opcional (al vender se pregunta "¿lleva …?")</label>
+      </div>
+      <button class="btn" id="mrListo">Listo</button>
+      <button class="btn ghost" id="mrAuto">↺ Volver a lo automático</button>
+      <button class="btn ghost" id="mrCancelar">Cancelar</button>
+    </div>
+  </div>
+
   <!-- ¿Cómo se controla en inventario este producto? -->
   <div class="modal" id="modalInv">
     <div class="box">
@@ -193,7 +213,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, SECCIONES, pesos, slug, normalizar } from '/catalog.js';
+    import { GRUPOS, SECCIONES, pesos, slug, normalizar, recetaDe } from '/catalog.js';
     import { requerirSesion, api, esc, toast, htmlQR, puede, sedeActual } from '/sesion.js';
     import { jornadaActual, horarioDe, horaJornada, textoHora } from '/fechas.js';
 
@@ -294,7 +314,7 @@
         return `<h3 class="sub">${esc(sec)}</h3>` + lista.map((t) => `<div class="fila ${t.activo ? '' : 'apagado'} ${t.precio ? '' : 'sinprecio'}">
           ${sw('tamanos', t.id, t.activo)}${inp('tamanos', t.id, 'nombre', t.nombre, 'maxlength="40"')}
           <input class="field seccion" list="dlSecciones" data-l="tamanos" data-id="${t.id}" data-k="seccion" value="${esc(t.seccion || 'Tamaños')}" maxlength="30">
-          ${precio('tamanos', t.id, t.precio)}${borrar('tamanos', t.id)}</div>`).join('');
+          ${precio('tamanos', t.id, t.precio)}<button class="chip-inv ${t.receta ? 'usa' : ''}" data-receta="${t.id}" title="Qué se descuenta del inventario">${textoReceta(t)}</button>${borrar('tamanos', t.id)}</div>`).join('');
       }).join('');
       $('#lToppings').innerHTML = GRUPOS.map((g) => `<h3 class="sub">${g.nombre}</h3>` +
         cfg.toppings.filter((t) => t.grupo === g.id).map((t) => `<div class="fila ${t.activo ? '' : 'apagado'}">
@@ -353,12 +373,44 @@
       toast('Listo · toca Guardar cambios para aplicarlo');
     });
 
+    // ---------- Receta de cada presentación ----------
+    function textoReceta(t) {
+      const r = recetaDe(t, cfg), p = r.producto && cfg.productos.find((x) => x.id === r.producto);
+      return [r.vasos ? `🥤${r.vasos}` : '', `🥢${r.pitillos}`, `🍬${r.dulces * 4}`, p ? `🍺${r.productoOpcional ? '?' : ''}` : ''].filter(Boolean).join(' ');
+    }
+    let mrTam = null;
+    function abrirReceta(id) {
+      mrTam = cfg.tamanos.find((x) => x.id === id); if (!mrTam) return;
+      const r = recetaDe(mrTam, cfg);
+      $('#mrNombre').textContent = mrTam.nombre;
+      $('#mrVasos').value = r.vasos; $('#mrPitillos').value = r.pitillos; $('#mrDulces').value = r.dulces;
+      $('#mrVaso').innerHTML = '<option value="">—</option>' + cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === 'Tamaños').map((t) => `<option value="${t.id}" ${t.id === r.vaso ? 'selected' : ''}>Vaso ${esc(t.nombre)}</option>`).join('');
+      $('#mrProducto').innerHTML = '<option value="">Ninguno</option>' + cfg.categorias.map((c) => {
+        const ps = cfg.productos.filter((p) => p.categoria === c.id); if (!ps.length) return '';
+        return `<optgroup label="${esc(c.nombre)}">${ps.map((p) => `<option value="${p.id}" ${p.id === r.producto ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}</optgroup>`;
+      }).join('');
+      $('#mrOpcional').checked = !!r.productoOpcional;
+      dulcesTxt(); $('#modalReceta').classList.add('show');
+    }
+    const dulcesTxt = () => { const n = Math.max(1, Number($('#mrDulces').value) || 1); $('#mrDulcesTxt').textContent = `= ${n * 4} dulces en total (${n} aro/gusano, ${n} chicle/okaloka, ${n} paleta, ${n} bandera)`; };
+    $('#mrDulces').addEventListener('input', dulcesTxt);
+    $('#mrCancelar').addEventListener('click', () => $('#modalReceta').classList.remove('show'));
+    $('#mrAuto').addEventListener('click', () => { delete mrTam.receta; $('#modalReceta').classList.remove('show'); marcar(); renderGranizado(); toast('Listo · toca Guardar cambios'); });
+    $('#mrListo').addEventListener('click', () => {
+      mrTam.receta = { vasos: Number($('#mrVasos').value) || 0, vaso: $('#mrVaso').value || null, pitillos: Number($('#mrPitillos').value) || 0,
+        dulces: Math.max(1, Number($('#mrDulces').value) || 1), producto: $('#mrProducto').value || null, productoOpcional: $('#mrOpcional').checked };
+      $('#modalReceta').classList.remove('show'); marcar(); renderGranizado(); toast('Listo · toca Guardar cambios');
+    });
+
     function renderTodo() { renderSabores(); renderProductos(); renderGranizado(); renderCategorias(); mostrarTab(); }
 
     // ---------- Edición ----------
     const buscarEn = (l, id) => cfg[l].find((x) => x.id === id);
 
-    document.querySelector('main').addEventListener('click', (e) => { const b = e.target.closest('[data-inv]'); if (b) abrirInv(b.dataset.inv); });
+    document.querySelector('main').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-inv]'); if (b) abrirInv(b.dataset.inv);
+      const r = e.target.closest('[data-receta]'); if (r) abrirReceta(r.dataset.receta);
+    });
 
     document.querySelector('main').addEventListener('input', (e) => {
       const el = e.target;

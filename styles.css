@@ -1103,3 +1103,15 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .div-rapido label { font-weight: 700; font-size: .95rem; }
 .div-rapido #divN { width: 80px; text-align: center; font-weight: 800; font-size: 1.05rem; }
 .div-rapido #divIgual { min-width: 0; padding: 10px 14px; border-radius: 12px; border: 0; background: var(--grad); color: #fff; font: 800 .95rem 'Nunito', sans-serif; cursor: pointer; }
+.receta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 14px; }
+.receta-grid .ancho { grid-column: 1 / -1; }
+.receta-grid small { display: block; margin-top: 4px; }
+/* Varios dulces por grupo (pecera, nevera, 2×12) */
+.grupo.grupo-multi { display: block; }
+.grupo-multi .lbl small { margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(255,255,255,.08); color: var(--muted); font-weight: 800; }
+.grupo-multi .lbl small.completo { background: rgba(25, 158, 112, .25); color: #5ee6a8; }
+.grupo-multi .multi { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.multi-op { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.03); }
+.multi-op.has { border-color: rgba(255, 63, 209, .55); background: var(--brand-soft); }
+.multi-op > span { font-weight: 700; }
+.receta-grid .opcional { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }

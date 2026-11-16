@@ -126,6 +126,7 @@ export function normalizarConfig(raw) {
   const tamanos = lista(raw.tamanos, (t) => ({
     id: txt(t.id, 48), nombre: txt(t.nombre, 40), seccion: txt(t.seccion, 30) || 'Tamaños',
     precio: precioOk(t.precio, t.nombre), activo: !!t.activo,
+    ...(t.receta && typeof t.receta === 'object' ? { receta: limpiarReceta(t.receta) } : {}),
   }), 'presentaciones');
   if (!tamanos.length) throw new Error('Debe haber al menos una presentación de granizado');
 
@@ -155,6 +156,32 @@ export function normalizarConfig(raw) {
 
   return { tamanos, sabores, toppings, categorias, productos };
 }
+
+// ---------- Lo que gasta cada presentación ----------
+// receta: { vasos, vaso (id del tamaño del vaso), pitillos, dulces (por grupo), producto, productoOpcional }
+//  · Granizado 8/12/16/20: 1 vaso, 1 pitillo, 1 dulce de cada grupo (4 dulces)
+//  · Jueves 2×12: 2 vasos de 12, 2 pitillos, 2 de cada grupo (8 dulces)
+//  · Pecera: 4 pitillos, 2 de cada grupo (8 dulces) y 1 Coronita
+//  · Nevera (3 o 5 litros): 4 pitillos, 4 de cada grupo (16 dulces) y 1 Corona (si aplica)
+const ent = (x, max = 50) => Math.min(max, Math.max(0, Math.round(Number(x) || 0)));
+function limpiarReceta(r) {
+  return {
+    vasos: ent(r.vasos, 20), vaso: r.vaso ? txt(r.vaso, 48) : null, pitillos: ent(r.pitillos, 20), dulces: Math.max(1, ent(r.dulces, 10)),
+    producto: r.producto ? txt(r.producto, 48) : null, productoOpcional: !!r.productoOpcional,
+  };
+}
+export function recetaAuto(t, cfg) {
+  const n = normalizar(t.nombre);
+  const buscarProd = (re) => cfg.productos.find((p) => re.test(normalizar(p.nombre)))?.id || null;
+  const oz = (n.match(/\b(8|12|16|20)\b/) || [])[1];
+  const vasoDe = (o) => o && (cfg.tamanos.find((x) => (x.seccion || 'Tamaños') === 'Tamaños' && new RegExp(`\\b${o}\\b`).test(normalizar(x.nombre)))?.id || null);
+  if (/pecera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 2, producto: buscarProd(/^coronita/), productoOpcional: false };
+  if (/nevera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 4, producto: buscarProd(/^corona(?!ita)/), productoOpcional: true };
+  if (/recarga/.test(n)) return { vasos: 0, vaso: null, pitillos: 1, dulces: 1, producto: null, productoOpcional: false };
+  const doble = /(\*|x)\s*2\b|\b2\s*(\*|x)|2\s*granizados/.test(n);
+  return { vasos: doble ? 2 : oz ? 1 : 0, vaso: vasoDe(oz), pitillos: doble ? 2 : 1, dulces: doble ? 2 : 1, producto: null, productoOpcional: false };
+}
+export const recetaDe = (t, cfg) => (t.receta ? { ...recetaAuto(t, cfg), ...t.receta } : recetaAuto(t, cfg));
 
 // ---------- Armado de un ítem del pedido ----------
 // raw (lo que manda el navegador):
@@ -196,13 +223,26 @@ export function armarItem(raw, cfg) {
   if (sabores.some((s) => !s)) throw new Error('Hay un sabor que ya no está disponible');
   if (!sabores.length) throw new Error('Escoge al menos un sabor');
 
+  const receta = recetaDe(tam, cfg);
+  // Toppings incluidos: por grupo, un id (1) o { id: cantidad } cuando la presentación lleva varios (pecera, nevera, 2×12)
   const incluidos = [];
   for (const g of GRUPOS) {
-    const id = raw.incluidos?.[g.id];
-    if (!id) continue;
-    const t = cfg.toppings.find((x) => x.id === id && x.grupo === g.id && x.activo);
-    if (!t) throw new Error('Hay un topping que ya no está disponible');
-    incluidos.push({ id: t.id, nombre: t.nombre, grupo: g.id });
+    const v = raw.incluidos?.[g.id];
+    if (!v) continue;
+    const pares = typeof v === 'string' ? [[v, 1]] : Object.entries(v).map(([id, q]) => [id, Math.floor(Number(q) || 0)]).filter(([, q]) => q > 0);
+    if (pares.reduce((s0, [, q]) => s0 + q, 0) > receta.dulces) throw new Error(`Máximo ${receta.dulces} de "${g.nombre}"`);
+    for (const [id, q] of pares) {
+      const t = cfg.toppings.find((x) => x.id === id && x.grupo === g.id && x.activo);
+      if (!t) throw new Error('Hay un topping que ya no está disponible');
+      incluidos.push({ id: t.id, nombre: t.nombre, grupo: g.id, ...(q > 1 ? { cantidad: q } : {}) });
+    }
+  }
+  // Producto que va con la presentación (Coronita en la pecera, Corona en la nevera si aplica)
+  let producto = null;
+  const pInc = receta.producto && cfg.productos.find((x) => x.id === receta.producto);
+  if (pInc && (!receta.productoOpcional || raw.conProducto)) {
+    const armado = armarItem({ tipo: 'producto', productoId: pInc.id, cantidad: 1 }, { ...cfg, productos: cfg.productos.map((x) => (x.id === pInc.id ? { ...x, activo: true, precio: x.precio || 1 } : x)) });
+    producto = { id: pInc.id, nombre: pInc.nombre, inv: armado.inv };
   }
 
   const adicionales = [];
@@ -220,6 +260,7 @@ export function armarItem(raw, cfg) {
     tipo: 'granizado', tamano: tam.id, tamanoNombre: tam.nombre,
     sabores: sabores.map((s) => ({ id: s.id, nombre: s.nombre })),
     incluidos, adicionales, precioUnit, cantidad, nota, subtotal: precioUnit * cantidad,
+    receta: { vaso: receta.vaso, vasos: receta.vasos, pitillos: receta.pitillos }, ...(producto ? { producto } : {}),
   };
 }
 
@@ -230,7 +271,7 @@ export function vistaItem(it) {
     return {
       esGranizado: true, cantidad: it.cantidad, nota: it.nota, subtotal: it.subtotal,
       tam: it.tamanoNombre, sabores: it.sabores.map((s) => s.nombre),
-      incluidos: it.incluidos.map((t) => t.nombre),
+      incluidos: [...it.incluidos.map((t) => (t.cantidad > 1 ? `${t.cantidad}× ${t.nombre}` : t.nombre)), ...(it.producto ? [`🍺 ${it.producto.nombre}`] : [])],
       adicionales: it.adicionales.map((a) => `${a.cantidad}× ${a.nombre}`),
     };
   }
@@ -322,10 +363,15 @@ export function consumoDe(items, inventario) {
         // "inv" = de qué producto se descuenta (null = no lleva inventario); pedidos viejos: el mismo producto
         if (r.tipo === 'producto' && it.tipo === 'producto' && ('inv' in it ? it.inv : it.productoId) === r.id) sumar(inv.id, q * k);
         if (it.tipo !== 'granizado') continue;
-        if (r.tipo === 'granizado') sumar(inv.id, q * k);
-        if (r.tipo === 'tamano' && it.tamano === r.id) sumar(inv.id, q * k);
+        const rc = it.receta; // pedidos viejos no tienen receta: 1 vaso del tamaño y 1 pitillo
+        if (r.tipo === 'producto' && it.producto?.inv === r.id) sumar(inv.id, q * k); // Coronita de la pecera, Corona de la nevera
+        if (r.tipo === 'granizado') sumar(inv.id, q * k * (rc ? rc.pitillos : 1));
+        if (r.tipo === 'tamano') {
+          const n = (it.tamano === r.id && rc?.vaso !== it.tamano ? 1 : 0) + (rc && rc.vaso === r.id ? rc.vasos : 0);
+          if (n) sumar(inv.id, q * k * n);
+        }
         if (r.tipo === 'topping') {
-          const n = (it.incluidos || []).filter((t) => t.id === r.id).length
+          const n = (it.incluidos || []).filter((t) => t.id === r.id).reduce((s, t) => s + (t.cantidad || 1), 0)
             + (it.adicionales || []).filter((a) => a.id === r.id).reduce((s, a) => s + a.cantidad, 0);
           if (n) sumar(inv.id, q * n * k);
         }
@@ -479,4 +525,58 @@ export function validarPartes(partes, total) {
   const suma = l.reduce((s, x) => s + x.valor, 0);
   if (suma !== total) throw new Error(`Las partes suman ${suma.toLocaleString('es-CO')} y el total es ${total.toLocaleString('es-CO')}`);
   return l;
+}
+
+// ---------- Toppings incluidos en pantalla (tomar pedido y domicilios) ----------
+// item.incluidos[grupo] es un id (1 dulce) o { id: cantidad } cuando la presentación lleva varios por grupo.
+export const conteoIncluido = (v) => (!v ? {} : typeof v === 'string' ? { [v]: 1 } : { ...v });
+// Ajusta los incluidos cuando cambia la presentación (ej. de pecera a 12 oz)
+export function ajustarIncluidos(item, dulces) {
+  for (const g of Object.keys(item.incluidos)) {
+    const c = conteoIncluido(item.incluidos[g]);
+    if (dulces <= 1) { item.incluidos[g] = Object.keys(c)[0] || null; continue; }
+    let quedan = dulces; const n = {};
+    for (const [id, q] of Object.entries(c)) { const x = Math.min(q, quedan); if (x > 0) { n[id] = x; quedan -= x; } }
+    item.incluidos[g] = Object.keys(n).length ? n : null;
+  }
+}
+// HTML de los toppings incluidos. agotado(id) opcional. Devuelve botones con data-inc / data-incq.
+export function htmlIncluidos({ item, toppings, dulces, agotado = () => false, esc = (x) => x, txtNo = 'Sin' }) {
+  return GRUPOS.map((g) => {
+    const ops = toppings.filter((t) => t.grupo === g.id);
+    if (!ops.length) return '';
+    const nom = (t) => esc(t.nombre.replace(/^Paleta de /, ''));
+    if (dulces <= 1) {
+      const sel = item.incluidos[g.id];
+      const botones = ops.length === 1
+        ? `<button class="${sel === ops[0].id ? 'on' : ''}" data-inc="${g.id}" data-val="${ops[0].id}" ${agotado(ops[0].id) && sel !== ops[0].id ? 'disabled title="Agotado"' : ''}>${agotado(ops[0].id) && sel !== ops[0].id ? '🔴 Agotado' : 'Sí'}</button>`
+        : ops.map((t) => { const ag = agotado(t.id) && sel !== t.id;
+            return `<button class="${sel === t.id ? 'on' : ''} ${ag ? 'agot' : ''}" data-inc="${g.id}" data-val="${t.id}" ${ag ? 'disabled title="Agotado"' : ''}>${nom(t)}${ag ? ' 🔴' : ''}</button>`; }).join('');
+      return `<div class="grupo"><span class="lbl">${g.nombre}</span><div class="seg">${botones}<button class="none ${!sel ? 'on' : ''}" data-inc="${g.id}" data-val="">${txtNo}</button></div></div>`;
+    }
+    const c = conteoIncluido(item.incluidos[g.id]), total = Object.values(c).reduce((a, b) => a + b, 0);
+    return `<div class="grupo grupo-multi"><span class="lbl">${g.nombre} <small class="${total === dulces ? 'completo' : ''}">${total} de ${dulces}</small></span><div class="multi">` +
+      ops.map((t) => { const q = c[t.id] || 0, ag = agotado(t.id);
+        return `<div class="multi-op ${q ? 'has' : ''}"><span>${nom(t)}${ag && !q ? ' 🔴' : ''}</span><div class="qty ${q ? 'has' : ''}"><button data-incq="${g.id}" data-val="${t.id}" data-d="-1" ${q ? '' : 'disabled'}>−</button><b>${q}</b><button data-incq="${g.id}" data-val="${t.id}" data-d="1" ${total >= dulces || ag ? 'disabled' : ''}>+</button></div></div>`; }).join('') +
+      `</div></div>`;
+  }).join('');
+}
+// Cambia la cantidad de un topping incluido (presentaciones con varios por grupo)
+export function cambiarIncluido(item, grupo, id, d, dulces) {
+  const c = conteoIncluido(item.incluidos[grupo]);
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  if (d > 0 && total >= dulces) return;
+  c[id] = Math.max(0, (c[id] || 0) + d);
+  if (!c[id]) delete c[id];
+  item.incluidos[grupo] = Object.keys(c).length ? c : null;
+}
+
+// Un granizado "mínimo" de una presentación (sin sabores ni dulces): sirve para saber si se puede
+// vender según el inventario (vasos, pitillos y la cerveza incluida si no es opcional).
+export function itemBase(t, cfg) {
+  const rc = recetaDe(t, cfg);
+  const p = rc.producto && !rc.productoOpcional && cfg.productos.find((x) => x.id === rc.producto);
+  let producto = null;
+  if (p) { try { const a = armarItem({ tipo: 'producto', productoId: p.id }, { ...cfg, productos: cfg.productos.map((x) => (x.id === p.id ? { ...x, activo: true, precio: x.precio || 1 } : x)) }); producto = { id: p.id, nombre: p.nombre, inv: a.inv }; } catch { /* sin inventario */ } }
+  return { tipo: 'granizado', tamano: t.id, cantidad: 1, incluidos: [], adicionales: [], receta: { vaso: rc.vaso, vasos: rc.vasos, pitillos: rc.pitillos }, ...(producto ? { producto } : {}) };
 }
