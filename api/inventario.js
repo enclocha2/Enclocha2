@@ -51,6 +51,7 @@ async function handler(req, res) {
             .filter((r) => TIPOS_REGLA.includes(r.tipo) && (r.tipo === 'granizado' || r.id))
             .map((r) => ({ tipo: r.tipo, id: r.tipo === 'granizado' ? null : txt(r.id, 48), cantidad: Math.max(0, num(r.cantidad)) || 1 })),
           activo: it.activo !== false,
+          ...(it.reutilizable ? { reutilizable: true } : {}),
           empaques: (Array.isArray(it.empaques) ? it.empaques : []).slice(0, 6)
             .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)) }))
             .filter((e) => e.nombre && e.unidades > 0),

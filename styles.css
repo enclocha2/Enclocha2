@@ -1115,3 +1115,6 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .multi-op.has { border-color: rgba(255, 63, 209, .55); background: var(--brand-soft); }
 .multi-op > span { font-weight: 700; }
 .receta-grid .opcional { display: flex; flex-direction: row; align-items: center; gap: 10px; cursor: pointer; }
+.reu { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); white-space: nowrap; cursor: pointer; }
+.reu input { accent-color: #33e1ff; width: 16px; height: 16px; }
+.tag-reu { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; color: #9ff0ff; background: rgba(51,225,255,.12); border: 1px solid rgba(51,225,255,.35); }

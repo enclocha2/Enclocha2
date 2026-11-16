@@ -169,11 +169,29 @@
       const noLleva = (id) => { const p = cfg.productos.find((x) => x.id === id); return p && (p.sinInventario || p.usa?.length || sinCat.has(p.categoria)); };
       return items.filter((i) => i.reglas?.length && i.reglas.every((r) => r.tipo === 'producto' && noLleva(r.id)));
     }
+    // Peceras de vidrio: siempre hay 3, se lavan y se reutilizan (no se descuentan)
+    function sugerirPeceras() {
+      if (!cfg) return '';
+      const peceras = cfg.tamanos.filter((t) => t.activo && /pecera/.test(normalizar(t.nombre)));
+      if (!peceras.length) return '';
+      const ya = items.some((i) => i.reutilizable && i.reglas?.some((r) => r.tipo === 'tamano' && peceras.some((t) => t.id === r.id)));
+      return ya ? '' : `<div class="card aviso-sobran"><b>🐟 ¿Agregar las peceras de vidrio?</b>
+        <p class="hint" style="margin:4px 0 8px">Se crea "Peceras de vidrio" con 3 unidades, marcada como ♻️ reutilizable: al vender una pecera revisa que haya, pero no se descuenta. Si se rompe una, la registras como merma.</p>
+        <button class="btn" id="crearPeceras" style="width:auto;padding:8px 16px">Agregar peceras (3)</button></div>`;
+    }
     function pintarSobran() {
       const l = sobrantes();
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirPeceras());
+      $('#crearPeceras')?.addEventListener('click', () => {
+        const peceras = cfg.tamanos.filter((t) => t.activo && /pecera/.test(normalizar(t.nombre)));
+        let id = 'peceras-vidrio'; while (items.some((i) => i.id === id)) id += '-2';
+        items.push({ id, nombre: 'Peceras de vidrio', categoria: 'otros', unidad: 'und', minimo: 1, activo: true, reutilizable: true, empaques: [],
+          reglas: peceras.map((t) => ({ tipo: 'tamano', id: t.id, cantidad: 1 })), _stockInicial: 3 });
+        marcar(); pintar(); toast('🐟 Peceras agregadas · toca Guardar cambios');
+      });
       $('#quitarSobran')?.addEventListener('click', () => { const ids = new Set(sobrantes().map((i) => i.id)); items = items.filter((i) => !ids.has(i.id)); marcar(); pintar(); toast('Listo · toca Guardar cambios'); });
     }
 
@@ -206,7 +224,7 @@
         const s = stock[i.id] || 0, e = est(i);
         return `<div class="inv-item ${e.clase}">
           <div class="inv-info">
-            <b>${CAT[i.categoria]?.icono || '📦'} ${esc(i.nombre)}</b>
+            <b>${CAT[i.categoria]?.icono || '📦'} ${esc(i.nombre)}${i.reutilizable ? ' <span class="tag-reu">♻️ reutilizable · no se descuenta</span>' : ''}</b>
             <span class="hint">${i.reglas?.length ? '⚡ ' + i.reglas.map(nombreRegla).map(esc).join(' · ') : 'Solo movimientos manuales'}${i.minimo ? ` · mínimo ${fmt(i.minimo)}` : ''}${i.empaques?.length ? ` · 📦 ${i.empaques.map((e) => `${esc(e.nombre)} x${fmt(e.unidades)}`).join(', ')}` : ''}</span>
           </div>
           <div class="inv-stock"><b>${fmt(s)}</b><span>${esc(i.unidad)}${enEmpaques(s, i) ? `<br>${enEmpaques(s, i)}` : ''}</span><em class="estado-pago ${e.clase === 'ok' ? 'ok' : e.clase === 'bajo' ? 'pend' : 'venc'}">${e.icono} ${e.txt}</em></div>
@@ -248,6 +266,7 @@
           <select class="field" data-id="${i.id}" data-k="categoria">${opc(CATEGORIAS_COMPRA, i.categoria)}</select>
           <select class="field" data-id="${i.id}" data-k="unidad" style="max-width:110px">${opc(UNIDADES_INV, i.unidad)}</select>
           <span class="hint">mín.</span><input class="field dia" type="number" min="0" step="any" data-id="${i.id}" data-k="minimo" value="${i.minimo || 0}">
+          <label class="reu" title="Se lava y se reutiliza: nunca se descuenta al vender (ej. peceras de vidrio)"><input type="checkbox" data-id="${i.id}" data-k="reutilizable" ${i.reutilizable ? 'checked' : ''}> ♻️ Reutilizable</label>
           <button class="mini" data-reglas="${i.id}">⚡ Reglas (${i.reglas?.length || 0})</button>
           <button class="mini" data-emp="${i.id}">📦 Empaques (${i.empaques?.length || 0})</button>
           <button class="del" data-del="${i.id}">🗑</button>

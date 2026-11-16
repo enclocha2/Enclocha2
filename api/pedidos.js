@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes } from '../catalog.js';
+import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
@@ -79,7 +79,7 @@ async function handler(req, res) {
         historial: [{ accion: 'tomado', usuario, en: t }],
       };
       // Inventario: descontar lo que consume este pedido
-      pedido.inventario = consumo;
+      pedido.inventario = sinReutilizables(consumo, inventario); // las peceras de vidrio no se descuentan
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario });
       const resp = { pedido };

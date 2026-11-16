@@ -580,3 +580,10 @@ export function itemBase(t, cfg) {
   if (p) { try { const a = armarItem({ tipo: 'producto', productoId: p.id }, { ...cfg, productos: cfg.productos.map((x) => (x.id === p.id ? { ...x, activo: true, precio: x.precio || 1 } : x)) }); producto = { id: p.id, nombre: p.nombre, inv: a.inv }; } catch { /* sin inventario */ } }
   return { tipo: 'granizado', tamano: t.id, cantidad: 1, incluidos: [], adicionales: [], receta: { vaso: rc.vaso, vasos: rc.vasos, pitillos: rc.pitillos }, ...(producto ? { producto } : {}) };
 }
+
+// ---------- Ítems reutilizables (ej. peceras de vidrio: se lavan y vuelven) ----------
+// Se revisa que haya (si se rompen todas, no se puede vender) pero nunca se descuentan.
+export function sinReutilizables(consumo, inventario) {
+  const reu = new Set((inventario || []).filter((i) => i.reutilizable).map((i) => i.id));
+  return Object.fromEntries(Object.entries(consumo).filter(([id]) => !reu.has(id)));
+}

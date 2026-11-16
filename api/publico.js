@@ -3,7 +3,7 @@
 // GET  /api/publico?seguir=ID&t=TOKEN → estado de un pedido
 // POST /api/publico            → crear pedido a domicilio
 import { randomUUID, randomBytes } from 'node:crypto';
-import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida, itemBase, recetaDe } from '../catalog.js';
+import { armarItem, consumoDe, SECCIONES, faltantes, distanciaKm, tarifaPorKm, coordValida, itemBase, recetaDe, sinReutilizables } from '../catalog.js';
 import { configActual, siguienteNumero, guardar, obtener, leerAjustes, leerInventario, moverStock, limitar, leerStock } from './_lib/store.js';
 import { horarioDe, jornadaActual, horaJornada, textoHorario, hoy } from '../fechas.js';
 import { DOM_DEFECTO } from './ajustes.js';
@@ -153,7 +153,7 @@ async function handler(req, res) {
         tomadoPor: '🛵 Web', creado: t,
         historial: [{ accion: 'tomado', usuario: '🛵 Cliente (web)', en: t }],
       };
-      pedido.inventario = consumo;
+      pedido.inventario = sinReutilizables(consumo, inventario); // las peceras de vidrio no se descuentan
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario: '🛵 Web' });
       return res.status(201).json({ id, token: pedido.domicilio.token, numero: pedido.numero, total });
