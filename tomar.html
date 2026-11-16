@@ -229,7 +229,12 @@
     const eligeOpcion = (p) => !sinInv(p) && (p.usa?.length || 0) > 1;
     const faltaProd = (id, usa) => { const a = armar({ tipo: 'producto', productoId: id, cantidad: 1, usa }); return a ? faltaPara([a]) : [{ nombre: '?' }]; };
     const opcionesLibres = (p) => p.usa.filter((u) => !faltaProd(p.id, u).length);
-    const tagProd = (p) => sinInv(p) ? '' : eligeOpcion(p) ? `<em class="stock-tag usa">🔗 ${opcionesLibres(p).length} de ${p.usa.length} opciones</em>` : tagStock('producto', p.usa?.[0] || p.id);
+    const tagItem = (p) => { // producto que descuenta directo de un ítem (ej. Adición gusano → Gusano)
+      const it = inv.items.find((x) => x.id === p.invItem.id && x.activo !== false); if (!it) return '';
+      const n = Math.floor((restante()[it.id] || 0) / (p.invItem.cantidad || 1));
+      return n <= 0 ? '<em class="stock-tag agotado">🔴 Agotado</em>' : n <= Math.max(it.minimo || 0, 5) ? `<em class="stock-tag bajo">🟠 Quedan ${n}</em>` : '';
+    };
+    const tagProd = (p) => sinInv(p) ? '' : p.invItem ? tagItem(p) : eligeOpcion(p) ? `<em class="stock-tag usa">🔗 ${opcionesLibres(p).length} de ${p.usa.length} opciones</em>` : tagStock('producto', p.usa?.[0] || p.id);
 
     // ---------- Cuentas abiertas ----------
     const estadoPed = { rev: null, pedidos: [] };

@@ -146,6 +146,7 @@ export function normalizarConfig(raw) {
     if (!cats.has(p.categoria)) throw new Error(`"${nombre}" no tiene una categoría válida`);
     const extra = {};
     if (p.sinInventario) extra.sinInventario = true;
+    else if (p.invItem?.id) extra.invItem = { id: txt(p.invItem.id, 48), cantidad: Math.max(0.001, Number(p.invItem.cantidad) || 1) }; // descuenta de un ítem (ej. Adición gusano → Gusano)
     else if (Array.isArray(p.usa) && p.usa.length) extra.usa = [...new Set(p.usa.map((x) => txt(x, 48)))].filter((x) => x && x !== p.id).slice(0, 30);
     if (extra.usa && !extra.usa.length) delete extra.usa;
     return { id: txt(p.id, 48), nombre, categoria: p.categoria, precio: precioOk(p.precio, nombre), activo: !!p.activo, ...extra };
@@ -202,14 +203,16 @@ export function armarItem(raw, cfg) {
     if (!p.precio) throw new Error(`"${p.nombre}" no tiene precio`);
     const cat = cfg.categorias.find((c) => c.id === p.categoria);
     let inv = p.id, nombre = p.nombre, usa;
+    let invDirecto;
     if (p.sinInventario || cat?.sinInventario) inv = null;
+    else if (p.invItem) { inv = null; invDirecto = p.invItem; }
     else if (p.usa?.length) {
       inv = p.usa.length === 1 ? p.usa[0] : p.usa.includes(raw.usa) ? raw.usa : null;
       if (!inv) throw new Error(`Escoge con qué va "${p.nombre}"`);
       if (p.usa.length > 1) { usa = inv; nombre = `${p.nombre} (${cfg.productos.find((x) => x.id === inv)?.nombre || inv})`; }
     }
     return {
-      tipo: 'producto', productoId: p.id, nombre, categoria: cat?.nombre || '', inv, ...(usa ? { usa } : {}),
+      tipo: 'producto', productoId: p.id, nombre, categoria: cat?.nombre || '', inv, ...(usa ? { usa } : {}), ...(invDirecto ? { invDirecto } : {}),
       icono: cat?.icono || '🛒', precioUnit: p.precio, cantidad, nota, subtotal: p.precio * cantidad,
     };
   }
@@ -355,6 +358,9 @@ export const UNIDADES_INV = ['und', 'vaso', 'bolsa', 'kg', 'g', 'litro', 'ml', '
 export function consumoDe(items, inventario, ctx = {}) {
   const deltas = {};
   const sumar = (id, n) => { deltas[id] = Math.round(((deltas[id] || 0) - n) * 1000) / 1000; };
+  // productos que descuentan directo de un ítem del inventario
+  const existe = new Set((inventario || []).filter((i) => i.activo !== false).map((i) => i.id));
+  for (const it of items) if (it.tipo === 'producto' && it.invDirecto && existe.has(it.invDirecto.id)) sumar(it.invDirecto.id, (it.cantidad || 1) * it.invDirecto.cantidad);
   for (const inv of inventario || []) {
     for (const r of inv.reglas || []) {
       const k = Number(r.cantidad) || 0;
