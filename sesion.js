@@ -310,9 +310,15 @@ const $p = (n) => '$' + Math.round(n).toLocaleString('es-CO');
 export function dividirPago({ total, nombre = '' }) {
   return new Promise((resolver) => {
     let partes = [];
+    // Partes iguales. Si el total no se puede dividir exacto, se reparte en múltiplos de $50
+    // (la moneda más pequeña) y la diferencia entre personas queda en máximo $50.
     const igual = (n) => {
-      const base = Math.floor(total / n / 100) * 100;
-      partes = Array.from({ length: n }, (_, i) => ({ quien: '', valor: i === n - 1 ? total - base * (n - 1) : base, metodo: 'efectivo' }));
+      if (total % n === 0) { partes = Array.from({ length: n }, () => ({ quien: '', valor: total / n, metodo: 'efectivo' })); return; }
+      const base = Math.floor(total / n / 50) * 50;
+      let resto = total - base * n;
+      partes = Array.from({ length: n }, () => ({ quien: '', valor: base, metodo: 'efectivo' }));
+      for (let i = n - 1; resto >= 50; i = (i - 1 + n) % n) { partes[i].valor += 50; resto -= 50; }
+      partes[n - 1].valor += resto; // lo que sobre (menos de $50) va a la última persona
     };
     igual(2);
     const m = document.createElement('div');
