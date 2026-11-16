@@ -166,3 +166,7 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - Cada compra sale de **un solo lado** (`saleDeCaja` en catalog.js): efectivo de la caja del día (se descuenta en el cierre y NO gasta presupuesto) o del presupuesto (efectivo aparte, transferencia u otro; NO se descuenta en el cierre).
 - Al escoger Efectivo aparece "El efectivo sale de: 🔒 La caja del día / 💼 El presupuesto" (campo `origen`). Compras viejas en efectivo cuentan como caja.
 - Los gastos anotados en el cierre de caja tampoco gastan presupuesto. En Presupuesto se ven aparte ("🔒 Pagado con la caja") y se restan de "Te quedan de las ventas".
+
+## v53 · Para llevar solo granizados y neveras
+- `vaParaLlevar` (catalog.js): solo granizados en vaso (gastan tapa) y neveras (traen su propia tapa, no gastan). Peceras, cervezas, licor, copas, sodas, etc. no.
+- En Tomar pedido el selector "Para tomar aquí / Para llevar" solo aparece si se está armando un granizado o hay granizados/neveras en el pedido. El servidor ignora "llevar" si el pedido no tiene ninguno.

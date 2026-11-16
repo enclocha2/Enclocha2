@@ -379,6 +379,9 @@ export const PERIODOS_FIJO = [
 export const UNIDADES_INV = ['und', 'vaso', 'cucharada', 'bolsa', 'kg', 'g', 'litro', 'ml', 'botella', 'lata', 'paquete'];
 
 // ctx.llevar: pedido para llevar o a domicilio → también se gastan las tapas (una por vaso, según su tamaño)
+// "Para llevar" solo aplica a granizados (en vaso, llevan tapa) y neveras (traen su propia tapa).
+// Peceras (vidrio prestado), cervezas, licor, copas, sodas, etc. no.
+export const vaParaLlevar = (it) => it?.tipo === 'granizado' && !/pecera/.test(normalizar(it.tamanoNombre || ''));
 export function consumoDe(items, inventario, ctx = {}) {
   const deltas = {};
   const sumar = (id, n) => { deltas[id] = Math.round(((deltas[id] || 0) - n) * 1000) / 1000; };

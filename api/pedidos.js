@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
+import { vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
@@ -58,7 +58,7 @@ async function handler(req, res) {
 
       // Inventario: si algo está agotado o no alcanza, no se deja tomar el pedido
       const inventario = await leerInventario();
-      const llevar = !!body.llevar;
+      const llevar = !!body.llevar && items.some(vaParaLlevar); // solo granizados y neveras
       const consumo = consumoDe(items, inventario, { llevar });
       const [stockAct, prestados] = await Promise.all([leerStock(), leerPrestados()]);
       const falta = faltantes(consumo, stockDisponible(stockAct, inventario, prestados), inventario);
