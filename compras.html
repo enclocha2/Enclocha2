@@ -30,33 +30,26 @@
       <h2 id="formTitulo">➕ Registrar compra</h2>
       <div class="chips recientes" id="recientes"></div>
       <form id="fCompra" class="form-compra">
-        <label class="campo ancho"><span>¿Qué se compró?</span>
-          <input class="field" name="insumo" maxlength="80" placeholder="Ej: Hielo en bolsa, vasos 16 oz, pulpa de mango" required list="dlInsumos"></label>
-        <datalist id="dlInsumos"></datalist>
-        <label class="campo"><span>Categoría</span><select class="field" name="categoria" id="selCat"></select></label>
+        <div class="campo ancho"><span>1. ¿Qué se compró?</span>
+          <div class="row" style="gap:8px;flex-wrap:nowrap">
+            <input class="field" id="buscaInsumo" placeholder="🔍 Buscar insumo (ej: vasos 12, hielo, aguila)" autocomplete="off" style="flex:1">
+            <button type="button" class="mini" id="nuevoInsumo" title="Si no está en la lista">➕ Nuevo</button>
+          </div>
+          <div class="insumos" id="insumos"></div>
+          <div class="insumo-sel" id="insumoSel" hidden></div>
+        </div>
+        <div class="campo ancho" id="presBox" hidden><span>2. ¿En qué presentación?</span><div class="presentaciones" id="presentaciones"></div></div>
+        <div class="campo" id="cantBox" hidden><span>3. ¿Cuántos?</span>
+          <input class="field" name="cantidad" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
+          <small class="hint" id="cantInfo"></small></div>
+        <label class="campo" id="valorBox" hidden><span>4. Valor total pagado</span>
+          <div class="precio" style="flex:1"><span>$</span><input class="field" name="valor" type="number" min="0" step="100" inputmode="numeric" placeholder="0"></div>
+          <small class="hint" id="valorInfo"></small></label>
         <label class="campo"><span>Fecha (jornada)</span><input class="field" type="date" name="fecha" required></label>
-        <div class="campo"><span>Cantidad</span>
-          <div class="row" style="gap:6px;flex-wrap:nowrap">
-            <input class="field" name="cantidad" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" style="max-width:110px">
-            <select class="field" name="unidad" id="selUnidad"></select>
-          </div></div>
-        <label class="campo"><span>Valor total</span>
-          <div class="precio" style="flex:1"><span>$</span><input class="field" name="valor" type="number" min="0" step="100" inputmode="numeric" placeholder="0" required></div></label>
         <div class="campo ancho"><span>¿Con qué se pagó?</span><div class="g3" id="pagos"></div></div>
         <label class="campo"><span>Proveedor (opcional)</span><input class="field" name="proveedor" maxlength="60" list="dlProveedores" placeholder="Ej: D1, Makro, Don Pedro"></label>
         <datalist id="dlProveedores"></datalist>
         <label class="campo"><span>Nota (opcional)</span><input class="field" name="nota" maxlength="200"></label>
-        <div class="campo ancho inv-link">
-          <span>📦 ¿Entra al inventario?</span>
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <select class="field" name="invId" id="selInv" style="flex:1;min-width:200px"><option value="">No, no se suma al inventario</option></select>
-            <input class="field" name="invCant" type="number" min="0" step="any" placeholder="Cantidad" style="max-width:110px" hidden>
-            <select class="field" name="invEmp" id="selEmp" style="max-width:170px" hidden></select>
-            <b class="hint" id="invUni"></b>
-          </div>
-          <span class="hint" id="invAyuda" hidden>Ej: 2 bolsas de aros (x100) → entran 200 und al inventario.</span>
-          <div class="con-tapas" id="invTapasBox" hidden></div>
-        </div>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
           <button class="btn ghost" type="button" id="btnCancelarEdicion" hidden>Cancelar edición</button>
@@ -78,6 +71,15 @@
 
     <div class="kpis" id="kpis"></div>
 
+    <section class="card" id="homoCard" hidden>
+      <h2>🔗 Homologar compras anteriores <span class="hint">(escritas a mano)</span></h2>
+      <p class="hint" style="margin-top:0">Asigna cada nombre escrito a mano a un insumo de la lista. Todas las compras con ese nombre quedan unificadas (no cambia el inventario).</p>
+      <div id="homoLista"></div>
+    </section>
+
+    <section class="card"><h2>🧮 Por insumo <span class="hint">(cuánto se compró y a cuánto sale cada unidad)</span></h2>
+      <div class="tabla-wrap"><table class="tabla" id="porInsumo"></table></div></section>
+
     <div class="dos-col">
       <section class="card"><h2>📊 Por categoría</h2><div id="porCat"></div></section>
       <section class="card"><h2>🏪 Por proveedor</h2><div id="porProv"></div></section>
@@ -92,10 +94,26 @@
     </section>
   </main>
 
+  <div class="modal" id="modalInsumo">
+    <div class="box">
+      <h3>➕ Nuevo insumo</h3>
+      <p class="hint" style="margin-top:0">Queda en la lista para siempre, con el mismo nombre en todas las compras.</p>
+      <label class="campo"><span>Nombre</span><input class="field" id="niNombre" maxlength="60" placeholder="Ej: Pulpa de maracuyá"></label>
+      <label class="campo"><span>Categoría</span><select class="field" id="niCat"></select></label>
+      <label class="campo"><span>Se cuenta por</span><select class="field" id="niUni"></select></label>
+      <label class="campo"><span>Empaque (opcional)</span><div class="row" style="gap:6px;flex-wrap:nowrap"><input class="field" id="niEmp" placeholder="ej: bolsa, caja" maxlength="20"><span class="hint">de</span><input class="field" id="niEmpN" type="number" min="0" placeholder="ej: 100" style="max-width:100px"></div></label>
+      <label class="opcional-row"><input type="checkbox" id="niStock" checked> 📦 Llevarle inventario (stock)</label>
+      <p class="hint" style="margin:0 0 10px">Desmárcalo para cosas que se compran pero no se cuentan (gas, bolsas de basura...).</p>
+      <div class="error" id="niError"></div>
+      <button class="btn" id="niCrear">Crear y usar</button>
+      <button class="btn ghost" id="niCancelar">Cancelar</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '/catalog.js';
+    import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA } from '/catalog.js';
     import { requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
 
@@ -116,84 +134,103 @@
     ];
     let periodo = 'mes', filtroCat = 'todas', compras = [], editando = null, pagoSel = 'caja', recientes = [];
 
-    // ---------- Formulario ----------
+    // ---------- Formulario (compras estandarizadas) ----------
     const form = $('#fCompra');
-    $('#selCat').innerHTML = CATEGORIAS_COMPRA.map((c) => `<option value="${c.id}">${c.icono} ${c.nombre}</option>`).join('');
-    $('#selUnidad').innerHTML = UNIDADES.map((u) => `<option>${u}</option>`).join('');
     const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="opt ${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.nombre}</button>`).join(''); };
     $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
 
-    // Inventario para enlazar compras
-    let inventario = [];
-    try { ({ items: inventario } = await api('/api/inventario')); } catch {}
-    $('#selInv').innerHTML += inventario.filter((i) => i.activo !== false).map((i) => `<option value="${i.id}">${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('');
-    let fijarUnidad = false; // al editar: la cantidad guardada ya está en unidades
-    const pintarInv = () => {
-      const it = inventario.find((i) => i.id === form.invId.value);
-      form.invCant.hidden = !it; form.invEmp.hidden = !it; $('#invAyuda').hidden = !it;
+    // La lista de insumos = ítems del inventario (+ los "solo compras")
+    let inventario = [], insumo = null, presSel = '';
+    async function cargarInsumos() { try { ({ items: inventario } = await api('/api/inventario?lite=1')); } catch {} }
+    await cargarInsumos();
+    const fmt = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 2 });
+    const tapaDe = (it) => it?.tapa && inventario.find((x) => x.id === it.tapa);
 
-      if (!it) { $('#invUni').textContent = ''; return; }
-      const previoN = form.invEmp.selectedOptions[0]?.dataset.n || null; // por nombre: "con tapa" y "sin tapa" tienen el mismo x20
-      const tapaIt = it.tapa && inventario.find((x) => x.id === it.tapa);
-      form.invEmp.innerHTML = `<option value="1">${esc(it.unidad)}</option>` + (it.empaques || []).map((e) => `<option value="${e.unidades}" data-n="${esc(e.nombre)}" data-tapa="${e.conTapa && tapaIt ? 1 : ''}">${esc(e.nombre)} (x${e.unidades}${e.conTapa && tapaIt ? ' + tapas' : ''})</option>`).join('');
-      // si la compra dice "bolsa"/"caja"... escoger ese empaque
-      const match = [...form.invEmp.options].find((o) => o.dataset.n && o.dataset.n === form.unidad.value);
-      const ops = [...form.invEmp.options];
-      const elegido = fijarUnidad ? ops[0] : match || ops.find((o) => previoN && o.dataset.n === previoN) || ops[0];
-      form.invEmp.selectedIndex = ops.indexOf(elegido);
-      if (!form.invCant.value) form.invCant.value = form.cantidad.value || '';
-      const total = (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1);
-      $('#invUni').textContent = total ? `= ${total.toLocaleString('es-CO')} ${it.unidad}` : '';
-      const conT = !!form.invEmp.selectedOptions[0]?.dataset.tapa;
-      $('#invTapasBox').hidden = !conT;
-      if (conT) $('#invTapasBox').innerHTML = `🧢 Vienen con tapa: entran también <b>${total.toLocaleString('es-CO')}</b> ${esc(tapaIt.nombre)}`;
-    };
-    form.invId.addEventListener('change', pintarInv);
-    form.invEmp.addEventListener('change', () => { fijarUnidad = false; pintarInv(); });
-    form.invCant.addEventListener('input', pintarInv);
-    form.unidad.addEventListener('change', () => { fijarUnidad = false; pintarInv(); });
-    form.cantidad.addEventListener('input', () => { if (form.invId.value) { fijarUnidad = false; form.invCant.value = form.cantidad.value; pintarInv(); } });
-    // sugerir el ítem de inventario según el nombre de la compra
-    form.insumo.addEventListener('change', () => {
-      if (form.invId.value) return;
-      const q = normalizar(form.insumo.value);
-      const it = inventario.find((i) => q && (normalizar(i.nombre).includes(q) || q.includes(normalizar(i.nombre))));
-      if (it) { form.invId.value = it.id; pintarInv(); }
+    function pintarInsumos() {
+      const q = normalizar($('#buscaInsumo').value);
+      if (insumo && !q) { $('#insumos').innerHTML = ''; return; }
+      const lista = inventario.filter((i) => i.activo !== false && !i.reutilizable && (!q || normalizar(i.nombre).includes(q)));
+      const grupos = CATEGORIAS_COMPRA.map((c) => [c, lista.filter((i) => i.categoria === c.id)]).filter(([, l]) => l.length);
+      $('#insumos').innerHTML = grupos.map(([c, l]) => `<div class="ins-cat">${c.icono} ${esc(c.nombre)}</div>` +
+        l.map((i) => `<button type="button" class="chip ${insumo?.id === i.id ? 'on' : ''}" data-ins="${i.id}">${esc(i.nombre)}</button>`).join('')).join('')
+        || `<p class="hint">No está en la lista. Créalo con <b>➕ Nuevo</b>.</p>`;
+    }
+    function escogerInsumo(it, pres = null) {
+      insumo = it; $('#buscaInsumo').value = '';
+      const emps = it.empaques || [];
+      presSel = pres ?? (emps.find((e) => e.conTapa)?.nombre || emps[0]?.nombre || '');
+      $('#insumoSel').hidden = false;
+      $('#insumoSel').innerHTML = `<b>${CAT[it.categoria]?.icono || '📦'} ${esc(it.nombre)}</b> ${it.soloCompras ? '<span class="hint">· 🧾 no lleva inventario</span>' : '<span class="hint">· 📦 entra al inventario</span>'} <button type="button" class="mini" id="cambiarInsumo">Cambiar</button>`;
+      ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = false; });
+      pintarInsumos(); pintarPres(); form.cantidad.focus();
+    }
+    function pintarPres() {
+      if (!insumo) return;
+      const t = tapaDe(insumo);
+      const ops = [['', `${insumo.unidad} suelto${insumo.unidad === 'und' ? 's' : ''}`], ...(insumo.empaques || []).map((e) => [e.nombre, `${e.nombre} · ${fmt(e.unidades)} ${insumo.unidad}${e.conTapa && t ? ` + ${fmt(e.unidades)} tapas` : ''}`])];
+      $('#presentaciones').innerHTML = ops.map(([v, txt]) => `<button type="button" class="opt ${presSel === v ? 'on' : ''}" data-pres="${esc(v)}">${esc(txt)}</button>`).join('');
+      calcular();
+    }
+    function calcular() {
+      if (!insumo) return;
+      const emp = (insumo.empaques || []).find((e) => e.nombre === presSel);
+      const n = Number(form.cantidad.value) || 0, u = n * (emp ? emp.unidades : 1), t = emp?.conTapa && tapaDe(insumo);
+      $('#cantInfo').innerHTML = n ? `= <b>${fmt(u)} ${esc(insumo.unidad)}</b>${t ? ` + <b>${fmt(u)}</b> ${esc(t.nombre)}` : ''}${insumo.soloCompras ? '' : ' al inventario'}` : '';
+      const v = Number(form.valor.value) || 0;
+      $('#valorInfo').innerHTML = v && u ? `≈ <b>${pesos(Math.round(v / u))}</b> por ${esc(insumo.unidad)}${emp ? ` · ${pesos(Math.round(v / n))} por ${esc(emp.nombre)}` : ''}` : '';
+    }
+    $('#buscaInsumo').addEventListener('input', pintarInsumos);
+    $('#insumos').addEventListener('click', (e) => { const b = e.target.closest('[data-ins]'); if (b) escogerInsumo(inventario.find((x) => x.id === b.dataset.ins)); });
+    $('#insumoSel').addEventListener('click', (e) => { if (e.target.id === 'cambiarInsumo') { insumo = null; $('#insumoSel').hidden = true; pintarInsumos(); $('#buscaInsumo').focus(); } });
+    $('#presentaciones').addEventListener('click', (e) => { const b = e.target.closest('[data-pres]'); if (b) { presSel = b.dataset.pres; pintarPres(); } });
+    form.cantidad.addEventListener('input', calcular); form.valor.addEventListener('input', calcular);
+
+    // Nuevo insumo
+    $('#niCat').innerHTML = CATEGORIAS_COMPRA.map((c) => `<option value="${c.id}">${c.icono} ${c.nombre}</option>`).join('');
+    $('#niUni').innerHTML = UNIDADES_INV.map((u) => `<option>${u}</option>`).join('');
+    $('#nuevoInsumo').addEventListener('click', () => { $('#niNombre').value = $('#buscaInsumo').value; $('#niEmp').value = ''; $('#niEmpN').value = ''; $('#niError').textContent = ''; $('#modalInsumo').classList.add('show'); $('#niNombre').focus(); });
+    $('#niCancelar').addEventListener('click', () => $('#modalInsumo').classList.remove('show'));
+    $('#niCrear').addEventListener('click', async () => {
+      try {
+        const emp = $('#niEmp').value.trim() && Number($('#niEmpN').value) > 0 ? [{ nombre: $('#niEmp').value.trim(), unidades: Number($('#niEmpN').value) }] : undefined;
+        const { insumo: it } = await api('/api/compras?r=insumo', { method: 'POST', body: JSON.stringify({ nombre: $('#niNombre').value, categoria: $('#niCat').value, unidad: $('#niUni').value, soloCompras: !$('#niStock').checked, ...(emp ? { empaques: emp } : {}) }) });
+        inventario.push(it); $('#modalInsumo').classList.remove('show'); escogerInsumo(it); toast(`✅ "${it.nombre}" creado`);
+      } catch (e) { $('#niError').textContent = e.message; }
     });
 
     function limpiarForm() {
-      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; fijarUnidad = false; pintarInv();
+      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; insumo = null; presSel = '';
+      $('#insumoSel').hidden = true; ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = true; });
+      $('#cantInfo').textContent = ''; $('#valorInfo').textContent = '';
       $('#formTitulo').textContent = '➕ Registrar compra';
       $('#btnGuardar').textContent = '💾 Guardar compra';
       $('#btnCancelarEdicion').hidden = true;
-      pintarPagos();
+      pintarPagos(); pintarInsumos();
     }
     function llenarForm(c, conFecha = true) {
-      form.insumo.value = c.insumo; form.categoria.value = c.categoria; form.unidad.value = c.unidad || 'und';
+      const it = c.insumoId && inventario.find((x) => x.id === c.insumoId);
+      if (it) escogerInsumo(it, c.presentacion ?? '');
+      else { limpiarForm(); $('#buscaInsumo').value = c.insumo; pintarInsumos(); toast('Esta compra es de antes: escoge el insumo de la lista', true); }
       form.proveedor.value = c.proveedor || '';
-      if (conFecha) {
-        form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago;
-        form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? '';
-        fijarUnidad = !!c.inventario;
-      } else { form.invId.value = c.inventario?.id || ''; form.invCant.value = ''; fijarUnidad = false; }
-      pintarInv(); pintarPagos();
+      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; }
+      calcular(); pintarPagos();
     }
     $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!insumo) return toast('Escoge qué se compró', true);
       const datos = {
-        insumo: form.insumo.value, categoria: form.categoria.value, fecha: form.fecha.value,
-        cantidad: form.cantidad.value, unidad: form.unidad.value, valor: form.valor.value,
+        insumoId: insumo.id, presentacion: presSel, cantidad: form.cantidad.value, valor: form.valor.value, fecha: form.fecha.value,
         pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
-        inventario: form.invId.value ? { id: form.invId.value, cantidad: (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1), conTapas: !!form.invEmp.selectedOptions[0]?.dataset.tapa } : null,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       const antes = presu?.resumen.deVentas ?? null;
       try {
+        const editado = editando;
         if (editando) await api('/api/compras', { method: 'PUT', body: JSON.stringify({ id: editando, ...datos }) });
         else await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) });
-        toast(editando ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
+        toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
         limpiarForm(); cargar(); cargarRecientes();
         if (puede('presupuesto')) {
           presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
@@ -209,10 +246,9 @@
       try {
         const { compras: cs } = await api(`/api/compras?desde=${sumarDias(H, -60)}&hasta=${H}`);
         const vistos = new Map();
-        for (const c of cs) { const k = normalizar(c.insumo); const v = vistos.get(k) || { ...c, veces: 0 }; v.veces++; vistos.set(k, v); }
+        for (const c of cs) { if (!c.insumoId || !inventario.some((x) => x.id === c.insumoId)) continue; const k = c.insumoId + '|' + (c.presentacion || ''); const v = vistos.get(k) || { ...c, veces: 0 }; v.veces++; vistos.set(k, v); }
         recientes = [...vistos.values()].sort((a, b) => b.veces - a.veces).slice(0, 10);
-        $('#recientes').innerHTML = recientes.length ? '<span class="hint">Frecuentes:</span> ' + recientes.map((c, i) => `<button type="button" class="chip" data-rec="${i}">${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}</button>`).join('') : '';
-        $('#dlInsumos').innerHTML = [...vistos.values()].map((c) => `<option value="${esc(c.insumo)}">`).join('');
+        $('#recientes').innerHTML = recientes.length ? '<span class="hint">Frecuentes:</span> ' + recientes.map((c, i) => `<button type="button" class="chip" data-rec="${i}">${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}${c.presentacion ? ` · ${esc(c.presentacion)}` : ''}</button>`).join('') : '';
         $('#dlProveedores').innerHTML = [...new Set(cs.map((c) => c.proveedor).filter(Boolean))].map((p) => `<option value="${esc(p)}">`).join('');
       } catch {}
     }
@@ -221,6 +257,33 @@
       if (!b) return;
       llenarForm(recientes[b.dataset.rec], false);
       form.cantidad.focus();
+    });
+
+    // Homologar compras viejas (texto libre) → insumo de la lista
+    async function cargarHomologar() {
+      if (!admin) return;
+      try {
+        const { pendientes } = await api('/api/compras?r=homologar');
+        $('#homoCard').hidden = !pendientes.length;
+        const opciones = (sug) => '<option value="">Escoge el insumo…</option>' + CATEGORIAS_COMPRA.map((c) => {
+          const l = inventario.filter((i) => i.categoria === c.id && !i.reutilizable); if (!l.length) return '';
+          return `<optgroup label="${c.icono} ${esc(c.nombre)}">${l.map((i) => `<option value="${i.id}" ${i.id === sug ? 'selected' : ''}>${esc(i.nombre)}</option>`).join('')}</optgroup>`;
+        }).join('');
+        const sugerir = (nombre) => { const q = normalizar(nombre); return inventario.find((i) => normalizar(i.nombre) === q)?.id || inventario.find((i) => q.includes(normalizar(i.nombre)) || normalizar(i.nombre).includes(q))?.id || ''; };
+        $('#homoLista').innerHTML = pendientes.map((p, k) => `<div class="homo-fila">
+          <div><b>"${esc(p.nombre)}"</b><br><span class="hint">${p.n} compra${p.n === 1 ? '' : 's'} · ${pesos(p.total)}</span></div>
+          <select class="field" data-homo="${k}">${opciones(sugerir(p.nombre))}</select>
+          <button class="mini" data-homoap="${k}">✅ Unificar</button></div>`).join('');
+        $('#homoLista').dataset.json = JSON.stringify(pendientes.map((p) => p.nombre));
+      } catch {}
+    }
+    $('#homoLista').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-homoap]'); if (!b) return;
+      const nombres = JSON.parse($('#homoLista').dataset.json || '[]'), k = b.dataset.homoap;
+      const insumoId = document.querySelector(`[data-homo="${k}"]`).value;
+      if (!insumoId) return toast('Escoge el insumo de la lista', true);
+      try { const r = await api('/api/compras?r=homologar', { method: 'PUT', body: JSON.stringify({ nombre: nombres[k], insumoId }) }); toast(`🔗 ${r.homologadas} compra(s) unificadas`); cargarHomologar(); cargar(); }
+      catch (err) { toast(err.message, true); }
     });
 
     // ---------- Lista ----------
@@ -257,13 +320,20 @@
         <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${lista.length} registro${lista.length === 1 ? '' : 's'}</small></div>
         ${PAGOS_COMPRA.map((p) => `<div class="kpi"><span>${p.icono} ${p.nombre}</span><b>${pesos(porPago[p.id] || 0)}</b></div>`).join('')}`;
       $('#porCat').innerHTML = barras(por((c) => c.categoria).map(([k, v]) => [`${CAT[k]?.icono || ''} ${esc(CAT[k]?.nombre || k)}`, v]));
+      // Por insumo: unidades compradas y costo por unidad (solo compras de la lista)
+      const ins = new Map();
+      for (const c of lista) { const k = c.insumoId || 'txt:' + c.insumo; const v = ins.get(k) || { nombre: c.insumo, veces: 0, total: 0, unidades: 0, conUnidades: 0, unidad: c.unidadBase || '', libre: !c.insumoId }; v.veces++; v.total += c.valor; if (c.unidades) { v.unidades += c.unidades; v.conUnidades += c.valor; v.unidad ||= c.unidadBase; } ins.set(k, v); }
+      const filasIns = [...ins.values()].sort((a, b) => b.total - a.total);
+      $('#porInsumo').innerHTML = filasIns.length ? `<thead><tr><th>Insumo</th><th class="num">Compras</th><th class="num">Cantidad</th><th class="num">Total</th><th class="num">Cada unidad</th></tr></thead><tbody>` +
+        filasIns.map((v) => `<tr><td><b>${esc(v.nombre)}</b>${v.libre ? ' <span class="hint">· sin homologar</span>' : ''}</td><td class="num">${v.veces}</td><td class="num">${v.unidades ? `${fmt(v.unidades)} ${esc(v.unidad)}` : '—'}</td><td class="num">${pesos(v.total)}</td><td class="num">${v.unidades ? `<b>${pesos(Math.round(v.conUnidades / v.unidades))}</b>/${esc(v.unidad)}` : '—'}</td></tr>`).join('') + '</tbody>'
+        : '<tr><td class="empty">Sin compras en este periodo.</td></tr>';
       $('#porProv').innerHTML = barras(por((c) => c.proveedor || 'Sin proveedor').slice(0, 8).map(([k, v]) => [esc(k), v]));
 
       $('#tabla').innerHTML = lista.length ? `
         <thead><tr><th>Fecha</th><th>Insumo</th><th>Categoría</th><th class="num">Cantidad</th><th>Pagó con</th><th>Proveedor</th><th class="num">Valor</th>${admin ? '<th></th>' : ''}</tr></thead>
         <tbody>${lista.map((c) => `<tr>
           <td style="white-space:nowrap">${fechaCorta(c.fecha)}<br><span class="hint">${esc(c.registradoPor)}</span></td>
-          <td><b>${esc(c.insumo)}</b>${c.nota ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}${c.inventario ? `<br><span class="hint">📦 +${c.inventario.cantidad} ${esc(c.inventario.unidad)} a ${esc(c.inventario.nombre)}</span>` : ''}</td>
+          <td><b>${esc(c.insumo)}</b>${c.nota ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}${c.inventario ? `<br><span class="hint">📦 +${fmt(c.inventario.cantidad)} ${esc(c.inventario.unidad)} al inventario${c.inventario.tapa ? ` + ${fmt(c.inventario.cantidad)} tapas` : ''}</span>` : ''}${!c.insumoId ? '<br><span class="hint">⚠️ sin homologar</span>' : ''}</td>
           <td>${CAT[c.categoria]?.icono || ''} ${esc(CAT[c.categoria]?.nombre || '')}</td>
           <td class="num">${c.cantidad ? `${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)}` : '—'}${c.cantidad > 0 ? `<br><span class="hint">${pesos(Math.round(c.valor / c.cantidad))}/${esc(c.unidad)}</span>` : ''}</td>
           <td style="white-space:nowrap">${PAGO[c.pago]?.icono || ''} ${esc(PAGO[c.pago]?.nombre || '')}</td>
@@ -315,7 +385,7 @@
     limpiarForm();
     const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);
     $('#desde').value = d0; $('#hasta').value = h0;
-    pintarFiltros(); cargar(); cargarRecientes();
+    pintarFiltros(); cargar(); cargarRecientes(); cargarHomologar();
   </script>
 </body>
 </html>

@@ -53,6 +53,7 @@ async function handler(req, res) {
             .map((r) => ({ tipo: r.tipo, id: r.tipo === 'granizado' ? null : txt(r.id, 48), cantidad: Math.max(0, num(r.cantidad)) || 1 })),
           activo: it.activo !== false,
           ...(it.reutilizable ? { reutilizable: true } : {}),
+          ...(it.soloCompras ? { soloCompras: true } : {}), // insumo que se compra pero no se le lleva stock (gas, bolsas de basura...)
           ...(it.tapa ? { tapa: txt(it.tapa, 48) } : {}), // vasos: ítem de las tapas que a veces vienen con ellos
           empaques: (Array.isArray(it.empaques) ? it.empaques : []).slice(0, 6)
             .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)), ...(e.conTapa ? { conTapa: true } : {}) }))

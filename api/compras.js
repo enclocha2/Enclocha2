@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { sesion } from './_lib/auth.js';
 import gastosFijos from './_lib/gastosfijos.js';
 import presupuesto from './_lib/presupuesto.js';
-import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, moverStock } from './_lib/store.js';
-import { CATEGORIAS_COMPRA, UNIDADES, PAGOS_COMPRA } from '../catalog.js';
+import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock } from './_lib/store.js';
+import { CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, normalizar, slug, empaquesSugeridos } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -11,8 +11,8 @@ const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
 
 function validar(b) {
-  const insumo = txt(b.insumo, 80);
-  if (!insumo) throw new Error('Escribe qué se compró');
+  const insumo = txt(b.insumo, 80) || (b.insumoId ? '…' : '');
+  if (!insumo) throw new Error('Escoge qué se compró');
   if (!FECHA.test(b.fecha || '')) throw new Error('Fecha inválida');
   const valor = Math.round(Number(b.valor));
   if (!(valor > 0) || valor > 100_000_000) throw new Error('Escribe el valor total de la compra');
@@ -27,6 +27,49 @@ function validar(b) {
     proveedor: txt(b.proveedor, 60),
     nota: txt(b.nota, 200),
   };
+}
+
+// ---------- Compras estandarizadas ----------
+// La compra se hace sobre un INSUMO de la lista (los ítems del inventario + los insumos "solo compras"),
+// en una PRESENTACIÓN (la unidad o uno de sus empaques: "paquete con tapa x20"...). Así todas las compras
+// del mismo insumo quedan con el mismo nombre y se pueden comparar (homologar).
+// b = { insumoId, presentacion (nombre del empaque o ''), cantidad, ... }
+async function estandarizar(b, datos) {
+  if (!b.insumoId) return datos; // compra antigua de texto libre
+  const items = await leerInventario();
+  const it = items.find((x) => x.id === b.insumoId);
+  if (!it) throw new Error('Ese insumo ya no existe. Escoge otro de la lista.');
+  const emp = b.presentacion ? (it.empaques || []).find((e) => e.nombre === b.presentacion) : null;
+  if (b.presentacion && !emp) throw new Error('Esa presentación ya no existe para este insumo');
+  const cantidad = Math.round((Number(b.cantidad) || 0) * 1000) / 1000;
+  if (!(cantidad > 0)) throw new Error('Escribe la cantidad que se compró');
+  const unidades = Math.round(cantidad * (emp ? emp.unidades : 1) * 1000) / 1000;
+  const tapa = emp?.conTapa && it.tapa && items.find((x) => x.id === it.tapa);
+  return {
+    ...datos, insumoId: it.id, insumo: it.nombre, categoria: it.categoria,
+    cantidad, unidad: emp ? emp.nombre : it.unidad, presentacion: emp ? emp.nombre : '', unidades, unidadBase: it.unidad,
+    ...(tapa ? { tapas: unidades } : {}),
+    // los que llevan stock entran solos al inventario (y sus tapas si el paquete las trae)
+    inventario: it.soloCompras ? null : { id: it.id, nombre: it.nombre, unidad: it.unidad, cantidad: unidades, ...(tapa ? { tapa: tapa.id } : {}) },
+  };
+}
+
+// Crear un insumo nuevo desde Compras (queda en la lista para siempre)
+async function crearInsumo(b) {
+  const nombre = txt(b.nombre, 60);
+  if (nombre.length < 2) throw new Error('Escribe el nombre del insumo');
+  const items = await leerInventario();
+  if (items.some((x) => normalizar(x.nombre) === normalizar(nombre))) throw new Error('Ya existe un insumo con ese nombre');
+  let id = slug(nombre) || 'insumo'; while (items.some((x) => x.id === id)) id += '-2';
+  const empaques = (Array.isArray(b.empaques) ? b.empaques : empaquesSugeridos(nombre)).slice(0, 6)
+    .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, Number(e.unidades) || 0), ...(e.conTapa ? { conTapa: true } : {}) })).filter((e) => e.nombre && e.unidades > 0);
+  const it = {
+    id, nombre, categoria: CATEGORIAS_COMPRA.some((c) => c.id === b.categoria) ? b.categoria : 'otros',
+    unidad: UNIDADES_INV.includes(b.unidad) ? b.unidad : 'und', minimo: 0, reglas: [], activo: true, empaques,
+    ...(b.soloCompras ? { soloCompras: true } : {}),
+  };
+  await guardarInventario([...items, it]);
+  return it;
 }
 
 // Si la compra entra al inventario: { id, cantidad } (cantidad en la unidad del ítem de inventario)
@@ -57,6 +100,33 @@ async function handler(req, res) {
   const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
 
   try {
+    // Nuevo insumo desde Compras
+    if (r === 'insumo' && req.method === 'POST') {
+      if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso' });
+      try { return res.status(201).json({ insumo: await crearInsumo(leer(req)) }); } catch (e) { return res.status(400).json({ error: e.message }); }
+    }
+    // Homologar: compras viejas escritas a mano → un insumo de la lista
+    if (r === 'homologar') {
+      if (!yo.puede('compras_editar')) return res.status(403).json({ error: 'No tienes permiso' });
+      const todas = await comprasEntre('2000-01-01', '2100-12-31');
+      if (req.method === 'GET') {
+        const m = new Map();
+        for (const c of todas) if (!c.insumoId) { const k = c.insumo; const v = m.get(k) || { nombre: k, n: 0, total: 0, categoria: c.categoria }; v.n++; v.total += c.valor; m.set(k, v); }
+        return res.status(200).json({ pendientes: [...m.values()].sort((a, b) => b.n - a.n) });
+      }
+      if (req.method === 'PUT') {
+        const b = leer(req);
+        const it = (await leerInventario()).find((x) => x.id === b.insumoId);
+        if (!it) return res.status(400).json({ error: 'Escoge el insumo de la lista' });
+        let n = 0;
+        for (const c of todas) if (!c.insumoId && c.insumo === b.nombre) {
+          await guardarCompra({ ...c, insumoId: it.id, insumo: it.nombre, categoria: it.categoria, insumoOriginal: c.insumo, homologadoPor: usuario });
+          n++;
+        }
+        return res.status(200).json({ homologadas: n });
+      }
+    }
+
     if (req.method === 'GET') {
       if (!FECHA.test(q.desde || '') || !FECHA.test(q.hasta || '')) return res.status(400).json({ error: 'Fechas inválidas' });
       const compras = (await comprasEntre(q.desde, q.hasta)).sort((a, b) => (b.fecha + b.creado).localeCompare(a.fecha + a.creado));
@@ -66,7 +136,7 @@ async function handler(req, res) {
     if (req.method === 'POST') {
       if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso para registrar compras' });
       let datos;
-      try { datos = validar(leer(req)); datos.inventario = await validarInventario(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
+      try { const b = leer(req); datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
       const compra = { id: randomUUID(), ...datos, registradoPor: usuario, creado: Date.now() };
       await guardarCompra(compra);
       await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
@@ -84,7 +154,7 @@ async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
       let datos;
-      try { datos = validar(leer(req)); datos.inventario = await validarInventario(leer(req)); } catch (e) { return res.status(400).json({ error: e.message }); }
+      try { const b = leer(req); datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
       // reversar la entrada anterior y aplicar la nueva
       await entrada(actual.inventario, -1, { tipo: 'compra-editada', nota: actual.insumo + ' (antes)', usuario });
       await entrada(datos.inventario, 1, { tipo: 'compra-editada', nota: datos.insumo, usuario });

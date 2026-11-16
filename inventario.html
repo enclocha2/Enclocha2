@@ -237,7 +237,7 @@
 
     function pintar() {
       if (admin) pintarSobran();
-      const activos = items.filter((i) => i.activo !== false);
+      const activos = items.filter((i) => i.activo !== false && !i.soloCompras); // los "solo compras" no llevan stock
       const est = (i) => estadoStock(i, stock[i.id] || 0);
       const bajos = activos.filter((i) => est(i).clase === 'bajo').length;
       const agot = activos.filter((i) => est(i).clase === 'agotado').length;
@@ -310,6 +310,8 @@
           <label class="reu" title="Se lava y se reutiliza: nunca se descuenta al vender (ej. peceras de vidrio)"><input type="checkbox" data-id="${i.id}" data-k="reutilizable" ${i.reutilizable ? 'checked' : ''}> ♻️ Reutilizable</label>
           <button class="mini" data-reglas="${i.id}">⚡ Reglas (${i.reglas?.length || 0})</button>
           <button class="mini" data-emp="${i.id}">📦 Empaques (${i.empaques?.length || 0})</button>
+          ${i.soloCompras ? '<span class="tag-solo">🧾 solo compras · sin stock</span>' : ''}
+          ${i.empaques?.length ? `<span class="emp-res">📦 ${i.empaques.map((e) => `${esc(e.nombre)} x${fmt(e.unidades)}${e.conTapa ? ' + tapas' : ''}`).join(' · ')}</span>` : ''}
           <button class="del" data-del="${i.id}">🗑</button>
         </div>`).join('') || '<p class="hint">No hay ítems todavía.</p>';
     }

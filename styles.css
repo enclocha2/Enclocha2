@@ -1129,3 +1129,17 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .pecera-prestada.ok { opacity: .7; }
 .con-tapas { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(51,225,255,.08); border: 1px solid rgba(51,225,255,.35); cursor: pointer; font-weight: 700; }
 .con-tapas input { width: 18px; height: 18px; accent-color: #33e1ff; }
+
+/* Compras estandarizadas */
+.insumos { max-height: 260px; overflow-y: auto; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.insumos .ins-cat { width: 100%; font-size: .75rem; font-weight: 800; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.insumo-sel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--brand-soft); border: 1px solid rgba(255, 63, 209, .5); }
+.insumo-sel #cambiarInsumo { margin-left: auto; }
+.presentaciones { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.presentaciones .opt { text-align: left; padding: 12px; }
+.homo-fila { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 260px) auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+@media (max-width: 600px) { .homo-fila { grid-template-columns: 1fr; } }
+.opcional-row { display: flex; align-items: center; gap: 8px; font-weight: 700; margin: 6px 0 2px; cursor: pointer; }
+.opcional-row input { width: 18px; height: 18px; accent-color: #ff3fd1; }
+.tag-solo { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; color: #ffd98a; background: rgba(255,207,112,.12); border: 1px solid rgba(255,207,112,.4); }
+.emp-res { font-size: .78rem; color: var(--muted); width: 100%; }
