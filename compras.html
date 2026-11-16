@@ -20,7 +20,7 @@
 <body style="visibility:hidden">
   <header class="top">
     <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>🛒 Compras</h1></div>
-    <div class="row"><a href="/gastos" class="solo-admin">🏠 Gastos fijos</a></div>
+    <div class="row"><a href="/proveedores">🚚 Proveedores</a><a href="/gastos" class="solo-admin">🏠 Gastos fijos</a></div>
   </header>
 
   <main class="admin" style="max-width:1100px">
@@ -54,8 +54,15 @@
         </div>
         <label class="campo"><span>Fecha (jornada)</span><input class="field" type="date" name="fecha" required></label>
         <div class="campo ancho"><span>¿Con qué se pagó?</span><div class="g3" id="pagos"></div></div>
-        <label class="campo"><span>Proveedor (opcional)</span><input class="field" name="proveedor" maxlength="60" list="dlProveedores" placeholder="Ej: D1, Makro, Don Pedro"></label>
-        <datalist id="dlProveedores"></datalist>
+        <div class="campo"><span>¿A quién se le compró?</span>
+          <select class="field" id="provSel"></select>
+          <small class="hint" id="provInfo"></small></div>
+        <div class="campo ancho"><span>📎 Foto o scan de la factura (opcional)</span>
+          <div class="adj-sel">
+            <label class="btn ghost adj-btn"><input type="file" id="factFile" accept="image/*,application/pdf" hidden>📷 Tomar foto o escoger archivo</label>
+            <span class="hint" id="factInfo">Sin archivo</span>
+            <button type="button" class="del" id="factQuitar" hidden title="Quitar">✕</button>
+          </div></div>
         <label class="campo"><span>Nota (opcional)</span><input class="field" name="nota" maxlength="200"></label>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
@@ -71,6 +78,7 @@
         <span class="hint">Desde</span><input class="field" type="date" id="desde">
         <span class="hint">hasta</span><input class="field" type="date" id="hasta">
         <button class="mini" id="aplicar">Ver</button>
+        <select class="field" id="filtroProv" style="max-width:240px"></select>
         <input class="field" id="buscar" placeholder="🔍 Buscar insumo o proveedor..." style="flex:1;min-width:200px">
       </div>
       <div class="chips" id="filtroCat"></div>
@@ -97,9 +105,35 @@
         <h2 style="margin:0">🧾 Compras</h2>
         <button class="mini" id="descargar">⬇️ Descargar para Excel</button>
       </div>
-      <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
+      <div id="facturas"></div>
     </section>
   </main>
+
+  <div class="modal" id="modalProv">
+    <div class="box">
+      <h3>🚚 Nuevo proveedor</h3>
+      <p class="hint" style="margin-top:0">Queda guardado en <a href="/proveedores">Proveedores</a> para las próximas compras.</p>
+      <label class="campo"><span>Nombre o razón social</span><input class="field" id="npNombre" maxlength="80"></label>
+      <label class="campo"><span>NIT</span><input class="field" id="npNit" maxlength="20" inputmode="numeric" placeholder="Ej: 900123456-7"></label>
+      <label class="campo"><span>Teléfono (opcional)</span><input class="field" id="npTel" maxlength="20" inputmode="tel"></label>
+      <div class="error" id="npError"></div>
+      <button class="btn" id="npCrear">Guardar y usar</button>
+      <button class="btn ghost" id="npCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal" id="modalFactura">
+    <div class="box box-factura">
+      <h3 id="mfTitulo">🧾 Factura</h3>
+      <div id="mfCuerpo" class="factura-ver"></div>
+      <div class="row" style="gap:8px">
+        <a class="btn ghost" id="mfDescargar" download style="flex:1;text-align:center">⬇️ Descargar</a>
+        <button class="btn ghost del-txt" id="mfBorrar">🗑 Quitar</button>
+      </div>
+      <button class="btn" id="mfCerrar">Cerrar</button>
+    </div>
+  </div>
+  <input type="file" id="adjFile" accept="image/*,application/pdf" hidden>
 
   <div class="modal" id="modalInsumo">
     <div class="box">
@@ -139,7 +173,112 @@
       ['mespasado', 'Mes pasado', sumarMeses(H, -1), finMes(sumarMeses(H, -1))],
       ['3m', 'Últimos 3 meses', sumarMeses(H, -2), H],
     ];
-    let periodo = 'mes', filtroCat = 'todas', compras = [], editando = null, pagoSel = 'caja', recientes = [];
+    let periodo = 'mes', filtroCat = 'todas', filtroProv = '', compras = [], adjuntos = {}, editando = null, pagoSel = 'caja', recientes = [];
+
+    // ---------- Proveedores ----------
+    let proveedores = [], provSel = '';
+    const PROV = () => Object.fromEntries(proveedores.map((p) => [p.id, p]));
+    async function cargarProveedores() { try { ({ proveedores } = await api('/api/compras?r=proveedores')); } catch {} pintarProv(); }
+    function pintarProv() {
+      proveedores.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      $('#provSel').innerHTML = `<option value="">🏪 Tienda de barrio (sin datos)</option>` +
+        proveedores.map((p) => `<option value="${p.id}">🚚 ${esc(p.nombre)} · NIT ${esc(p.nit)}</option>`).join('') +
+        (puede('compras') ? `<option value="__nuevo">➕ Registrar proveedor nuevo…</option>` : '');
+      if (provSel && !PROV()[provSel]) provSel = '';
+      $('#provSel').value = provSel;
+      const p = PROV()[provSel];
+      $('#provInfo').innerHTML = p ? `NIT <b>${esc(p.nit)}</b>${p.telefono ? ` · 📞 ${esc(p.telefono)}` : ''}` : 'No hay que llenar nada';
+    }
+    $('#provSel').addEventListener('change', (e) => {
+      if (e.target.value === '__nuevo') { e.target.value = provSel; ['#npNombre', '#npNit', '#npTel'].forEach((x) => { $(x).value = ''; }); $('#npError').textContent = ''; $('#modalProv').classList.add('show'); $('#npNombre').focus(); return; }
+      provSel = e.target.value; pintarProv();
+    });
+    $('#npCancelar').addEventListener('click', () => $('#modalProv').classList.remove('show'));
+    $('#npCrear').addEventListener('click', async () => {
+      try {
+        const r = await api('/api/compras?r=proveedores', { method: 'POST', body: JSON.stringify({ nombre: $('#npNombre').value, nit: $('#npNit').value, telefono: $('#npTel').value }) });
+        proveedores = r.proveedores; provSel = r.proveedor.id; pintarProv(); pintarFiltroProv();
+        $('#modalProv').classList.remove('show'); toast(`✅ ${r.proveedor.nombre} registrado`);
+      } catch (e) { $('#npError').textContent = e.message; }
+    });
+
+    // ---------- Factura adjunta (foto o PDF) ----------
+    // Las fotos se achican en el celular antes de subir (máx 1600 px, JPG) para que pesen poco.
+    function leerArchivo(f) { return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = mal; r.readAsDataURL(f); }); }
+    async function prepararArchivo(f) {
+      if (f.type === 'application/pdf') {
+        if (f.size > 700 * 1024) throw new Error('El PDF pesa mucho (máx. 700 KB). Mejor toma una foto de la factura.');
+        return { data: await leerArchivo(f), nombre: f.name };
+      }
+      if (!f.type.startsWith('image/')) throw new Error('Sube una foto o un PDF');
+      const url = await leerArchivo(f);
+      const img = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => mal(new Error('No se pudo leer la foto')); i.src = url; });
+      let lado = 1600, calidad = 0.72, data;
+      for (let k = 0; k < 5; k++) {
+        const esc2 = Math.min(1, lado / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * esc2); c.height = Math.round(img.height * esc2);
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+        data = c.toDataURL('image/jpeg', calidad);
+        if (data.length < 900 * 1024) break;
+        lado *= 0.8; calidad = Math.max(0.5, calidad - 0.08);
+      }
+      return { data, nombre: f.name.replace(/\.[^.]+$/, '') + '.jpg' };
+    }
+    async function subirFactura(factura, archivo) {
+      return (await api('/api/compras?r=adjunto', { method: 'PUT', body: JSON.stringify({ factura, ...archivo }) })).adjunto;
+    }
+    let factArchivo = null;
+    $('#factFile').addEventListener('change', async (e) => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      $('#factInfo').textContent = '⏳ Preparando…';
+      try { factArchivo = await prepararArchivo(f); $('#factInfo').innerHTML = `✅ <b>${esc(f.name)}</b> · ${Math.round(factArchivo.data.length * 0.75 / 1024)} KB`; $('#factQuitar').hidden = false; }
+      catch (err) { factArchivo = null; $('#factInfo').textContent = 'Sin archivo'; toast(err.message, true); }
+    });
+    const quitarFactura = () => { factArchivo = null; $('#factInfo').textContent = 'Sin archivo'; $('#factQuitar').hidden = true; };
+    $('#factQuitar').addEventListener('click', quitarFactura);
+    async function adjuntarDespues(factura) {
+      if (!factArchivo || !factura) return;
+      try { await subirFactura(factura, factArchivo); }
+      catch (err) { toast(`La compra quedó guardada, pero la factura no se pudo subir: ${err.message}`, true); }
+    }
+    // Ver / adjuntar desde la lista
+    let verFactura = null;
+    async function abrirFactura(id) {
+      verFactura = id;
+      $('#mfCuerpo').innerHTML = '<p class="hint">⏳ Cargando…</p>'; $('#mfBorrar').hidden = !puede('compras'); $('#modalFactura').classList.add('show');
+      try {
+        const a = await api(`/api/compras?r=adjunto&factura=${encodeURIComponent(id)}`);
+        $('#mfTitulo').textContent = `🧾 ${a.nombre || 'Factura'}`;
+        $('#mfCuerpo').innerHTML = a.tipo === 'application/pdf'
+          ? `<iframe src="${a.data}" title="Factura"></iframe><p class="hint">Si no se ve, usa ⬇️ Descargar.</p>`
+          : `<img src="${a.data}" alt="Factura">`;
+        $('#mfDescargar').href = a.data; $('#mfDescargar').download = a.nombre || 'factura';
+      } catch (e) { $('#mfCuerpo').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+    }
+    $('#mfCerrar').addEventListener('click', () => $('#modalFactura').classList.remove('show'));
+    $('#mfBorrar').addEventListener('click', async (e) => {
+      const b = e.currentTarget;
+      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Seguro?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑 Quitar'; }, 3000); return; }
+      try { await api(`/api/compras?r=adjunto&factura=${encodeURIComponent(verFactura)}`, { method: 'DELETE' }); delete adjuntos[verFactura]; $('#modalFactura').classList.remove('show'); toast('Factura quitada'); render(); } catch (err) { toast(err.message, true); }
+    });
+    let adjPara = null;
+    $('#adjFile').addEventListener('change', async (e) => {
+      const f = e.target.files[0]; e.target.value = '';
+      if (!f || !adjPara) return;
+      toast('⏳ Subiendo factura…');
+      try { adjuntos[adjPara] = await subirFactura(adjPara, await prepararArchivo(f)); toast('✅ Factura adjuntada'); render(); }
+      catch (err) { toast(err.message, true); }
+    });
+    function pintarFiltroProv() {
+      const usados = new Map();
+      for (const c of compras) { const k = c.proveedorId || (c.proveedor ? 'txt:' + c.proveedor : 'barrio'); if (!usados.has(k)) usados.set(k, c.proveedorId ? (PROV()[c.proveedorId]?.nombre || c.proveedor) : c.proveedor || '🏪 Tienda de barrio'); }
+      for (const p of proveedores) if (!usados.has(p.id)) usados.set(p.id, p.nombre);
+      if (filtroProv && !usados.has(filtroProv)) filtroProv = '';
+      $('#filtroProv').innerHTML = '<option value="">Todos los proveedores</option>' + [...usados.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]))).map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
+      $('#filtroProv').value = filtroProv;
+    }
+    $('#filtroProv').addEventListener('change', (e) => { filtroProv = e.target.value; render(); });
 
     // ---------- Formulario (compras estandarizadas) ----------
     const form = $('#fCompra');
@@ -254,13 +393,14 @@
       $('#formTitulo').textContent = '➕ Registrar compra';
       $('#btnGuardar').textContent = '💾 Guardar compra';
       $('#btnCancelarEdicion').hidden = true;
+      provSel = ''; quitarFactura(); pintarProv();
       pintarPagos(); pintarInsumos(); pintarLineas();
     }
     function llenarForm(c, conFecha = true) {
       const it = c.insumoId && inventario.find((x) => x.id === c.insumoId);
       if (it) escogerInsumo(it, c.presentacion ?? '');
       else { limpiarForm(); $('#buscaInsumo').value = c.insumo; pintarInsumos(); toast('Esta compra es de antes: escoge el insumo de la lista', true); }
-      form.proveedor.value = c.proveedor || '';
+      provSel = c.proveedorId && PROV()[c.proveedorId] ? c.proveedorId : ''; pintarProv();
       if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; }
       calcular(); pintarPagos();
     }
@@ -275,8 +415,9 @@
         const todas = [...lineas, ...(l ? [l] : [])];
         const btn = $('#btnGuardar'); btn.disabled = true;
         try {
-          await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
+          const r = await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, proveedorId: provSel, nota: form.nota.value,
             lineas: todas.map(({ insumoId, presentacion, cantidad, valor }) => ({ insumoId, presentacion, cantidad, valor })) }) });
+          await adjuntarDespues(r.factura);
           toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`);
           limpiarForm(); cargar(); cargarRecientes();
           if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
@@ -287,14 +428,21 @@
       if (!insumo) return toast('Escoge qué se compró', true);
       const datos = {
         insumoId: insumo.id, presentacion: presSel, cantidad: form.cantidad.value, valor: form.valor.value, fecha: form.fecha.value,
-        pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
+        pago: pagoSel, proveedorId: provSel, nota: form.nota.value,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       const antes = presu?.resumen.deVentas ?? null;
       try {
         const editado = editando;
-        if (editando) await api('/api/compras', { method: 'PUT', body: JSON.stringify({ id: editando, ...datos }) });
-        else await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) });
+        const conFactura = !!factArchivo;
+        if (editando) {
+          const c0 = compras.find((x) => x.id === editando);
+          // si era de barrio con nombre escrito a mano, se conserva
+          if (!provSel && c0?.proveedor && !c0.proveedorId) datos.proveedor = c0.proveedor;
+          const { compra } = await api('/api/compras', { method: 'PUT', body: JSON.stringify({ id: editando, ...datos }) });
+          await adjuntarDespues(compra.factura || compra.id);
+        } else { const { compra } = await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) }); await adjuntarDespues(compra.factura); }
+        if (conFactura) toast('📎 Factura adjuntada');
         toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
         limpiarForm(); cargar(); cargarRecientes();
         if (puede('presupuesto')) {
@@ -314,7 +462,6 @@
         for (const c of cs) { if (!c.insumoId || !inventario.some((x) => x.id === c.insumoId)) continue; const k = c.insumoId + '|' + (c.presentacion || ''); const v = vistos.get(k) || { ...c, veces: 0 }; v.veces++; vistos.set(k, v); }
         recientes = [...vistos.values()].sort((a, b) => b.veces - a.veces).slice(0, 10);
         $('#recientes').innerHTML = recientes.length ? '<span class="hint">Frecuentes:</span> ' + recientes.map((c, i) => `<button type="button" class="chip" data-rec="${i}">${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}${c.presentacion ? ` · ${esc(c.presentacion)}` : ''}</button>`).join('') : '';
-        $('#dlProveedores').innerHTML = [...new Set(cs.map((c) => c.proveedor).filter(Boolean))].map((p) => `<option value="${esc(p)}">`).join('');
       } catch {}
     }
     $('#recientes').addEventListener('click', (e) => {
@@ -360,14 +507,15 @@
 
     async function cargar() {
       try {
-        ({ compras } = await api(`/api/compras?desde=${$('#desde').value}&hasta=${$('#hasta').value}`));
-        render();
+        ({ compras, adjuntos = {} } = await api(`/api/compras?desde=${$('#desde').value}&hasta=${$('#hasta').value}`));
+        pintarFiltroProv(); render();
       } catch (e) { toast(e.message, true); }
     }
 
     const filtradas = () => {
       const q = normalizar($('#buscar').value);
-      return compras.filter((c) => (filtroCat === 'todas' || c.categoria === filtroCat) && (!q || normalizar(`${c.insumo} ${c.proveedor} ${c.nota}`).includes(q)));
+      const provDe = (c) => c.proveedorId || (c.proveedor ? 'txt:' + c.proveedor : 'barrio');
+      return compras.filter((c) => (filtroCat === 'todas' || c.categoria === filtroCat) && (!filtroProv || provDe(c) === filtroProv) && (!q || normalizar(`${c.insumo} ${c.proveedor} ${c.nit || ''} ${c.nota}`).includes(q)));
     };
 
     function barras(filas) {
@@ -392,22 +540,32 @@
       $('#porInsumo').innerHTML = filasIns.length ? `<thead><tr><th>Insumo</th><th class="num">Compras</th><th class="num">Cantidad</th><th class="num">Total</th><th class="num">Cada unidad</th></tr></thead><tbody>` +
         filasIns.map((v) => `<tr><td><b>${esc(v.nombre)}</b>${v.libre ? ' <span class="hint">· sin homologar</span>' : ''}</td><td class="num">${v.veces}</td><td class="num">${v.unidades ? `${fmt(v.unidades)} ${esc(v.unidad)}` : '—'}</td><td class="num">${pesos(v.total)}</td><td class="num">${v.unidades ? `<b>${pesos(Math.round(v.conUnidades / v.unidades))}</b>/${esc(v.unidad)}` : '—'}</td></tr>`).join('') + '</tbody>'
         : '<tr><td class="empty">Sin compras en este periodo.</td></tr>';
-      $('#porProv').innerHTML = barras(por((c) => c.proveedor || 'Sin proveedor').slice(0, 8).map(([k, v]) => [esc(k), v]));
+      $('#porProv').innerHTML = barras(por((c) => c.proveedor || '🏪 Tienda de barrio').slice(0, 8).map(([k, v]) => [esc(k), v]));
 
-      $('#tabla').innerHTML = lista.length ? `
-        <thead><tr><th>Fecha</th><th>Insumo</th><th>Categoría</th><th class="num">Cantidad</th><th>Pagó con</th><th>Proveedor</th><th class="num">Valor</th>${admin ? '<th></th>' : ''}</tr></thead>
-        <tbody>${lista.map((c) => `<tr>
-          <td style="white-space:nowrap">${fechaCorta(c.fecha)}<br><span class="hint">${esc(c.registradoPor)}</span></td>
-          <td><b>${esc(c.insumo)}</b>${c.nota ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}${c.inventario ? `<br><span class="hint">📦 +${fmt(c.inventario.cantidad)} ${esc(c.inventario.unidad)} al inventario${c.inventario.tapa ? ` + ${fmt(c.inventario.cantidad)} tapas` : ''}</span>` : ''}${!c.insumoId ? '<br><span class="hint">⚠️ sin homologar</span>' : ''}</td>
-          <td>${CAT[c.categoria]?.icono || ''} ${esc(CAT[c.categoria]?.nombre || '')}</td>
-          <td class="num">${c.cantidad ? `${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)}` : '—'}${c.cantidad > 0 ? `<br><span class="hint">${pesos(Math.round(c.valor / c.cantidad))}/${esc(c.unidad)}</span>` : ''}</td>
-          <td style="white-space:nowrap">${PAGO[c.pago]?.icono || ''} ${esc(PAGO[c.pago]?.nombre || '')}</td>
-          <td>${esc(c.proveedor || '—')}</td>
-          <td class="num"><b>${pesos(c.valor)}</b></td>
-          ${admin ? `<td style="white-space:nowrap"><button class="mini" data-edit="${c.id}">✏️</button> <button class="del" data-del="${c.id}">🗑</button></td>` : ''}
-        </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="6"><b>Total</b></td><td class="num"><b>${pesos(total)}</b></td>${admin ? '<td></td>' : ''}</tr></tfoot>`
-        : '<tr><td class="empty">No hay compras en este periodo.</td></tr>';
+      // Cada compra (factura) por separado, con sus productos adentro
+      const grupos = new Map();
+      for (const c of lista) { const k = c.factura || c.id; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); }
+      const subir = puede('compras');
+      $('#facturas').innerHTML = grupos.size ? [...grupos.entries()].map(([fid, cs]) => {
+        const c0 = cs[0], tot = cs.reduce((t, c) => t + c.valor, 0), adj = adjuntos[fid];
+        const prov = c0.proveedorId ? `🚚 <b>${esc(PROV()[c0.proveedorId]?.nombre || c0.proveedor)}</b> <span class="hint">· NIT ${esc(c0.nit || PROV()[c0.proveedorId]?.nit || '')}</span>` : `🏪 <b>${esc(c0.proveedor || 'Tienda de barrio')}</b>`;
+        return `<article class="factura-card">
+          <header>
+            <div><div>${prov}</div><span class="hint">${fechaCorta(c0.fecha)} · ${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.nombre || '')} · ${esc(c0.registradoPor)}${c0.nota && cs.length > 1 ? ` · 📝 ${esc(c0.nota)}` : ''}</span></div>
+            <div class="factura-der">
+              <b class="factura-total">${pesos(tot)}</b>
+              ${adj ? `<button class="mini adj-on" data-ver-fact="${esc(fid)}">📎 Ver factura</button>` : subir ? `<button class="mini" data-adj="${esc(fid)}">📎 Adjuntar factura</button>` : '<span class="hint">sin factura</span>'}
+            </div>
+          </header>
+          <div class="factura-lineas">${cs.map((c) => `<div class="factura-linea">
+            <span><b>${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}</b>${c.cantidad ? ` <span class="hint">· ${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)}${c.cantidad > 0 ? ` (${pesos(Math.round(c.valor / c.cantidad))} c/u)` : ''}</span>` : ''}
+              ${c.inventario ? `<br><span class="hint">📦 +${fmt(c.inventario.cantidad)} ${esc(c.inventario.unidad)} al inventario${c.inventario.tapa ? ` + ${fmt(c.inventario.cantidad)} tapas` : ''}</span>` : ''}${!c.insumoId ? '<br><span class="hint">⚠️ sin homologar</span>' : ''}${c.nota && cs.length === 1 ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}</span>
+            <b>${pesos(c.valor)}</b>
+            ${admin ? `<span class="factura-acc"><button class="mini" data-edit="${c.id}">✏️</button> <button class="del" data-del="${c.id}">🗑</button></span>` : ''}
+          </div>`).join('')}</div>
+        </article>`;
+      }).join('') + `<div class="factura-pie"><span>${grupos.size} compra${grupos.size === 1 ? '' : 's'} · ${lista.length} producto${lista.length === 1 ? '' : 's'}</span><b>${pesos(total)}</b></div>`
+        : '<p class="empty hint">No hay compras en este periodo.</p>';
     }
 
     document.querySelector('main').addEventListener('click', async (e) => {
@@ -418,6 +576,8 @@
         $('#desde').value = d; $('#hasta').value = h; pintarFiltros(); cargar();
       }
       if (b.dataset.fc) { filtroCat = b.dataset.fc; pintarFiltros(); render(); }
+      if (b.dataset.verFact) abrirFactura(b.dataset.verFact);
+      if (b.dataset.adj) { adjPara = b.dataset.adj; $('#adjFile').click(); }
       if (b.dataset.edit) {
         const c = compras.find((x) => x.id === b.dataset.edit);
         editando = c.id; lineas = []; llenarForm(c); pintarLineas();
@@ -438,8 +598,9 @@
       const lista = filtradas();
       if (!lista.length) return toast('No hay compras para descargar', true);
       const c = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
-      const filas = [['Fecha', 'Insumo', 'Categoría', 'Cantidad', 'Unidad', 'Valor', 'Pagó con', 'Proveedor', 'Nota', 'Registró']]
-        .concat(lista.map((x) => [x.fecha, x.insumo, CAT[x.categoria]?.nombre, x.cantidad ?? '', x.unidad, x.valor, PAGO[x.pago]?.nombre, x.proveedor, x.nota, x.registradoPor]));
+      const nCompra = new Map(); for (const x of lista) { const k = x.factura || x.id; if (!nCompra.has(k)) nCompra.set(k, nCompra.size + 1); }
+      const filas = [['Compra #', 'Fecha', 'Insumo', 'Categoría', 'Cantidad', 'Unidad', 'Valor', 'Pagó con', 'Proveedor', 'NIT', 'Factura adjunta', 'Nota', 'Registró']]
+        .concat(lista.map((x) => [nCompra.get(x.factura || x.id), x.fecha, x.insumo, CAT[x.categoria]?.nombre, x.cantidad ?? '', x.unidad, x.valor, PAGO[x.pago]?.nombre, x.proveedor || 'Tienda de barrio', x.nit || '', adjuntos[x.factura || x.id] ? 'Sí' : 'No', x.nota, x.registradoPor]));
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob(['﻿' + filas.map((f) => f.map(c).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
       a.download = `compras_${$('#desde').value}_a_${$('#hasta').value}.csv`; a.click();
@@ -447,6 +608,7 @@
 
     let presu = null;
     if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
+    await cargarProveedores();
     limpiarForm();
     const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);
     $('#desde').value = d0; $('#hasta').value = h0;

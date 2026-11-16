@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sesion } from './_lib/auth.js';
 import gastosFijos from './_lib/gastosfijos.js';
 import presupuesto from './_lib/presupuesto.js';
-import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock } from './_lib/store.js';
+import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock, leerProveedores, guardarProveedores, guardarAdjunto, leerAdjunto, borrarAdjunto, metaAdjuntos } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, normalizar, slug, empaquesSugeridos } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
@@ -56,6 +56,16 @@ async function estandarizar(b, datos) {
   };
 }
 
+// ---------- Proveedores ----------
+// Proveedor fijo: nombre + NIT (y si se quiere teléfono y contacto). La tienda de barrio no necesita nada.
+const limpiarNit = (n) => String(n || '').replace(/[^0-9kK-]/g, '').slice(0, 20);
+async function conProveedor(b, datos) {
+  if (!b.proveedorId) return { ...datos, proveedorId: null, nit: '' };
+  const p = (await leerProveedores()).find((x) => x.id === b.proveedorId);
+  if (!p) throw new Error('Ese proveedor ya no existe');
+  return { ...datos, proveedorId: p.id, proveedor: p.nombre, nit: p.nit || '' };
+}
+
 // Crear un insumo nuevo desde Compras (queda en la lista para siempre)
 async function crearInsumo(b) {
   const nombre = txt(b.nombre, 60);
@@ -102,6 +112,47 @@ async function handler(req, res) {
   const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
 
   try {
+    // ---------- Proveedores ----------
+    if (r === 'proveedores') {
+      const lista = await leerProveedores();
+      if (req.method === 'GET') return res.status(200).json({ proveedores: lista });
+      if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso' });
+      const b = leer(req);
+      if (req.method === 'DELETE') return res.status(200).json({ proveedores: await guardarProveedores(lista.filter((p) => p.id !== (q.id || b.id))) });
+      const nombre = txt(b.nombre, 80), nit = limpiarNit(b.nit);
+      if (nombre.length < 2) return res.status(400).json({ error: 'Escribe el nombre del proveedor' });
+      if (!nit) return res.status(400).json({ error: 'Escribe el NIT (para la tienda de barrio no hace falta registrar proveedor)' });
+      const datos = { nombre, nit, telefono: txt(b.telefono, 20), contacto: txt(b.contacto, 60), nota: txt(b.nota, 120) };
+      if (req.method === 'POST') {
+        if (lista.some((p) => p.nit === nit)) return res.status(400).json({ error: 'Ya hay un proveedor con ese NIT' });
+        const p = { id: randomUUID().slice(0, 8), ...datos, creado: Date.now(), creadoPor: usuario };
+        await guardarProveedores([...lista, p]);
+        return res.status(201).json({ proveedor: p, proveedores: [...lista, p] });
+      }
+      if (req.method === 'PUT') {
+        const p = lista.find((x) => x.id === b.id); if (!p) return res.status(404).json({ error: 'Proveedor no encontrado' });
+        if (lista.some((x) => x.id !== p.id && x.nit === nit)) return res.status(400).json({ error: 'Ya hay un proveedor con ese NIT' });
+        Object.assign(p, datos);
+        await guardarProveedores(lista);
+        return res.status(200).json({ proveedor: p, proveedores: lista });
+      }
+    }
+    // ---------- Foto o scan de la factura ----------
+    if (r === 'adjunto') {
+      const factura = String(q.factura || leer(req).factura || '').slice(0, 64);
+      if (!factura) return res.status(400).json({ error: 'Falta la factura' });
+      if (req.method === 'GET') { const a = await leerAdjunto(factura); return a ? res.status(200).json(a) : res.status(404).json({ error: 'Esta compra no tiene factura adjunta' }); }
+      if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso' });
+      if (req.method === 'DELETE') { await borrarAdjunto(factura); return res.status(200).json({ ok: true }); }
+      if (req.method === 'PUT') {
+        const b = leer(req);
+        if (typeof b.data !== 'string' || !/^data:(image\/(jpeg|png|webp)|application\/pdf);base64,/.test(b.data)) return res.status(400).json({ error: 'El archivo debe ser una foto (JPG/PNG) o un PDF' });
+        if (b.data.length > 950 * 1024) return res.status(400).json({ error: 'El archivo es muy pesado (máx. ~700 KB). Si es PDF, toma mejor una foto.' });
+        const meta = await guardarAdjunto(factura, { data: b.data, nombre: txt(b.nombre, 80) || 'factura', tipo: b.data.slice(5, b.data.indexOf(';')), subidoPor: usuario });
+        return res.status(200).json({ adjunto: meta });
+      }
+    }
+
     // Nuevo insumo desde Compras
     if (r === 'insumo' && req.method === 'POST') {
       if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso' });
@@ -132,7 +183,9 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       if (!FECHA.test(q.desde || '') || !FECHA.test(q.hasta || '')) return res.status(400).json({ error: 'Fechas inválidas' });
       const compras = (await comprasEntre(q.desde, q.hasta)).sort((a, b) => (b.fecha + b.creado).localeCompare(a.fecha + a.creado));
-      return res.status(200).json({ compras, admin: yo.puede('compras_editar') });
+      const facturas = [...new Set(compras.map((c) => c.factura || c.id))];
+      const adjuntos = await metaAdjuntos(facturas);
+      return res.status(200).json({ compras, adjuntos, admin: yo.puede('compras_editar') });
     }
 
     if (req.method === 'POST') {
@@ -145,7 +198,7 @@ async function handler(req, res) {
         const comun = { fecha: b.fecha, pago: b.pago, proveedor: b.proveedor, nota: b.nota };
         const lista = [];
         for (const [k, l] of b.lineas.entries()) {
-          try { const x = { ...comun, ...l }; let d = validar(x); d.inventario = await validarInventario(x); d = await estandarizar(x, d); lista.push(d); }
+          try { const x = { ...comun, ...l, proveedorId: b.proveedorId }; let d = validar(x); d.inventario = await validarInventario(x); d = await estandarizar(x, d); d = await conProveedor(x, d); lista.push(d); }
           catch (e) { return res.status(400).json({ error: `Producto ${k + 1}: ${e.message}` }); }
         }
         const factura = randomUUID(), t = Date.now(), compras = [];
@@ -158,8 +211,9 @@ async function handler(req, res) {
         return res.status(201).json({ compras, factura });
       }
       let datos;
-      try { datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
-      const compra = { id: randomUUID(), ...datos, registradoPor: usuario, creado: Date.now() };
+      try { datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); datos = await conProveedor(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
+      const idc = randomUUID();
+      const compra = { id: idc, ...datos, factura: idc, registradoPor: usuario, creado: Date.now() };
       await guardarCompra(compra);
       await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
       return res.status(201).json({ compra });
@@ -172,11 +226,12 @@ async function handler(req, res) {
       if (!actual) return res.status(404).json({ error: 'Compra no encontrada' });
       if (req.method === 'DELETE') {
         await borrarCompra(actual.id);
+        if (actual.factura === actual.id) await borrarAdjunto(actual.id);
         await entrada(actual.inventario, -1, { tipo: 'compra-borrada', nota: actual.insumo, usuario });
         return res.status(200).json({ ok: true });
       }
       let datos;
-      try { const b = leer(req); datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
+      try { const b = leer(req); datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); datos = await conProveedor(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
       // reversar la entrada anterior y aplicar la nueva
       await entrada(actual.inventario, -1, { tipo: 'compra-editada', nota: actual.insumo + ' (antes)', usuario });
       await entrada(datos.inventario, 1, { tipo: 'compra-editada', nota: datos.insumo, usuario });

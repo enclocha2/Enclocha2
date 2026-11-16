@@ -1162,3 +1162,25 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .linea { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
 .linea.total { background: var(--brand-soft); border-color: rgba(255, 63, 209, .5); }
 .linea .del { width: 32px; height: 32px; padding: 0; }
+
+/* ---------- Compras por factura + proveedores ---------- */
+.adj-sel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.adj-btn { margin: 0; cursor: pointer; width: auto; padding: 10px 14px; }
+.factura-card { border: 1px solid rgba(255, 255, 255, .12); border-radius: 14px; margin-bottom: 10px; overflow: hidden; background: rgba(255, 255, 255, .03); }
+.factura-card > header { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; background: rgba(139, 92, 246, .14); }
+.factura-der { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.factura-total { font-size: 1.1rem; }
+.adj-on { border-color: #199e70; }
+.factura-lineas { padding: 4px 12px; }
+.factura-linea { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px dashed rgba(255, 255, 255, .1); }
+.factura-linea:last-child { border-bottom: 0; }
+.factura-acc { white-space: nowrap; }
+.factura-pie { display: flex; justify-content: space-between; padding: 10px 12px; font-size: 1.05rem; }
+.box-factura { max-width: 720px !important; }
+.factura-ver img { width: 100%; border-radius: 10px; background: #fff; }
+.factura-ver iframe { width: 100%; height: 70vh; border: 0; border-radius: 10px; background: #fff; }
+.del-txt { width: auto; }
+@media (max-width: 600px) {
+  .factura-linea { grid-template-columns: 1fr auto; }
+  .factura-acc { grid-column: 1 / -1; justify-self: end; }
+}

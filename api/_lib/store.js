@@ -463,3 +463,42 @@ export async function guardarDiasCerrados(lista) {
   if (redis) await redis.set('dias:cerrados', l); else mem.diasCerrados = l;
   return l;
 }
+
+// ---------- Proveedores (iguales para todas las sedes) ----------
+export async function leerProveedores() {
+  const l = redis ? await redis.get('proveedores') : mem.proveedores;
+  return Array.isArray(l) ? l : [];
+}
+export async function guardarProveedores(lista) {
+  if (redis) await redis.set('proveedores', lista); else mem.proveedores = lista;
+  return lista;
+}
+
+// ---------- Factura (foto o scan) de cada compra ----------
+// El archivo va en su propia llave (no se trae al listar); la lista solo sabe si hay adjunto.
+export async function guardarAdjunto(factura, adj) {
+  const meta = { nombre: adj.nombre, tipo: adj.tipo, tam: adj.data.length, subidoPor: adj.subidoPor, en: Date.now() };
+  if (redis) { const pl = redis.pipeline(); pl.set(K(`factura:archivo:${factura}`), adj.data); pl.hset(K('facturas:adjuntos'), { [factura]: JSON.stringify(meta) }); await pl.exec(); }
+  else { (M().adjuntos ||= {})[factura] = { ...meta, data: adj.data }; }
+  return meta;
+}
+export async function leerAdjunto(factura) {
+  if (redis) {
+    const [data, meta] = await Promise.all([redis.get(K(`factura:archivo:${factura}`)), redis.hget(K('facturas:adjuntos'), factura)]);
+    return data ? { data, ...(typeof meta === 'string' ? JSON.parse(meta) : meta || {}) } : null;
+  }
+  return M().adjuntos?.[factura] || null;
+}
+export async function borrarAdjunto(factura) {
+  if (redis) { const pl = redis.pipeline(); pl.del(K(`factura:archivo:${factura}`)); pl.hdel(K('facturas:adjuntos'), factura); await pl.exec(); }
+  else if (M().adjuntos) delete M().adjuntos[factura];
+}
+export async function metaAdjuntos(ids) {
+  if (!ids.length) return {};
+  if (redis) {
+    const vals = await redis.hmget(K('facturas:adjuntos'), ...ids);
+    const o = {}; ids.forEach((id, k) => { const v = Array.isArray(vals) ? vals[k] : vals?.[id]; if (v) o[id] = typeof v === 'string' ? JSON.parse(v) : v; });
+    return o;
+  }
+  const o = {}; for (const id of ids) if (M().adjuntos?.[id]) { const { data, ...m } = M().adjuntos[id]; o[id] = m; } return o;
+}

@@ -149,3 +149,9 @@ Cada archivo dentro de `api/` (menos `api/_lib/`) cuenta como una función. La a
 - `/api/ventas?r=estadisticas` (código en `api/_lib/estadisticas.js`)
 - `/api/usuarios?r=roles` (roles)
 Si agregas más endpoints, mételos así para no pasar de 12.
+
+## v50 · Proveedores y facturas
+- **Proveedores** (menú → Caja y dinero → 🚚 Proveedores): nombre/razón social, NIT, teléfono, contacto y nota. El NIT no se puede repetir. Son los mismos para todas las sedes.
+- En **Compras**, "¿A quién se le compró?": por defecto *🏪 Tienda de barrio* (no hay que llenar nada); o se escoge un proveedor fijo (queda guardado nombre + NIT en la compra). Se puede registrar uno nuevo ahí mismo.
+- **Foto o scan de la factura** (JPG/PNG/PDF): se adjunta al registrar o después con "📎 Adjuntar factura". Las fotos se achican en el celular (máx. 1600 px) antes de subir; PDF máx. 700 KB. Se guardan por sede en Redis (`factura:archivo:<id>`).
+- La lista de compras sale **separada por compra/factura**: cada tarjeta con proveedor, NIT, fecha, pago, total y sus productos. Filtro por proveedor y el Excel trae # de compra, NIT y si tiene factura.
