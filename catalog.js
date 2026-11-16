@@ -663,3 +663,34 @@ export function gruposRepetidos(items) {
   for (const i of items) { if (i.reutilizable) continue; const r = raiz(i.id); g.set(r, [...(g.get(r) || []), i]); }
   return [...g.values()].filter((l) => l.length > 1);
 }
+
+// ---------- Bases de granizado (una por sabor) ----------
+// Todo sabor (activo o no) tiene su ítem "Base …" en litros. Solo cuentan los de sabores ACTIVOS:
+// los de sabores apagados no se muestran ni alertan hasta que el sabor se vuelva a activar.
+export const nombreBase = (sabor) => 'Base ' + sabor.nombre.replace(/\s*\(.*$/, '').trim();
+// Las bolsas de sabor vienen de 6 litros (algunas de 3)
+export const EMPAQUES_BASE = [{ nombre: 'bolsa de 6 litros', unidades: 6 }, { nombre: 'bolsa de 3 litros', unidades: 3 }];
+export function asegurarBases(items, cfg) {
+  let cambio = false;
+  const lista = items.map((i) => {
+    if (!i.reglas?.some((r) => r.tipo === 'sabor')) return i;
+    // bases que ya existían: quedan con las dos bolsas (6 y 3 litros) y contadas en litros
+    const ok = i.unidad === 'litro' && EMPAQUES_BASE.every((e) => i.empaques?.some((x) => x.nombre === e.nombre && x.unidades === e.unidades));
+    if (ok) return i;
+    cambio = true;
+    const otros = (i.empaques || []).filter((e) => !/^bolsa/.test(e.nombre));
+    return { ...i, unidad: 'litro', empaques: [...EMPAQUES_BASE, ...otros].slice(0, 6) };
+  });
+  for (const s of cfg.sabores) {
+    if (lista.some((i) => i.reglas?.some((r) => r.tipo === 'sabor' && r.id === s.id))) continue;
+    let id = slug('base ' + s.id); while (lista.some((i) => i.id === id)) id += '-2';
+    lista.push({ id, nombre: nombreBase(s), categoria: 'sabores', unidad: 'litro', minimo: 6, activo: true, empaques: EMPAQUES_BASE.map((e) => ({ ...e })), reglas: [{ tipo: 'sabor', id: s.id, cantidad: 1 }] });
+    cambio = true;
+  }
+  return cambio ? lista : null;
+}
+// ¿Este ítem es la base de un sabor apagado? (no se muestra ni alerta)
+export function baseInactiva(item, cfg) {
+  const r = item.reglas?.filter((x) => x.tipo === 'sabor') || [];
+  return r.length > 0 && r.length === (item.reglas || []).length && r.every((x) => !cfg?.sabores.find((s) => s.id === x.id)?.activo);
+}

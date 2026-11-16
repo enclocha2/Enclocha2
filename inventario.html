@@ -122,7 +122,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques, baseMichelada, gruposRepetidos, claveNombre } from '/catalog.js';
+    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques, baseMichelada, gruposRepetidos, claveNombre, baseInactiva } from '/catalog.js';
     import { requerirSesion, api, esc, toast, puede } from '/sesion.js';
     import { fechaHora } from '/fechas.js';
 
@@ -377,7 +377,7 @@
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
-      $('#sobran').insertAdjacentHTML('beforeend', sugerirBases() + sugerirRepetidos() + sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirRepetidos() + sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
       $('#organizarDulces')?.addEventListener('click', organizarDulces);
       $('#copasSinInv')?.addEventListener('click', copasSinInventario);
       $('#crearBases')?.addEventListener('click', () => {
@@ -444,7 +444,8 @@
 
     function pintar() {
       if (admin) pintarSobran();
-      const activos = items.filter((i) => i.activo !== false && !i.soloCompras); // los "solo compras" no llevan stock
+      const activos = items.filter((i) => i.activo !== false && !i.soloCompras && !baseInactiva(i, cfg)); // sin "solo compras" ni bases de sabores apagados
+      const apagadas = items.filter((i) => baseInactiva(i, cfg));
       const est = (i) => estadoStock(i, stock[i.id] || 0);
       const bajos = activos.filter((i) => est(i).clase === 'bajo').length;
       const agot = activos.filter((i) => est(i).clase === 'agotado').length;
@@ -482,6 +483,7 @@
             <button class="mini" data-hist="${i.id}">📜</button>
           </div></div>`;
       }).join('') || '<p class="empty">No hay ítems con ese filtro.</p>';
+      if (apagadas.length && filtro === 'todos' && !q) $('#lista').insertAdjacentHTML('beforeend', `<p class="hint" style="margin:10px 4px">💤 ${apagadas.length} bases de sabores apagados no se muestran (${apagadas.map((i) => esc(i.nombre.replace(/^Base /, ''))).join(', ')}). Aparecen solas cuando actives el sabor en Productos.</p>`);
 
       pintarMovs();
       if (admin) pintarAdm();
@@ -517,7 +519,7 @@
           <label class="reu" title="Se lava y se reutiliza: nunca se descuenta al vender (ej. peceras de vidrio)"><input type="checkbox" data-id="${i.id}" data-k="reutilizable" ${i.reutilizable ? 'checked' : ''}> ♻️ Reutilizable</label>
           <button class="mini" data-reglas="${i.id}">⚡ Reglas (${i.reglas?.length || 0})</button>
           <button class="mini" data-emp="${i.id}">📦 Empaques (${i.empaques?.length || 0})</button>
-          ${i.soloCompras ? '<span class="tag-solo">🧾 solo compras · sin stock</span>' : ''}
+          ${i.soloCompras ? '<span class="tag-solo">🧾 solo compras · sin stock</span>' : ''}${baseInactiva(i, cfg) ? '<span class="tag-solo">💤 sabor apagado · no se cuenta</span>' : ''}
           ${i.empaques?.length ? `<span class="emp-res">📦 ${i.empaques.map((e) => `${esc(e.nombre)} x${fmt(e.unidades)}${e.conTapa ? ' + tapas' : ''}`).join(' · ')}</span>` : ''}
           <button class="del" data-del="${i.id}">🗑</button>
         </div>`).join('') || '<p class="hint">No hay ítems todavía.</p>';

@@ -1,5 +1,5 @@
-import { normalizarConfig } from '../catalog.js';
-import { configActual, guardarConfig } from './_lib/store.js';
+import { normalizarConfig, asegurarBases } from '../catalog.js';
+import { configActual, guardarConfig, leerInventario, guardarInventario } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 
 export default async function handler(req, res) {
@@ -29,6 +29,9 @@ export default async function handler(req, res) {
       nueva.actualizadoPor = usuario;
       nueva.actualizado = Date.now();
       await guardarConfig(nueva);
+      // un sabor nuevo queda con su base en el inventario
+      const conBases = asegurarBases(await leerInventario(), nueva);
+      if (conBases) await guardarInventario(conBases);
       return res.status(200).json({ config: nueva });
     }
 

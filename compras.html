@@ -141,7 +141,16 @@
 
     // La lista de insumos = ítems del inventario (+ los "solo compras")
     let inventario = [], insumo = null, presSel = '';
-    async function cargarInsumos() { try { ({ items: inventario } = await api('/api/inventario?lite=1')); } catch {} }
+    let saboresCfg = [];
+    async function cargarInsumos() {
+      try {
+        // bases=1: cada sabor de granizado (incluso uno recién creado) aparece como insumo "Base …"
+        const [r, c] = await Promise.all([api('/api/inventario?lite=1&bases=1'), api('/api/catalogo')]);
+        inventario = r.items; saboresCfg = c.config.sabores || [];
+      } catch {}
+    }
+    // base de un sabor apagado (se puede comprar igual; se marca)
+    const saborApagado = (it) => { const r = it.reglas?.find((x) => x.tipo === 'sabor'); return r && !saboresCfg.find((s) => s.id === r.id)?.activo; };
     await cargarInsumos();
     const fmt = (n) => Number(n).toLocaleString('es-CO', { maximumFractionDigits: 2 });
     const pl = (n, u) => (n === 1 || ['und', 'kg', 'g', 'ml'].includes(u) || /s$/.test(u) ? u : u + 's'); // vaso → vasos
@@ -153,7 +162,7 @@
       const lista = inventario.filter((i) => i.activo !== false && !i.reutilizable && (!q || normalizar(i.nombre).includes(q)));
       const grupos = CATEGORIAS_COMPRA.map((c) => [c, lista.filter((i) => i.categoria === c.id)]).filter(([, l]) => l.length);
       $('#insumos').innerHTML = grupos.map(([c, l]) => `<div class="ins-cat">${c.icono} ${esc(c.nombre)}</div>` +
-        l.map((i) => `<button type="button" class="chip ${insumo?.id === i.id ? 'on' : ''}" data-ins="${i.id}">${esc(i.nombre)}</button>`).join('')).join('')
+        l.map((i) => `<button type="button" class="chip ${insumo?.id === i.id ? 'on' : ''}" data-ins="${i.id}">${esc(i.nombre)}${saborApagado(i) ? ' <small class="hint">(sabor apagado)</small>' : ''}</button>`).join('')).join('')
         || `<p class="hint">No está en la lista. Créalo con <b>➕ Nuevo</b>.</p>`;
     }
     function escogerInsumo(it, pres = null) {
@@ -169,7 +178,8 @@
       if (!insumo) return;
       const t = tapaDe(insumo);
       // los vasos solo se compran por paquete (con o sin tapa); lo demás también se puede por unidad suelta
-      const soloPaquete = (!!insumo.tapa || /vaso/.test(normalizar(insumo.nombre))) && (insumo.empaques || []).length;
+      // vasos y bases de sabor: solo por paquete / bolsa
+      const soloPaquete = (!!insumo.tapa || /vaso/.test(normalizar(insumo.nombre)) || insumo.reglas?.some((r) => r.tipo === 'sabor')) && (insumo.empaques || []).length;
       const ops = [...(soloPaquete ? [] : [['', `${insumo.unidad === 'und' ? 'Por unidad' : pl(1, insumo.unidad) + ' suelto'}`]]), ...(insumo.empaques || []).map((e) => [e.nombre, `${e.nombre[0].toUpperCase() + e.nombre.slice(1)} · ${fmt(e.unidades)} ${pl(e.unidades, insumo.unidad)}${e.conTapa && t ? ` + ${fmt(e.unidades)} tapas` : ''}`])];
       if (!ops.some(([v]) => v === presSel)) presSel = ops[0]?.[0] ?? '';
       $('#presentaciones').innerHTML = ops.map(([v, txt]) => `<button type="button" class="opt ${presSel === v ? 'on' : ''}" data-pres="${esc(v)}">${esc(txt)}</button>`).join('');
