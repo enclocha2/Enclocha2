@@ -69,6 +69,8 @@ export function toast(msg, err = false) {
 // ---------- Pedidos con "revisión" (solo descarga si hubo cambios) ----------
 // estado = { rev, pedidos, persistente }. Devuelve true si llegaron datos nuevos.
 export async function traerPedidos(estado) {
+  // Día marcado como "no se trabaja": fuera de servicio, no se consulta nada
+  if (cerradoHoy()) { estado.pedidos ||= []; return false; }
   const q = estado.rev != null ? `?rev=${estado.rev}` : '';
   const d = await api('/api/pedidos' + q);
   if (d.sinCambios) return false;
@@ -84,9 +86,9 @@ export function cadaTanto(fn, ms) {
   setInterval(() => { if (!document.hidden && enHorarioOperacion()) fn(); }, ms);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && enHorarioOperacion()) fn(); });
 }
-import { enHorarioOperacion, textoPausa, fijarDiasCerrados } from '/fechas.js';
+import { enHorarioOperacion, textoPausa, fijarDiasCerrados, cerradoHoy } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '45';
+export const VERSION = '46';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
@@ -94,7 +96,8 @@ export function avisoHorario(contenedor, alRevisar) {
   const pintar = () => {
     const fuera = !enHorarioOperacion();
     contenedor.hidden = !fuera;
-    if (fuera) contenedor.innerHTML = `<span>🌙 Fuera de horario · la actualización automática está en pausa (${textoPausa()}).</span>
+    if (fuera && cerradoHoy()) contenedor.innerHTML = `<span>🚫 Hoy no se trabaja · la app está fuera de servicio y no consulta nada. Para reactivarla: Inicio → "✅ Sí se trabaja hoy".</span>`;
+    else if (fuera) contenedor.innerHTML = `<span>🌙 Fuera de horario · la actualización automática está en pausa (${textoPausa()}).</span>
       <button type="button" class="mini">🔄 Revisar ahora</button>`;
     contenedor.querySelector('button')?.addEventListener('click', alRevisar);
   };
