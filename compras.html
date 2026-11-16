@@ -169,7 +169,7 @@
       if (!insumo) return;
       const t = tapaDe(insumo);
       // los vasos solo se compran por paquete (con o sin tapa); lo demás también se puede por unidad suelta
-      const soloPaquete = !!insumo.tapa && (insumo.empaques || []).length;
+      const soloPaquete = (!!insumo.tapa || /vaso/.test(normalizar(insumo.nombre))) && (insumo.empaques || []).length;
       const ops = [...(soloPaquete ? [] : [['', `${insumo.unidad === 'und' ? 'Por unidad' : pl(1, insumo.unidad) + ' suelto'}`]]), ...(insumo.empaques || []).map((e) => [e.nombre, `${e.nombre[0].toUpperCase() + e.nombre.slice(1)} · ${fmt(e.unidades)} ${pl(e.unidades, insumo.unidad)}${e.conTapa && t ? ` + ${fmt(e.unidades)} tapas` : ''}`])];
       if (!ops.some(([v]) => v === presSel)) presSel = ops[0]?.[0] ?? '';
       $('#presentaciones').innerHTML = ops.map(([v, txt]) => `<button type="button" class="opt ${presSel === v ? 'on' : ''}" data-pres="${esc(v)}">${esc(txt)}</button>`).join('');

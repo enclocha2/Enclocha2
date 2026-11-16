@@ -41,7 +41,7 @@ async function estandarizar(b, datos) {
   if (!it) throw new Error('Ese insumo ya no existe. Escoge otro de la lista.');
   const emp = b.presentacion ? (it.empaques || []).find((e) => e.nombre === b.presentacion) : null;
   if (b.presentacion && !emp) throw new Error('Esa presentación ya no existe para este insumo');
-  if (!emp && it.tapa && it.empaques?.length) throw new Error('Los vasos se compran por paquete: escoge "paquete de vasos" o "paquete de vasos con tapa"');
+  if (!emp && (it.tapa || /vaso/.test(normalizar(it.nombre))) && it.empaques?.length) throw new Error('Los vasos se compran por paquete: escoge "paquete de vasos" o "paquete de vasos con tapa"');
   const cantidad = Math.round((Number(b.cantidad) || 0) * 1000) / 1000;
   if (!(cantidad > 0)) throw new Error('Escribe la cantidad que se compró');
   const unidades = Math.round(cantidad * (emp ? emp.unidades : 1) * 1000) / 1000;

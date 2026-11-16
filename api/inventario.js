@@ -1,6 +1,6 @@
 import { sesion } from './_lib/auth.js';
 import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez, leerPrestados } from './_lib/store.js';
-import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos, stockDisponible } from '../catalog.js';
+import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos, stockDisponible, normalizar } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
@@ -23,6 +23,17 @@ async function handler(req, res) {
       if (items.length && (await marcaUnaVez('inv:empaques-v1'))) {
         let cambio = false;
         items = items.map((it) => { if (it.empaques?.length) return it; const e = empaquesSugeridos(it.nombre); if (e.length) cambio = true; return { ...it, empaques: e }; });
+        if (cambio) await guardarInventario(items);
+      }
+      // Una sola vez: los vasos quedan con solo dos formas de compra (paquete de vasos / paquete de vasos con tapa)
+      if (items.length && (await marcaUnaVez('inv:vasos-v2'))) {
+        let cambio = false;
+        items = items.map((it) => {
+          const esVaso = !it.reutilizable && it.reglas?.some((r) => r.tipo === 'tamano') && (it.tapa || /vaso/.test(normalizar(it.nombre)));
+          if (!esVaso) return it;
+          cambio = true;
+          return { ...it, unidad: 'vaso', empaques: [{ nombre: 'paquete de vasos con tapa', unidades: 20, ...(it.tapa ? { conTapa: true } : {}) }, { nombre: 'paquete de vasos', unidades: 20 }].filter((e) => it.tapa || !/con tapa/.test(e.nombre)) };
+        });
         if (cambio) await guardarInventario(items);
       }
       const [stock, movs, prestados] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300), leerPrestados()]);

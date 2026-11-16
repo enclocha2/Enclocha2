@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v31)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v32)
 
 | Ruta | Qué es |
 |---|---|

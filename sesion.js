@@ -84,6 +84,8 @@ export function cadaTanto(fn, ms) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && enHorarioOperacion()) fn(); });
 }
 import { enHorarioOperacion, textoPausa } from '/fechas.js';
+// Versión de la app (para saber si ya quedó desplegada la última)
+export const VERSION = '32';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
@@ -215,7 +217,7 @@ function montarNav({ usuario }) {
   lateral.className = 'nav-lateral';
   lateral.innerHTML = `<a href="/" class="nl-logo"><img src="/img/logo.png" alt="Enclocha 2"></a>` + htmlSede('sede-sel') +
     secciones.map((g) => `<div class="nl-grupo"><span>${g.grupo}</span>${g.items.map((i) => link(i)).join('')}</div>`).join('') +
-    `<div class="nl-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Salir</button></div>`;
+    `<div class="nl-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Salir</button></div><div class="version">versión ${VERSION}</div>`;
 
   // Inferior (celular): 4 principales + "Más"
   const inferior = document.createElement('nav');
@@ -231,7 +233,7 @@ function montarNav({ usuario }) {
   hoja.className = 'nav-hoja';
   hoja.innerHTML = `<div class="nh-caja"><div class="nh-asa"></div>
     ${secciones.slice(1).map((g) => `<div class="nh-grupo"><span>${g.grupo}</span><div class="nh-grid">${g.items.map((i) => link(i, 'nh-item')).join('')}</div></div>`).join('')}
-    <div class="nh-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Cerrar sesión</button></div></div>`;
+    <div class="nh-pie"><span>👤 ${esc(usuario)}</span><button type="button" class="nl-salir">Cerrar sesión</button></div><div class="version">versión ${VERSION}</div></div>`;
 
   document.body.append(lateral, inferior, hoja);
   document.body.classList.add('con-nav');

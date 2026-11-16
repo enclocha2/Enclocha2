@@ -1143,3 +1143,4 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .opcional-row input { width: 18px; height: 18px; accent-color: #ff3fd1; }
 .tag-solo { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: .72rem; font-weight: 700; color: #ffd98a; background: rgba(255,207,112,.12); border: 1px solid rgba(255,207,112,.4); }
 .emp-res { font-size: .78rem; color: var(--muted); width: 100%; }
+.version { font-size: .7rem; color: var(--muted); opacity: .7; text-align: center; padding: 4px 0 8px; }
