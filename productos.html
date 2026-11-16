@@ -218,7 +218,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, SECCIONES, pesos, slug, normalizar, recetaDe } from '/catalog.js';
+    import { GRUPOS, SECCIONES, pesos, slug, normalizar, recetaDe, baseMichelada } from '/catalog.js';
     import { requerirSesion, api, esc, toast, htmlQR, puede, sedeActual } from '/sesion.js';
     import { jornadaActual, horarioDe, horaJornada, textoHora } from '/fechas.js';
 
@@ -355,7 +355,9 @@
       miProd = cfg.productos.find((x) => x.id === id); if (!miProd) return;
       miUsa = [...(miProd.usa || [])];
       // Micheladas: se preparan con cerveza o con soda (la "soda michelada", solo con soda)
-      if (!miUsa.length && /michelada/.test(normalizar(miProd.nombre))) {
+      const base = !miUsa.length && /michelada/.test(normalizar(miProd.nombre)) && baseMichelada(miProd, cfg.productos);
+      if (base) miUsa = [base.id]; // "Michelada Aguila" → solo la Aguila (no pregunta al vender)
+      else if (!miUsa.length && /michelada/.test(normalizar(miProd.nombre))) {
         const cats = cfg.categorias.filter((c) => (/soda/.test(normalizar(miProd.nombre)) ? /soda/ : /cerveza|soda/).test(normalizar(c.nombre))).map((c) => c.id);
         miUsa = cfg.productos.filter((x) => cats.includes(x.categoria) && x.id !== miProd.id && !x.usa?.length).map((x) => x.id);
       }

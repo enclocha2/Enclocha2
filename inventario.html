@@ -122,7 +122,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques } from '/catalog.js';
+    import { CATEGORIAS_COMPRA, UNIDADES_INV, GRUPOS, slug, normalizar, estadoStock, empaquesSugeridos, enEmpaques, baseMichelada } from '/catalog.js';
     import { requerirSesion, api, esc, toast, puede } from '/sesion.js';
     import { fechaHora } from '/fechas.js';
 
@@ -237,6 +237,8 @@
     // · Micheladas: descuentan la cerveza o la soda con que se preparan (no tienen ítem propio)
     const conTopping = (id) => items.find((i) => i.reglas?.some((r) => r.tipo === 'topping' && r.id === id));
     const JERINGAS = ['tequila', 'ginebra', 'whisky', 'vodka'];
+    // "Michelada" o "Soda michelada" (sin decir la cerveza) → se escoge al vender; "Michelada X" → la X
+    const michGenerica = (p) => /^(soda\s+)?michelada$/.test(normalizar(p.nombre));
     function planDulces() {
       if (!cfg) return null;
       const n = (p) => normalizar(p.nombre);
@@ -244,7 +246,8 @@
       const prods = cfg.productos.filter((p) => p.activo);
       const adiciones = prods.filter((p) => /adicion/.test(n(p)) && !p.invItem && !p.sinInventario);
       const jeringa = prods.filter((p) => /jeringa/.test(n(p)) && !p.invItem);
-      const mich = prods.filter((p) => /michelada/.test(n(p)) && !p.usa?.length && !p.invItem && !p.sinInventario);
+      // Micheladas: cada una ya dice su cerveza ("Michelada Aguila Light") → descuenta esa, sin preguntar
+      const mich = prods.filter((p) => /michelada/.test(n(p)) && !p.invItem && !p.sinInventario && (() => { const b = baseMichelada(p, cfg.productos); return b ? !(p.usa?.length === 1 && p.usa[0] === b.id) : michGenerica(p) && !p.usa?.length; })());
       const pend = [];
       if (aro && gus && aro !== gus) pend.push('Aros y gusanos en una sola bolsa de gomitas');
       if ([chi, oka].some((x) => x && x.unidad !== 'cucharada')) pend.push('Chicles y okaloka por cucharada (bolsa de 120)');
@@ -289,7 +292,8 @@
           if (dest) prod.invItem = { id: dest.id, ops: [{ id: dest.id, nombre: dest.nombre }], cantidad: 1 };
         }
         if (/jeringa/.test(n(prod)) && !prod.invItem) prod.invItem = { id: jer[0].id, ops: jer.map((j) => ({ id: j.id, nombre: j.nombre })), cantidad: 1 };
-        if (/michelada/.test(n(prod)) && !prod.usa?.length && !prod.invItem && !prod.sinInventario) {
+        if (/michelada/.test(n(prod)) && !prod.invItem && !prod.sinInventario && baseMichelada(prod, cfg.productos)) prod.usa = [baseMichelada(prod, cfg.productos).id];
+        else if (/michelada/.test(n(prod)) && michGenerica(prod) && !prod.usa?.length && !prod.invItem && !prod.sinInventario) {
           const cats = cfg.categorias.filter((c) => (/soda/.test(n(prod)) ? /soda/ : /cerveza|soda/).test(normalizar(c.nombre))).map((c) => c.id);
           const usa = cfg.productos.filter((x) => cats.includes(x.categoria) && x.id !== prod.id && !x.usa?.length).map((x) => x.id);
           if (usa.length) prod.usa = usa;

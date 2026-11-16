@@ -624,3 +624,14 @@ export function prestamoDe(consumo, inventario) {
   const reu = new Set((inventario || []).filter((i) => i.reutilizable).map((i) => i.id));
   return Object.fromEntries(Object.entries(consumo).filter(([id, d]) => reu.has(id) && d < 0).map(([id, d]) => [id, -d]));
 }
+
+// "Michelada Aguila Light" → el producto "Aguila Light" (de otra categoría). null si no se encuentra.
+export function baseMichelada(prod, productos) {
+  const resto = normalizar(prod.nombre).replace(/^michelada\s+(de\s+)?/, '').trim();
+  if (!resto || resto === normalizar(prod.nombre)) return null;
+  const cands = productos.filter((x) => x.id !== prod.id && x.categoria !== prod.categoria && !x.usa?.length);
+  return cands.find((x) => normalizar(x.nombre) === resto)
+    || cands.find((x) => normalizar(x.nombre).replace(/[^a-z0-9]/g, '') === resto.replace(/[^a-z0-9]/g, ''))
+    || cands.filter((x) => normalizar(x.nombre).startsWith(resto) || resto.startsWith(normalizar(x.nombre))).sort((a, b) => Math.abs(a.nombre.length - resto.length) - Math.abs(b.nombre.length - resto.length))[0]
+    || null;
+}
