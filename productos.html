@@ -283,6 +283,7 @@
         const n = (id) => cfg.productos.find((x) => x.id === id)?.nombre || id;
         return { clase: 'usa', txt: p.usa.length === 1 ? `🔗 Usa: ${n(p.usa[0])}` : `🔗 Escoge: ${p.usa.length} opciones` };
       }
+      if (invItems.length && !invItems.some((i) => i.reglas?.some((r) => r.tipo === 'producto' && r.id === p.id))) return { clase: 'no', txt: '⚠️ Propio · sin ítem en inventario' };
       return { clase: '', txt: '📦 Propio' };
     }
 

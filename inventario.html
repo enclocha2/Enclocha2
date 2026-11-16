@@ -213,6 +213,23 @@
         return p && unidadDe(p) !== i.unidad ? { i, u: unidadDe(p) } : null;
       }).filter(Boolean);
     }
+    // Productos que deberían controlarse ("📦 Propio") pero no tienen ítem en el inventario: se venden sin límite
+    function productosSinItem() {
+      if (!cfg) return [];
+      const sinCat = new Set(cfg.categorias.filter((c) => c.sinInventario).map((c) => c.id));
+      const conItem = new Set(items.flatMap((i) => (i.reglas || []).filter((r) => r.tipo === 'producto').map((r) => r.id)));
+      return cfg.productos.filter((p) => p.activo && p.precio && !p.sinInventario && !p.usa?.length && !p.invItem && !sinCat.has(p.categoria) && !conItem.has(p.id));
+    }
+    const pareceServicio = (p) => /descorche|decoraci|servicio|domicilio|alquiler|propina|recarga/.test(normalizar(p.nombre));
+    function sugerirProductos() {
+      const l = productosSinItem();
+      if (!l.length) return '';
+      const cat = (p) => cfg.categorias.find((c) => c.id === p.categoria);
+      return `<div class="card aviso-sobran"><b>📦 ${l.length} productos se venden sin control de inventario</b>
+        <p class="hint" style="margin:4px 0 8px">No tienen ítem en el inventario, así que se venden aunque no haya. Marca los que se deben controlar (ej. vaporizadores) y crea su ítem. Los que no llevan inventario (descorches, decoración…) márcalos en Productos → 📦 como "No lleva inventario" para que no vuelvan a salir aquí.</p>
+        <div class="prod-sin-item">${l.map((p) => `<label class="reu"><input type="checkbox" data-crear-prod="${p.id}" ${pareceServicio(p) ? '' : 'checked'}> ${esc(cat(p)?.icono || '')} ${esc(p.nombre)}</label>`).join('')}</div>
+        <button class="btn" id="crearProdItems" style="width:auto;padding:8px 16px;margin-top:8px">Crear ítems de los marcados</button></div>`;
+    }
     function sugerirUnidades() {
       const l = unidadesMal();
       return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos con la unidad equivocada</b>
@@ -224,7 +241,17 @@
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
-      $('#sobran').insertAdjacentHTML('beforeend', sugerirPeceras() + sugerirTapas() + sugerirUnidades());
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#crearProdItems')?.addEventListener('click', () => {
+        const ids = [...document.querySelectorAll('[data-crear-prod]:checked')].map((x) => x.dataset.crearProd);
+        if (!ids.length) return toast('Marca al menos un producto', true);
+        for (const pid of ids) {
+          const p = cfg.productos.find((x) => x.id === pid); if (!p) continue;
+          let id = slug(p.nombre); while (items.some((i) => i.id === id)) id += '-2';
+          items.push({ id, nombre: p.nombre, categoria: 'reventa', unidad: unidadDe(p), minimo: 2, activo: true, empaques: empaquesSugeridos(p.nombre), reglas: [{ tipo: 'producto', id: p.id, cantidad: 1 }], _stockInicial: 0 });
+        }
+        marcar(); pintar(); toast(`📦 ${ids.length} ítems creados · toca Guardar cambios y haz su conteo`);
+      });
       $('#corregirUnidades')?.addEventListener('click', () => { for (const { i, u } of unidadesMal()) i.unidad = u; marcar(); pintar(); toast('📏 Unidades corregidas · toca Guardar cambios'); });
       $('#crearTapas')?.addEventListener('click', () => {
         for (const t of tamVasos()) {
