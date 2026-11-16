@@ -1095,3 +1095,11 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 }
 .metodo.m-mixto { white-space: normal; }
 @media (max-width: 600px) { table.tabla.apilar td .metodo { white-space: normal; text-align: right; } }
+
+/* v24: pestañas una debajo de otra (sin desplazamiento) y dividir por número escrito */
+.tabs { flex-wrap: wrap; overflow: visible; padding-bottom: 6px; }
+.tabs button { flex: 0 1 auto; }
+.div-rapido { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.div-rapido label { font-weight: 700; font-size: .95rem; }
+.div-rapido #divN { width: 80px; text-align: center; font-weight: 800; font-size: 1.05rem; }
+.div-rapido #divIgual { min-width: 0; padding: 10px 14px; border-radius: 12px; border: 0; background: var(--grad); color: #fff; font: 800 .95rem 'Nunito', sans-serif; cursor: pointer; }

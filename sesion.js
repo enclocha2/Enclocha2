@@ -320,7 +320,12 @@ export function dividirPago({ total, nombre = '' }) {
     m.innerHTML = `<div class="box">
       <h3>➗ Dividir la cuenta${nombre ? ' de ' + esc(nombre) : ''}</h3>
       <div class="total" style="margin:0"><span>Total</span><span>${$p(total)}</span></div>
-      <div class="div-rapido"><span class="hint">Partes iguales:</span>${[2, 3, 4, 5, 6].map((n) => `<button type="button" data-n="${n}">${n}</button>`).join('')}</div>
+      <div class="div-rapido">
+        <label for="divN">¿Entre cuántas personas?</label>
+        <input class="field" id="divN" type="number" inputmode="numeric" min="1" max="30" value="2">
+        <button type="button" id="divIgual">Dividir igual</button>
+      </div>
+      <p class="hint" style="margin:-4px 0 8px">Después puedes cambiar el valor de cada persona.</p>
       <div class="div-partes" id="divPartes"></div>
       <button type="button" class="btn ghost" id="divMas" style="margin:0">+ Otra persona</button>
       <div class="div-estado" id="divEstado"></div>
@@ -351,6 +356,7 @@ export function dividirPago({ total, nombre = '' }) {
       </div>`).join('');
       estado();
     }
+    m.addEventListener('keydown', (e) => { if (e.target.id === 'divN' && e.key === 'Enter') { e.preventDefault(); q('#divIgual').click(); } });
     m.addEventListener('input', (e) => {
       const el = e.target, i = Number(el.dataset.i); if (!partes[i]) return;
       partes[i][el.dataset.k] = el.dataset.k === 'valor' ? Math.max(0, Math.round(Number(el.value) || 0)) : el.value;
@@ -358,7 +364,7 @@ export function dividirPago({ total, nombre = '' }) {
     });
     m.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
-      if (b.dataset.n) { igual(Number(b.dataset.n)); return pintar(); }
+      if (b.id === 'divIgual') { const n = Math.min(30, Math.max(1, Math.round(Number(q('#divN').value) || 1))); q('#divN').value = n; igual(n); return pintar(); }
       if (b.dataset.met) { partes[Number(b.dataset.i)].metodo = b.dataset.met; return pintar(); }
       if (b.dataset.quitar) { partes.splice(Number(b.dataset.quitar), 1); return pintar(); }
       if (b.id === 'divMas') {
