@@ -78,7 +78,7 @@
           <select class="field" id="mmEmp"></select>
         </div>
         <span class="hint" id="mmEquiv"></span></div>
-      <label class="con-tapas" id="mmTapasBox" hidden><input type="checkbox" id="mmTapas"> 🧢 Vienen con tapa (también entran las tapas)</label>
+      <div class="con-tapas" id="mmTapasBox" hidden></div>
       <label class="campo"><span>Nota (opcional)</span><input class="field" id="mmNota" maxlength="120" placeholder="Ej: se dañaron 3 vasos, regalo, préstamo..."></label>
       <div class="error" id="mmError"></div>
       <button class="btn" id="mmGuardar">Guardar</button>
@@ -181,14 +181,22 @@
         <p class="hint" style="margin:4px 0 8px">Se crea "Peceras de vidrio" con 3 unidades, marcada como ♻️ reutilizable: al vender una pecera revisa que haya, pero no se descuenta. Si se rompe una, la registras como merma.</p>
         <button class="btn" id="crearPeceras" style="width:auto;padding:8px 16px">Agregar peceras (3)</button></div>`;
     }
-    // Tapas: una por vaso en pedidos para llevar y domicilios
+    // Vasos icopor por tamaño: "paquete con tapa" (20 vasos + 20 tapas) y "paquete sin tapa" (20 vasos),
+    // cada uno unido a sus "Tapas" (las sueltas se compran por unidad, la cantidad varía).
+    const tamVasos = () => cfg.tamanos.filter((t) => t.activo && (t.seccion || 'Tamaños') === 'Tamaños');
+    function vasosOrganizados() {
+      return tamVasos().every((t) => {
+        const v = items.find((i) => i.reglas?.some((r) => r.tipo === 'tamano' && r.id === t.id) && !i.reutilizable);
+        return v && v.tapa && items.some((x) => x.id === v.tapa) && v.empaques?.some((e) => e.conTapa) && v.empaques?.some((e) => !e.conTapa);
+      });
+    }
     function sugerirTapas() {
-      if (!cfg) return '';
-      const tams = cfg.tamanos.filter((t) => t.activo && (t.seccion || 'Tamaños') === 'Tamaños');
-      if (!tams.length || items.some((i) => i.reglas?.some((r) => r.tipo === 'tapa'))) return '';
-      return `<div class="card aviso-sobran"><b>🧢 ¿Agregar las tapas?</b>
-        <p class="hint" style="margin:4px 0 8px">Se crea una "Tapas" por cada tamaño de vaso (${tams.map((t) => esc(t.nombre)).join(', ')}). Se descuenta una por vaso solo en pedidos <b>para llevar</b> y <b>domicilios</b>. Cada vaso queda unido a su tapa: al darles entrada a vasos que vienen con tapa, también entran las tapas.</p>
-        <button class="btn" id="crearTapas" style="width:auto;padding:8px 16px">Agregar tapas</button></div>`;
+      if (!cfg || !tamVasos().length || vasosOrganizados()) return '';
+      return `<div class="card aviso-sobran"><b>🥤 Organizar vasos y tapas</b>
+        <p class="hint" style="margin:4px 0 8px">Deja por cada tamaño (${tamVasos().map((t) => esc(t.nombre)).join(', ')}):
+        <b>Vasos icopor</b> con dos empaques — <b>paquete con tapa</b> (20 vasos + 20 tapas) y <b>paquete sin tapa</b> (20 vasos) — y sus <b>Tapas</b> aparte
+        (las sueltas se cuentan por unidad). Las tapas se descuentan solo en pedidos para llevar y domicilios. No se pierde el stock que ya tengas.</p>
+        <button class="btn" id="crearTapas" style="width:auto;padding:8px 16px">Organizar vasos y tapas</button></div>`;
     }
     function pintarSobran() {
       const l = sobrantes();
@@ -197,14 +205,25 @@
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
       $('#sobran').insertAdjacentHTML('beforeend', sugerirPeceras() + sugerirTapas());
       $('#crearTapas')?.addEventListener('click', () => {
-        const tams = cfg.tamanos.filter((t) => t.activo && (t.seccion || 'Tamaños') === 'Tamaños');
-        for (const t of tams) {
-          let id = slug('tapas ' + t.nombre); while (items.some((i) => i.id === id)) id += '-2';
-          items.push({ id, nombre: `Tapas ${t.nombre}`, categoria: 'desechables', unidad: 'und', minimo: 20, activo: true, empaques: [{ nombre: 'paquete', unidades: 50 }], reglas: [{ tipo: 'tapa', id: t.id, cantidad: 1 }] });
-          const vaso = items.find((i) => !i.tapa && i.reglas?.some((r) => r.tipo === 'tamano' && r.id === t.id));
-          if (vaso) vaso.tapa = id;
+        for (const t of tamVasos()) {
+          let tapa = items.find((i) => i.reglas?.some((r) => r.tipo === 'tapa' && r.id === t.id));
+          if (!tapa) {
+            let id = slug('tapas ' + t.nombre); while (items.some((i) => i.id === id)) id += '-2';
+            tapa = { id, nombre: `Tapas ${t.nombre}`, categoria: 'desechables', unidad: 'und', minimo: 20, activo: true, empaques: [], reglas: [{ tipo: 'tapa', id: t.id, cantidad: 1 }] };
+            items.push(tapa);
+          }
+          let vaso = items.find((i) => !i.reutilizable && i.reglas?.some((r) => r.tipo === 'tamano' && r.id === t.id));
+          if (!vaso) {
+            let id = slug('vasos icopor ' + t.nombre); while (items.some((i) => i.id === id)) id += '-2';
+            vaso = { id, nombre: '', categoria: 'desechables', unidad: 'vaso', minimo: 25, activo: true, reglas: [{ tipo: 'tamano', id: t.id, cantidad: 1 }] };
+            items.push(vaso);
+          }
+          vaso.nombre = `Vasos icopor ${t.nombre}`;
+          vaso.tapa = tapa.id;
+          const otros = (vaso.empaques || []).filter((e) => !/paquete (con|sin) tapa/.test(e.nombre));
+          vaso.empaques = [{ nombre: 'paquete con tapa', unidades: 20, conTapa: true }, { nombre: 'paquete sin tapa', unidades: 20 }, ...otros].slice(0, 6);
         }
-        marcar(); pintar(); toast('🧢 Tapas agregadas · haz su conteo y toca Guardar cambios');
+        marcar(); pintar(); toast('🥤 Vasos y tapas organizados · toca Guardar cambios y haz el conteo de las tapas');
       });
       $('#crearPeceras')?.addEventListener('click', () => {
         const peceras = cfg.tamanos.filter((t) => t.activo && /pecera/.test(normalizar(t.nombre)));
@@ -361,20 +380,27 @@
       $('#mmTitulo').textContent = aMover.nombre;
       $('#mmStock').textContent = `Stock en sistema: ${fmt(stock[id] || 0)} ${aMover.unidad}`;
       $('#mmCant').value = ''; $('#mmNota').value = ''; $('#mmError').textContent = '';
-      $('#mmEmp').innerHTML = `<option value="1">${esc(aMover.unidad)}</option>` + (aMover.empaques || []).map((e) => `<option value="${e.unidades}">${esc(e.nombre)} (x${fmt(e.unidades)})</option>`).join('');
+      $('#mmEmp').innerHTML = `<option value="1">${esc(aMover.unidad)}</option>` + (aMover.empaques || []).map((e) => `<option value="${e.unidades}" data-tapa="${e.conTapa && aMover.tapa ? 1 : ''}">${esc(e.nombre)} (x${fmt(e.unidades)}${e.conTapa && aMover.tapa ? ' + tapas' : ''})</option>`).join('');
+      // si hay "paquete con tapa", que sea el primero en salir al dar entrada
+      const conT = [...$('#mmEmp').options].find((o) => o.dataset.tapa); if (conT) $('#mmEmp').value = conT.value;
       $('#mmEquiv').textContent = '';
       pintarTipos();
-      $('#mmTapas').checked = false;
       $('#modalMov').classList.add('show'); setTimeout(() => $('#mmCant').focus(), 50);
     }
     function pintarTipos() {
       $('#mmTipos').innerHTML = TIPOS.map(([t, n]) => `<button type="button" class="opt ${tipoMov === t ? 'on' : ''}" data-tm="${t}">${n}</button>`).join('');
-      $('#mmTapasBox').hidden = !(tipoMov === 'entrada' && aMover.tapa);
+      tapasInfo();
       $('#mmLbl').textContent = tipoMov === 'conteo' ? `¿Cuánto hay realmente? (${aMover.unidad})` : `Cantidad (${aMover.unidad})`;
     }
-    $('#mmTipos').addEventListener('click', (e) => { const b = e.target.closest('[data-tm]'); if (b) { tipoMov = b.dataset.tm; pintarTipos(); } });
+    $('#mmTipos').addEventListener('click', (e) => { const b = e.target.closest('[data-tm]'); if (b) { tipoMov = b.dataset.tm; pintarTipos(); tapasInfo(); } });
     $('#mmCancelar').addEventListener('click', () => $('#modalMov').classList.remove('show'));
-    const equiv = () => { const k = Number($('#mmEmp').value || 1), n = Number($('#mmCant').value) || 0; $('#mmEquiv').textContent = k > 1 && n ? `= ${fmt(n * k)} ${aMover.unidad}` : ''; };
+    const conTapasSel = () => tipoMov === 'entrada' && !!$('#mmEmp').selectedOptions[0]?.dataset.tapa;
+    function tapasInfo() {
+      const n = (Number($('#mmCant').value) || 0) * Number($('#mmEmp').value || 1), t = items.find((x) => x.id === aMover?.tapa);
+      $('#mmTapasBox').hidden = !conTapasSel() || !t;
+      if (t) $('#mmTapasBox').innerHTML = `🧢 Vienen con tapa: entran también <b>${fmt(n)}</b> ${esc(t.nombre)}`;
+    }
+    const equiv = () => { const k = Number($('#mmEmp').value || 1), n = Number($('#mmCant').value) || 0; $('#mmEquiv').textContent = k > 1 && n ? `= ${fmt(n * k)} ${aMover.unidad}` : ''; tapasInfo(); };
     $('#mmCant').addEventListener('input', equiv); $('#mmEmp').addEventListener('change', equiv);
 
     // ---------- Empaques ----------
@@ -384,9 +410,9 @@
       $('#meLista').innerHTML = enEmp.empaques.map((e, k) => `<div class="fila">
           <input class="field" data-ek="${k}" data-ec="nombre" value="${esc(e.nombre)}" maxlength="20" placeholder="bolsa, caja, paca...">
           <span class="hint">=</span><input class="field dia" style="max-width:100px" type="number" min="0" step="any" data-ek="${k}" data-ec="unidades" value="${e.unidades}">
-          <span class="hint">${esc(enEmp.unidad)}</span><button class="del" data-edel="${k}">🗑</button></div>`).join('') || '<p class="hint">Sin empaques: se cuenta solo por unidad.</p>';
+          <span class="hint">${esc(enEmp.unidad)}</span>${enEmp.tapa ? `<label class="reu"><input type="checkbox" data-ek="${k}" data-ec="conTapa" ${e.conTapa ? 'checked' : ''}> 🧢 trae tapas</label>` : ''}<button class="del" data-edel="${k}">🗑</button></div>`).join('') || '<p class="hint">Sin empaques: se cuenta solo por unidad.</p>';
     }
-    $('#meLista').addEventListener('input', (e) => { const el = e.target, x = enEmp.empaques[el.dataset.ek]; if (!x) return; x[el.dataset.ec] = el.dataset.ec === 'unidades' ? Number(el.value) || 0 : el.value; marcar(); });
+    $('#meLista').addEventListener('input', (e) => { const el = e.target, x = enEmp.empaques[el.dataset.ek]; if (!x) return; x[el.dataset.ec] = el.type === 'checkbox' ? el.checked : el.dataset.ec === 'unidades' ? Number(el.value) || 0 : el.value; if (el.type === 'checkbox' && !el.checked) delete x.conTapa; marcar(); });
     $('#meLista').addEventListener('click', (e) => { const b = e.target.closest('[data-edel]'); if (b) { enEmp.empaques.splice(Number(b.dataset.edel), 1); marcar(); pintarEmp(); } });
     $('#meAgregar').addEventListener('click', () => { enEmp.empaques.push({ nombre: 'bolsa', unidades: 100 }); marcar(); pintarEmp(); });
     $('#meListo').addEventListener('click', () => { $('#modalEmp').classList.remove('show'); pintar(); });
@@ -395,7 +421,7 @@
         const total = (Number($('#mmCant').value) || 0) * Number($('#mmEmp').value || 1);
         const emp = $('#mmEmp').selectedOptions[0]?.textContent;
         const nota = [$('#mmNota').value, Number($('#mmEmp').value) > 1 ? `${$('#mmCant').value} ${emp}` : ''].filter(Boolean).join(' · ');
-        await api('/api/inventario', { method: 'POST', body: JSON.stringify({ id: aMover.id, tipo: tipoMov, cantidad: total, nota, conTapas: tipoMov === 'entrada' && $('#mmTapas').checked }) });
+        await api('/api/inventario', { method: 'POST', body: JSON.stringify({ id: aMover.id, tipo: tipoMov, cantidad: total, nota, conTapas: conTapasSel() }) });
         $('#modalMov').classList.remove('show'); toast('✅ Movimiento guardado'); cargar();
       } catch (err) { $('#mmError').textContent = err.message; }
     });

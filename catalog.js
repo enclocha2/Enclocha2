@@ -401,15 +401,14 @@ const EMPAQUES_SUGERIDOS = [
   [/paleta de chamoy/, [['bolsa', 40]]],
   [/bandera/, [['bolsa', 520]]],
   [/pitillo/, [['paquete', 250]]],
-  [/tapa/, [['paquete', 50]]],
-  [/vaso/, [['paquete', 20]]],
+  [/vaso/, [['paquete con tapa', 20, true], ['paquete sin tapa', 20]]], // con tapa: 20 vasos + 20 tapas
   [/coron/, [['caja', 24]]],
   [/aguila|pilsen|poker|club colombia|costenita|cordilleras|cerveza/, [['caja', 30], ['media caja', 15]]],
   [/soda/, [['paca 24', 24], ['paca 48', 48]]],
 ];
 export function empaquesSugeridos(nombre) {
   const n = String(nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  for (const [re, lista] of EMPAQUES_SUGERIDOS) if (re.test(n)) return lista.map(([nombre, unidades]) => ({ nombre, unidades }));
+  for (const [re, lista] of EMPAQUES_SUGERIDOS) if (re.test(n)) return lista.map(([nombre, unidades, conTapa]) => ({ nombre, unidades, ...(conTapa ? { conTapa: true } : {}) }));
   return [];
 }
 // "250 und" → "1 paquete" / "42 und" → "1 caja + 12"

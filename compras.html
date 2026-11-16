@@ -55,7 +55,7 @@
             <b class="hint" id="invUni"></b>
           </div>
           <span class="hint" id="invAyuda" hidden>Ej: 2 bolsas de aros (x100) → entran 200 und al inventario.</span>
-          <label class="con-tapas" id="invTapasBox" hidden><input type="checkbox" name="invTapas"> 🧢 Los vasos vienen con tapa (también entran las tapas)</label>
+          <div class="con-tapas" id="invTapasBox" hidden></div>
         </div>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
@@ -131,16 +131,22 @@
     const pintarInv = () => {
       const it = inventario.find((i) => i.id === form.invId.value);
       form.invCant.hidden = !it; form.invEmp.hidden = !it; $('#invAyuda').hidden = !it;
-      $('#invTapasBox').hidden = !it?.tapa;
+
       if (!it) { $('#invUni').textContent = ''; return; }
-      const previo = form.invEmp.value;
-      form.invEmp.innerHTML = `<option value="1">${esc(it.unidad)}</option>` + (it.empaques || []).map((e) => `<option value="${e.unidades}" data-n="${esc(e.nombre)}">${esc(e.nombre)} (x${e.unidades})</option>`).join('');
+      const previoN = form.invEmp.selectedOptions[0]?.dataset.n || null; // por nombre: "con tapa" y "sin tapa" tienen el mismo x20
+      const tapaIt = it.tapa && inventario.find((x) => x.id === it.tapa);
+      form.invEmp.innerHTML = `<option value="1">${esc(it.unidad)}</option>` + (it.empaques || []).map((e) => `<option value="${e.unidades}" data-n="${esc(e.nombre)}" data-tapa="${e.conTapa && tapaIt ? 1 : ''}">${esc(e.nombre)} (x${e.unidades}${e.conTapa && tapaIt ? ' + tapas' : ''})</option>`).join('');
       // si la compra dice "bolsa"/"caja"... escoger ese empaque
       const match = [...form.invEmp.options].find((o) => o.dataset.n && o.dataset.n === form.unidad.value);
-      form.invEmp.value = fijarUnidad ? '1' : match ? match.value : (previo && [...form.invEmp.options].some((o) => o.value === previo) ? previo : '1');
+      const ops = [...form.invEmp.options];
+      const elegido = fijarUnidad ? ops[0] : match || ops.find((o) => previoN && o.dataset.n === previoN) || ops[0];
+      form.invEmp.selectedIndex = ops.indexOf(elegido);
       if (!form.invCant.value) form.invCant.value = form.cantidad.value || '';
       const total = (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1);
       $('#invUni').textContent = total ? `= ${total.toLocaleString('es-CO')} ${it.unidad}` : '';
+      const conT = !!form.invEmp.selectedOptions[0]?.dataset.tapa;
+      $('#invTapasBox').hidden = !conT;
+      if (conT) $('#invTapasBox').innerHTML = `🧢 Vienen con tapa: entran también <b>${total.toLocaleString('es-CO')}</b> ${esc(tapaIt.nombre)}`;
     };
     form.invId.addEventListener('change', pintarInv);
     form.invEmp.addEventListener('change', () => { fijarUnidad = false; pintarInv(); });
@@ -167,7 +173,7 @@
       form.proveedor.value = c.proveedor || '';
       if (conFecha) {
         form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago;
-        form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? ''; form.invTapas.checked = !!c.inventario?.tapa;
+        form.invId.value = c.inventario?.id || ''; form.invCant.value = c.inventario?.cantidad ?? '';
         fijarUnidad = !!c.inventario;
       } else { form.invId.value = c.inventario?.id || ''; form.invCant.value = ''; fijarUnidad = false; }
       pintarInv(); pintarPagos();
@@ -180,7 +186,7 @@
         insumo: form.insumo.value, categoria: form.categoria.value, fecha: form.fecha.value,
         cantidad: form.cantidad.value, unidad: form.unidad.value, valor: form.valor.value,
         pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
-        inventario: form.invId.value ? { id: form.invId.value, cantidad: (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1), conTapas: !$('#invTapasBox').hidden && form.invTapas.checked } : null,
+        inventario: form.invId.value ? { id: form.invId.value, cantidad: (Number(form.invCant.value) || 0) * Number(form.invEmp.value || 1), conTapas: !!form.invEmp.selectedOptions[0]?.dataset.tapa } : null,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       const antes = presu?.resumen.deVentas ?? null;

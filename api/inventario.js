@@ -55,7 +55,7 @@ async function handler(req, res) {
           ...(it.reutilizable ? { reutilizable: true } : {}),
           ...(it.tapa ? { tapa: txt(it.tapa, 48) } : {}), // vasos: ítem de las tapas que a veces vienen con ellos
           empaques: (Array.isArray(it.empaques) ? it.empaques : []).slice(0, 6)
-            .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)) }))
+            .map((e) => ({ nombre: txt(e.nombre, 20), unidades: Math.max(0, num(e.unidades)), ...(e.conTapa ? { conTapa: true } : {}) }))
             .filter((e) => e.nombre && e.unidades > 0),
         });
       }
