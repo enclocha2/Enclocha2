@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes } from '../catalog.js';
+import { armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
@@ -7,6 +7,7 @@ import { conSede } from './_lib/sede.js';
 class ErrorUsuario extends Error {}
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
 const metodoValido = (m) => METODOS_PAGO.some((x) => x.id === m);
+const partesOk = (partes, total) => { try { return validarPartes(partes, total); } catch (e) { throw new ErrorUsuario(e.message); } };
 
 async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -97,15 +98,22 @@ async function handler(req, res) {
       // Cobrar una cuenta completa (todos sus pedidos sin pagar)
       if (body.cobrarCuenta && !yo.puede('cobrar')) return prohibido('No tienes permiso para cobrar');
       if (body.cobrarCuenta) {
-        if (!metodoValido(body.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
+        if (!body.partes && !metodoValido(body.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
         const todos = await listar(300);
         const abiertos = todos.filter((p) => cuentaDe(p) === body.cobrarCuenta && p.estado !== 'cancelado' && !p.pago?.pagado);
         if (!abiertos.length) throw new ErrorUsuario('Esa cuenta ya está pagada');
         const t = Date.now();
-        for (const p of abiertos) {
+        // Pago dividido: cada persona paga su parte en efectivo o transferencia
+        const total = abiertos.reduce((s, p) => s + p.total, 0);
+        const partes = body.partes ? partesOk(body.partes, total) : null;
+        const reparto = partes ? repartirPago(partes, abiertos) : null;
+        for (const [i, p] of abiertos.entries()) {
           p.pago ||= { ahora: false, metodo: null, pagado: false };
-          Object.assign(p.pago, { pagado: true, metodo: body.metodo, cobradoPor: usuario, pagadoEn: t });
-          (p.historial ||= []).push({ accion: 'pagado', usuario, en: t, metodo: body.metodo });
+          const metodo = reparto ? reparto[i].metodo : body.metodo;
+          Object.assign(p.pago, { pagado: true, metodo, cobradoPor: usuario, pagadoEn: t });
+          if (metodo === 'mixto') p.pago.efectivo = reparto[i].efectivo; else delete p.pago.efectivo;
+          if (partes && i === 0) p.pago.partes = partes; // el detalle de quién pagó qué queda en el primer pedido
+          (p.historial ||= []).push({ accion: 'pagado', usuario, en: t, metodo, ...(partes && i === 0 ? { partes } : {}) });
           p.actualizado = t;
           await registrarVenta(p);
           await guardar(p);
@@ -137,10 +145,14 @@ async function handler(req, res) {
       if (body.pago !== undefined) {
         pedido.pago ||= { ahora: false, metodo: null, pagado: false };
         if (body.pago.pagado) {
-          if (!metodoValido(body.pago.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
+          const partes = body.pago.partes ? partesOk(body.pago.partes, pedido.total) : null;
+          if (!partes && !metodoValido(body.pago.metodo)) throw new ErrorUsuario('Escoge efectivo o transferencia');
           if (pedido.pago.pagado) await anularVenta(pedido);
-          Object.assign(pedido.pago, { pagado: true, metodo: body.pago.metodo, cobradoPor: usuario, pagadoEn: t });
-          pedido.historial.push({ accion: 'pagado', usuario, en: t, metodo: body.pago.metodo });
+          const r = partes ? repartirPago(partes, [pedido])[0] : { metodo: body.pago.metodo };
+          Object.assign(pedido.pago, { pagado: true, metodo: r.metodo, cobradoPor: usuario, pagadoEn: t });
+          if (r.metodo === 'mixto') pedido.pago.efectivo = r.efectivo; else delete pedido.pago.efectivo;
+          if (partes) pedido.pago.partes = partes; else delete pedido.pago.partes;
+          pedido.historial.push({ accion: 'pagado', usuario, en: t, metodo: r.metodo, ...(partes ? { partes } : {}) });
           await registrarVenta(pedido);
         } else {
           await anularVenta(pedido);

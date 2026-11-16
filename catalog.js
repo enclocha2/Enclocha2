@@ -136,15 +136,22 @@ export function normalizarConfig(raw) {
     return { id: txt(t.id, 48), nombre: txt(t.nombre, 40), grupo: t.grupo, precio: precioOk(t.precio, t.nombre), activo: !!t.activo };
   }, 'toppings');
 
-  const categorias = lista(raw.categorias, (c) => ({ id: txt(c.id, 48), nombre: txt(c.nombre, 30), icono: txt(c.icono, 8) || '🛒' }), 'categorías');
+  const categorias = lista(raw.categorias, (c) => ({ id: txt(c.id, 48), nombre: txt(c.nombre, 30), icono: txt(c.icono, 8) || '🛒', ...(c.sinInventario ? { sinInventario: true } : {}) }), 'categorías');
   if (categorias.some((c) => c.id === 'granizados')) throw new Error('"granizados" es una categoría reservada');
   const cats = new Set(categorias.map((c) => c.id));
 
   const productos = lista(raw.productos, (p) => {
     const nombre = txt(p.nombre, 60);
     if (!cats.has(p.categoria)) throw new Error(`"${nombre}" no tiene una categoría válida`);
-    return { id: txt(p.id, 48), nombre, categoria: p.categoria, precio: precioOk(p.precio, nombre), activo: !!p.activo };
+    const extra = {};
+    if (p.sinInventario) extra.sinInventario = true;
+    else if (Array.isArray(p.usa) && p.usa.length) extra.usa = [...new Set(p.usa.map((x) => txt(x, 48)))].filter((x) => x && x !== p.id).slice(0, 30);
+    if (extra.usa && !extra.usa.length) delete extra.usa;
+    return { id: txt(p.id, 48), nombre, categoria: p.categoria, precio: precioOk(p.precio, nombre), activo: !!p.activo, ...extra };
   }, 'productos');
+  // "usa" solo puede apuntar a productos que existen
+  const ids = new Set(productos.map((p) => p.id));
+  for (const p of productos) if (p.usa) { p.usa = p.usa.filter((x) => ids.has(x)); if (!p.usa.length) delete p.usa; }
 
   return { tamanos, sabores, toppings, categorias, productos };
 }
@@ -152,7 +159,10 @@ export function normalizarConfig(raw) {
 // ---------- Armado de un ítem del pedido ----------
 // raw (lo que manda el navegador):
 //   granizado: { tipo:'granizado', tamano, sabores:[ids], incluidos:{grupo:id}, adicionales:{id:n}, cantidad, nota }
-//   producto:  { tipo:'producto', productoId, cantidad, nota }
+//   producto:  { tipo:'producto', productoId, cantidad, nota, usa? }
+//     · Producto/categoría "sin inventario" (ej. copas): no descuenta ni se bloquea.
+//     · Producto que "usa" el inventario de otro (ej. Michelada → la cerveza): descuenta de ese.
+//       Si puede hacerse con varios (ej. Michelada con Águila o Poker), al venderlo se escoge cuál (usa).
 // Devuelve una "foto" con nombres y precios del momento (así el pedido no cambia si luego cambian precios).
 export function armarItem(raw, cfg) {
   if (!raw || typeof raw !== 'object') throw new Error('Ítem inválido');
@@ -164,8 +174,15 @@ export function armarItem(raw, cfg) {
     if (!p || !p.activo) throw new Error('Hay un producto que ya no está disponible');
     if (!p.precio) throw new Error(`"${p.nombre}" no tiene precio`);
     const cat = cfg.categorias.find((c) => c.id === p.categoria);
+    let inv = p.id, nombre = p.nombre, usa;
+    if (p.sinInventario || cat?.sinInventario) inv = null;
+    else if (p.usa?.length) {
+      inv = p.usa.length === 1 ? p.usa[0] : p.usa.includes(raw.usa) ? raw.usa : null;
+      if (!inv) throw new Error(`Escoge con qué va "${p.nombre}"`);
+      if (p.usa.length > 1) { usa = inv; nombre = `${p.nombre} (${cfg.productos.find((x) => x.id === inv)?.nombre || inv})`; }
+    }
     return {
-      tipo: 'producto', productoId: p.id, nombre: p.nombre, categoria: cat?.nombre || '',
+      tipo: 'producto', productoId: p.id, nombre, categoria: cat?.nombre || '', inv, ...(usa ? { usa } : {}),
       icono: cat?.icono || '🛒', precioUnit: p.precio, cantidad, nota, subtotal: p.precio * cantidad,
     };
   }
@@ -302,7 +319,8 @@ export function consumoDe(items, inventario) {
       if (!k) continue;
       for (const it of items) {
         const q = it.cantidad || 1;
-        if (r.tipo === 'producto' && it.tipo === 'producto' && it.productoId === r.id) sumar(inv.id, q * k);
+        // "inv" = de qué producto se descuenta (null = no lleva inventario); pedidos viejos: el mismo producto
+        if (r.tipo === 'producto' && it.tipo === 'producto' && ('inv' in it ? it.inv : it.productoId) === r.id) sumar(inv.id, q * k);
         if (it.tipo !== 'granizado') continue;
         if (r.tipo === 'granizado') sumar(inv.id, q * k);
         if (r.tipo === 'tamano' && it.tamano === r.id) sumar(inv.id, q * k);
@@ -430,3 +448,35 @@ export function normalizarRoles(lista) {
 export const rolDe = (id, roles = ROLES) => roles.find((r) => r.id === id) || roles.find((r) => r.id === 'vendedor') || { id: 'sin-rol', nombre: 'Sin rol', icono: '❔', permisos: [] };
 // Permisos efectivos: los propios del usuario (si los personalizaron) o los de su rol
 export const permisosDe = (u, roles = ROLES) => (Array.isArray(u?.permisos) ? u.permisos : rolDe(u?.rol, roles).permisos).filter((p) => TODOS_PERMISOS.includes(p));
+
+// ---------- Pagos divididos ----------
+// Una venta puede ser en efectivo, transferencia o "mixto" (parte y parte).
+// partesDe(venta) → { efectivo, transferencia } (sirve para ventas guardadas "v" y para pedidos "p").
+export function partesDe(x) {
+  const m = x.m ?? x.pago?.metodo, t = x.t ?? x.total ?? 0;
+  if (m === 'mixto') {
+    const ef = x.ef ?? x.pago?.efectivo ?? 0;
+    return { efectivo: ef, transferencia: t - ef };
+  }
+  return { efectivo: m === 'efectivo' ? t : 0, transferencia: m === 'transferencia' ? t : 0 };
+}
+// Reparte lo que pagó cada persona entre varios pedidos de una cuenta.
+// partes: [{ metodo, valor }], pedidos: [{ total }] → [{ metodo, efectivo }] por pedido (primero se usa el efectivo)
+export function repartirPago(partes, pedidos) {
+  let ef = partes.filter((x) => x.metodo === 'efectivo').reduce((s, x) => s + x.valor, 0);
+  return pedidos.map((p) => {
+    const e = Math.min(ef, p.total); ef -= e;
+    return e === p.total ? { metodo: 'efectivo', efectivo: e } : e === 0 ? { metodo: 'transferencia', efectivo: 0 } : { metodo: 'mixto', efectivo: e };
+  });
+}
+// Revisa las partes de un pago dividido; devuelve la lista limpia o lanza un error
+export function validarPartes(partes, total) {
+  if (!Array.isArray(partes) || !partes.length) throw new Error('Agrega lo que paga cada persona');
+  if (partes.length > 30) throw new Error('Máximo 30 personas');
+  const l = partes.map((x) => ({ metodo: x.metodo === 'transferencia' ? 'transferencia' : x.metodo === 'efectivo' ? 'efectivo' : null, valor: Math.round(Number(x.valor) || 0), quien: String(x.quien || '').trim().slice(0, 40) }));
+  if (l.some((x) => !x.metodo)) throw new Error('Cada parte debe ser efectivo o transferencia');
+  if (l.some((x) => x.valor <= 0)) throw new Error('Cada parte debe tener un valor mayor a 0');
+  const suma = l.reduce((s, x) => s + x.valor, 0);
+  if (suma !== total) throw new Error(`Las partes suman ${suma.toLocaleString('es-CO')} y el total es ${total.toLocaleString('es-CO')}`);
+  return l;
+}

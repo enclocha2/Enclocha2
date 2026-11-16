@@ -1,3 +1,4 @@
+import { partesDe } from '../catalog.js';
 import { sesion } from './_lib/auth.js';
 import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas, comprasEntre } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
@@ -14,10 +15,11 @@ async function sistema(jornada) {
   const ventas = await ventasEntre(ini, fin);
   const r = { n: ventas.length, total: 0, efectivo: 0, transferencia: 0, porUsuario: {} };
   for (const v of ventas) {
+    const pt = partesDe(v); // una venta mixta suma a efectivo y a transferencia
     r.total += v.t;
-    r[v.m] += v.t;
+    r.efectivo += pt.efectivo; r.transferencia += pt.transferencia;
     const u = (r.porUsuario[v.cb || '—'] ||= { efectivo: 0, transferencia: 0, n: 0 });
-    u[v.m] += v.t; u.n++;
+    u.efectivo += pt.efectivo; u.transferencia += pt.transferencia; u.n++;
   }
   const pendientes = (await listar(300)).filter((p) => p.creado >= ini && p.creado <= fin && p.estado !== 'cancelado' && !p.pago?.pagado);
   const compras = (await comprasEntre(jornada, jornada)).filter((c) => c.pago === 'caja');

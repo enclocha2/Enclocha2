@@ -108,6 +108,15 @@
     </div>
   </div>
 
+  <!-- ¿Con cuál? (ej: Michelada → con qué cerveza) -->
+  <div class="modal" id="modalUsa">
+    <div class="box">
+      <h3 id="muTitulo">¿Con cuál?</h3>
+      <div class="usa-ops" id="muOps"></div>
+      <button class="btn ghost" id="muCancelar">Cancelar</button>
+    </div>
+  </div>
+
   <!-- Modal de pago -->
   <div class="modal" id="modalPago">
     <div class="box">
@@ -207,7 +216,15 @@
     const totalCarrito = () => carrito.reduce((s, d) => s + (armar(d)?.subtotal || 0), 0);
     const unidades = () => carrito.reduce((s, d) => s + d.cantidad, 0);
     const granizadosEnCarrito = () => carrito.filter((d) => d.tipo === 'granizado').length;
-    const enCarrito = (id) => carrito.find((d) => d.tipo === 'producto' && d.productoId === id);
+    // Productos: una línea por producto (y por opción, ej. Michelada con Águila / con Poker)
+    const lineaDe = (id, usa) => carrito.find((d) => d.tipo === 'producto' && d.productoId === id && (d.usa || null) === (usa || null));
+    const cantProd = (id) => carrito.filter((d) => d.tipo === 'producto' && d.productoId === id).reduce((t, d) => t + d.cantidad, 0);
+    const prodDe = (id) => cfg.productos.find((x) => x.id === id);
+    const sinInv = (p) => !!(p.sinInventario || cfg.categorias.find((c) => c.id === p.categoria)?.sinInventario);
+    const eligeOpcion = (p) => !sinInv(p) && (p.usa?.length || 0) > 1;
+    const faltaProd = (id, usa) => { const a = armar({ tipo: 'producto', productoId: id, cantidad: 1, usa }); return a ? faltaPara([a]) : [{ nombre: '?' }]; };
+    const opcionesLibres = (p) => p.usa.filter((u) => !faltaProd(p.id, u).length);
+    const tagProd = (p) => sinInv(p) ? '' : eligeOpcion(p) ? `<em class="stock-tag usa">🔗 ${opcionesLibres(p).length} de ${p.usa.length} opciones</em>` : tagStock('producto', p.usa?.[0] || p.id);
 
     // ---------- Cuentas abiertas ----------
     const estadoPed = { rev: null, pedidos: [] };
@@ -337,30 +354,48 @@
       if (!c) return;
       $('#tituloCat').textContent = `${c.icono} ${c.nombre}`;
       $('#prods').innerHTML = cfg.productos.filter((p) => p.categoria === c.id && p.activo && p.precio).map((p) => {
-        const n = enCarrito(p.id)?.cantidad || 0;
-        if (!p.precio) return `<div class="prod off"><div><b>${esc(p.nombre)}</b><span>Sin precio</span></div></div>`;
-        const sinMas = faltaPara([{ tipo: 'producto', productoId: p.id, cantidad: 1 }]).length > 0;
+        const n = cantProd(p.id);
+        const sinMas = sinInv(p) ? false : eligeOpcion(p) ? !opcionesLibres(p).length : faltaProd(p.id).length > 0;
         if (sinMas && !n) return `<div class="prod off"><div><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span><em class="stock-tag agotado">🔴 Agotado</em></div></div>`;
         return `<div class="prod ${n ? 'has' : ''}">
-          <button class="prod-main" data-prod="${p.id}" data-d="1"><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span>${tagStock('producto', p.id)}</button>
+          <button class="prod-main" data-prod="${p.id}" data-d="1"><b>${esc(p.nombre)}</b><span>${pesos(p.precio)}</span>${tagProd(p)}</button>
           ${n ? `<div class="qty has"><button data-prod="${p.id}" data-d="-1">−</button><b>${n}</b><button data-prod="${p.id}" data-d="1" ${sinMas ? 'disabled title="No hay más en inventario"' : ''}>+</button></div>` : ''}
         </div>`;
       }).join('');
     }
 
-    function cambiarProducto(id, d) {
+    function cambiarProducto(id, d, usa) {
+      const p = prodDe(id);
+      if (d > 0 && p && eligeOpcion(p) && !usa) return elegirOpcion(p);
+      if (d < 0 && usa === undefined) usa = [...carrito].reverse().find((x) => x.tipo === 'producto' && x.productoId === id)?.usa; // quitar el último agregado
       if (d > 0) {
-        const f = faltaPara([{ tipo: 'producto', productoId: id, cantidad: 1 }]);
+        const f = faltaProd(id, usa);
         if (f.length) return toast(`🔴 No hay más: ${textoFaltantes(f)}`, true);
       }
-      const linea = enCarrito(id);
+      const linea = lineaDe(id, usa);
       if (linea) {
         linea.cantidad += d;
         if (linea.cantidad <= 0) carrito = carrito.filter((x) => x !== linea);
       } else if (d > 0) {
-        carrito.push({ tipo: 'producto', productoId: id, cantidad: 1 });
+        carrito.push({ tipo: 'producto', productoId: id, cantidad: 1, ...(usa ? { usa } : {}) });
       }
     }
+    // Michelada y similares: escoger con qué producto va (y que haya en inventario)
+    function elegirOpcion(p) {
+      $('#muTitulo').textContent = `🔗 ${p.nombre}: ¿con cuál?`;
+      $('#muOps').innerHTML = p.usa.map((u) => {
+        const o = prodDe(u); if (!o) return '';
+        const falta = faltaProd(p.id, u).length > 0;
+        return `<button class="opt ${falta ? 'off' : ''}" data-usa-de="${p.id}" data-usa="${u}" ${falta ? 'disabled' : ''}><b>${esc(o.nombre)}</b>${falta ? '<em class="stock-tag agotado">🔴 Agotado</em>' : tagStock('producto', u)}</button>`;
+      }).join('');
+      $('#modalUsa').classList.add('show');
+    }
+    $('#muOps').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-usa]'); if (!b) return;
+      $('#modalUsa').classList.remove('show');
+      cambiarProducto(b.dataset.usaDe, 1, b.dataset.usa); render();
+    });
+    $('#muCancelar').addEventListener('click', () => $('#modalUsa').classList.remove('show'));
 
     // ---------- Carrito ----------
     function renderCarrito() {
@@ -371,7 +406,7 @@
         if (!a) return `<div class="cart-item"><div class="det">⚠️ Ítem ya no disponible</div><button class="x" data-del="${i}">✕</button></div>`;
         if (a.tipo === 'producto') {
           return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b></div>
-            <div class="qty has"><button data-prod="${a.productoId}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-d="1" ${faltaPara([{ tipo: 'producto', productoId: a.productoId, cantidad: 1 }]).length ? 'disabled' : ''}>+</button></div></div>`;
+            <div class="qty has"><button data-prod="${a.productoId}" data-usa="${a.usa || ''}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-usa="${a.usa || ''}" data-d="1" ${faltaProd(a.productoId, a.usa).length ? 'disabled' : ''}>+</button></div></div>`;
         }
         ng++;
         return `<div class="cart-item"><div class="det">
@@ -416,7 +451,7 @@
       if (!b) return;
       const ds = b.dataset;
       if (ds.tab) { tab = ds.tab; render(); return $('#tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-      if (ds.prod) { cambiarProducto(ds.prod, Number(ds.d)); return render(); }
+      if (ds.prod) { cambiarProducto(ds.prod, Number(ds.d), ds.usa !== undefined ? ds.usa || null : undefined); return render(); }
       if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
       if (ds.tam) {
         const primero = !item.tamano;

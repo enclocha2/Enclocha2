@@ -302,3 +302,79 @@ if (typeof document !== 'undefined') {
   const iniciar = () => { revisar(); new MutationObserver(revisar).observe(document.body, { childList: true, subtree: true }); };
   if (document.body) iniciar(); else document.addEventListener('DOMContentLoaded', iniciar);
 }
+
+// ---------- Pago dividido (cuenta de varias personas) ----------
+// Abre una ventana para repartir el total: cada persona paga su parte en efectivo o transferencia.
+// Devuelve una promesa con las partes [{ quien, valor, metodo }] o null si se cancela.
+const $p = (n) => '$' + Math.round(n).toLocaleString('es-CO');
+export function dividirPago({ total, nombre = '' }) {
+  return new Promise((resolver) => {
+    let partes = [];
+    const igual = (n) => {
+      const base = Math.floor(total / n / 100) * 100;
+      partes = Array.from({ length: n }, (_, i) => ({ quien: '', valor: i === n - 1 ? total - base * (n - 1) : base, metodo: 'efectivo' }));
+    };
+    igual(2);
+    const m = document.createElement('div');
+    m.className = 'modal show modal-dividir';
+    m.innerHTML = `<div class="box">
+      <h3>➗ Dividir la cuenta${nombre ? ' de ' + esc(nombre) : ''}</h3>
+      <div class="total" style="margin:0"><span>Total</span><span>${$p(total)}</span></div>
+      <div class="div-rapido"><span class="hint">Partes iguales:</span>${[2, 3, 4, 5, 6].map((n) => `<button type="button" data-n="${n}">${n}</button>`).join('')}</div>
+      <div class="div-partes" id="divPartes"></div>
+      <button type="button" class="btn ghost" id="divMas" style="margin:0">+ Otra persona</button>
+      <div class="div-estado" id="divEstado"></div>
+      <div id="divQR"></div>
+      <button type="button" class="btn" id="divOk">Cobrar</button>
+      <button type="button" class="btn ghost" id="divNo">Cancelar</button>
+    </div>`;
+    document.body.appendChild(m);
+    const q = (s) => m.querySelector(s);
+    const cerrar = (r) => { m.remove(); resolver(r); };
+    function estado() {
+      const suma = partes.reduce((s, x) => s + (x.valor || 0), 0), dif = total - suma;
+      const ef = partes.filter((x) => x.metodo === 'efectivo').reduce((s, x) => s + (x.valor || 0), 0);
+      const tr = suma - ef;
+      q('#divEstado').innerHTML = `<span>💵 Efectivo <b>${$p(ef)}</b></span><span>📲 Transferencia <b>${$p(tr)}</b></span>` +
+        (dif === 0 ? '<span class="ok">✅ Cuadra</span>' : dif > 0 ? `<span class="falta">Faltan ${$p(dif)}</span>` : `<span class="falta">Sobran ${$p(-dif)}</span>`);
+      const listo = dif === 0 && partes.every((x) => x.valor > 0);
+      q('#divOk').disabled = !listo;
+      q('#divOk').textContent = listo ? `Cobrar ${$p(total)}` : 'Cobrar (las partes deben sumar el total)';
+      if (tr > 0) leerQR().then((a) => { if (m.isConnected) q('#divQR').innerHTML = htmlQR(a, $p(tr)); }); else q('#divQR').innerHTML = '';
+    }
+    function pintar() {
+      q('#divPartes').innerHTML = partes.map((x, i) => `<div class="div-fila">
+        <input class="field" data-i="${i}" data-k="quien" placeholder="Persona ${i + 1}" value="${esc(x.quien)}" maxlength="40">
+        <div class="precio"><span>$</span><input class="field" type="number" inputmode="numeric" min="0" step="100" data-i="${i}" data-k="valor" value="${x.valor || ''}"></div>
+        <div class="div-met"><button type="button" class="${x.metodo === 'efectivo' ? 'on' : ''}" data-i="${i}" data-met="efectivo" title="Efectivo">💵</button><button type="button" class="${x.metodo === 'transferencia' ? 'on' : ''}" data-i="${i}" data-met="transferencia" title="Transferencia">📲</button></div>
+        ${partes.length > 1 ? `<button type="button" class="del" data-quitar="${i}" title="Quitar">✕</button>` : ''}
+      </div>`).join('');
+      estado();
+    }
+    m.addEventListener('input', (e) => {
+      const el = e.target, i = Number(el.dataset.i); if (!partes[i]) return;
+      partes[i][el.dataset.k] = el.dataset.k === 'valor' ? Math.max(0, Math.round(Number(el.value) || 0)) : el.value;
+      estado();
+    });
+    m.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.n) { igual(Number(b.dataset.n)); return pintar(); }
+      if (b.dataset.met) { partes[Number(b.dataset.i)].metodo = b.dataset.met; return pintar(); }
+      if (b.dataset.quitar) { partes.splice(Number(b.dataset.quitar), 1); return pintar(); }
+      if (b.id === 'divMas') {
+        const falta = total - partes.reduce((s, x) => s + (x.valor || 0), 0);
+        partes.push({ quien: '', valor: Math.max(0, falta), metodo: 'efectivo' }); return pintar();
+      }
+      if (b.id === 'divNo') return cerrar(null);
+      if (b.id === 'divOk' && !b.disabled) return cerrar(partes.map((x, i) => ({ quien: x.quien.trim() || `Persona ${i + 1}`, valor: x.valor, metodo: x.metodo })));
+    });
+    pintar();
+  });
+}
+// Texto corto de cómo se pagó (para mostrar en tarjetas)
+export function textoPago(pg, total) {
+  if (pg?.metodo !== 'mixto' && !pg?.partes?.length) return null;
+  const ef = pg.metodo === 'mixto' ? pg.efectivo || 0 : pg.metodo === 'efectivo' ? total : 0;
+  const det = pg.partes?.length ? ' · ' + pg.partes.map((x) => `${x.quien}: ${x.metodo === 'efectivo' ? '💵' : '📲'} ${$p(x.valor)}`).join(', ') : '';
+  return `➗ Dividido: 💵 ${$p(ef)} + 📲 ${$p(total - ef)}${det}`;
+}

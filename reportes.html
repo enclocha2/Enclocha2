@@ -94,7 +94,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos } from '/catalog.js';
+    import { pesos, partesDe } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
     import { hoy, jornadaDe, horaJornada, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, diasEntre,
       nombreMes, nombreDia, fechaLarga, fechaCorta, horarioDe, textoHorario, textoHora, esFestivo } from '/fechas.js';
@@ -159,14 +159,14 @@
               const h = h0 + i, x = h % 24;
               return { clave: h, lbl: `${x % 12 || 12}${x < 12 ? 'a' : 'p'}`, titulo: `${textoHora(h)} – ${textoHora(h + 1)}`, efectivo: 0, transferencia: 0, n: 0 };
             });
-            for (const v of ventas) { const b = buckets.find((x) => x.clave === horaJornada(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
+            for (const v of ventas) { const b = buckets.find((x) => x.clave === horaJornada(v.pa)); if (b) { const pt = partesDe(v); b.efectivo += pt.efectivo; b.transferencia += pt.transferencia; b.n++; } }
           } else {
             buckets = diasEntre(desde, hasta).map((d) => ({
               clave: d, lbl: modo === 'semana' ? nombreDia(d) : String(Number(d.slice(8))),
               titulo: `${fechaLarga(d)}${esFestivo(d) ? ' (festivo)' : ''}${horarioDe(d) ? ' · ' + textoHorario(d) : ' · sin jornada'}`,
               efectivo: 0, transferencia: 0, n: 0,
             }));
-            for (const v of ventas) { const b = buckets.find((x) => x.clave === jornadaDe(v.pa)); if (b) { b[v.m] += v.t; b.n++; } }
+            for (const v of ventas) { const b = buckets.find((x) => x.clave === jornadaDe(v.pa)); if (b) { const pt = partesDe(v); b.efectivo += pt.efectivo; b.transferencia += pt.transferencia; b.n++; } }
           }
         }
         pintar(buckets, ventas);

@@ -52,7 +52,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos } from '/catalog.js';
+    import { pesos, partesDe } from '/catalog.js';
     import { requerirSesion, api, esc, toast } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaHora, fechaLarga, jornadaDe, diaDe, nombreDia, textoHorario } from '/fechas.js';
     import { normalizar } from '/catalog.js';
@@ -89,14 +89,15 @@
 
     const filtradas = () => {
       const q = normalizar($('#buscar').value);
-      return ventas.filter((v) => (metodo === 'todos' || v.m === metodo) &&
+      return ventas.filter((v) => (metodo === 'todos' || v.m === metodo || (v.m === 'mixto' && partesDe(v)[metodo] > 0)) &&
         (!q || normalizar(`${v.c} #${v.n} ${v.it.map((i) => i[0]).join(' ')} ${v.u} ${v.cb}`).includes(q)));
     };
 
     function render() {
       const lista = filtradas();
       const suma = (f) => lista.filter(f).reduce((s, v) => s + v.t, 0);
-      const total = suma(() => true), ef = suma((v) => v.m === 'efectivo'), tr = suma((v) => v.m === 'transferencia');
+      const total = suma(() => true);
+      const ef = lista.reduce((s, v) => s + partesDe(v).efectivo, 0), tr = lista.reduce((s, v) => s + partesDe(v).transferencia, 0);
       const pct = (x) => (total ? Math.round((x / total) * 100) : 0) + '%';
       $('#kpis').innerHTML = `
         <div class="kpi"><span>Total vendido</span><b>${pesos(total)}</b><small>${lista.length} venta${lista.length === 1 ? '' : 's'}</small></div>
@@ -111,7 +112,7 @@
           <td>#${v.n}</td>
           <td><b>${esc(v.c)}</b></td>
           <td>${v.it.map((i) => `${i[1]}× ${esc(i[0])}`).join('<br>')}</td>
-          <td><span class="metodo m-${v.m}"><i></i>${v.m === 'efectivo' ? 'Efectivo' : 'Transferencia'}</span></td>
+          <td><span class="metodo m-${v.m}"><i></i>${v.m === 'efectivo' ? 'Efectivo' : v.m === 'transferencia' ? 'Transferencia' : `Dividido: 💵 ${pesos(partesDe(v).efectivo)} + 📲 ${pesos(partesDe(v).transferencia)}`}</span>${v.pt ? `<br><span class="hint">${v.pt.map(([m, x, q]) => `${esc(q)} ${m === 'e' ? '💵' : '📲'} ${pesos(x)}`).join(' · ')}</span>` : ''}</td>
           <td class="hint">${esc(v.u)} / ${esc(v.cb)}</td>
           <td class="num"><b>${pesos(v.t)}</b></td></tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="6"><b>Total</b></td><td class="num"><b>${pesos(total)}</b></td></tr></tfoot>`
@@ -124,7 +125,7 @@
       if (!lista.length) return toast('No hay ventas para descargar', true);
       const c = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
       const filas = [['Jornada', 'Fecha pago', 'Pedido', 'Cliente', 'Productos', 'Método', 'Tomó', 'Cobró', 'Total']]
-        .concat(lista.map((v) => [jornadaDe(v.pa), fechaHora(v.pa), v.n, v.c, v.it.map((i) => `${i[1]}x ${i[0]}`).join(' | '), v.m, v.u, v.cb, v.t]));
+        .concat(lista.map((v) => [jornadaDe(v.pa), fechaHora(v.pa), v.n, v.c, v.it.map((i) => `${i[1]}x ${i[0]}`).join(' | '), v.m === 'mixto' ? `mixto (efectivo ${partesDe(v).efectivo} + transferencia ${partesDe(v).transferencia})` : v.m, v.u, v.cb, v.t]));
       const csv = '﻿' + filas.map((f) => f.map(c).join(';')).join('\r\n');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

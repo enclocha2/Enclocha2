@@ -163,6 +163,25 @@
     </section>
   </main>
 
+  <!-- ¿Cómo se controla en inventario este producto? -->
+  <div class="modal" id="modalInv">
+    <div class="box">
+      <h3>📦 Inventario de <span id="miNombre"></span></h3>
+      <div class="modo-inv">
+        <label class="opt-radio"><input type="radio" name="miModo" value="propio"><span><b>📦 Tiene su propio inventario</b><small>Ej: una cerveza, una botella. Se descuenta al venderlo.</small></span></label>
+        <label class="opt-radio"><input type="radio" name="miModo" value="no"><span><b>🚫 No lleva inventario</b><small>Ej: copas. Nunca se bloquea ni descuenta.</small></span></label>
+        <label class="opt-radio"><input type="radio" name="miModo" value="usa"><span><b>🔗 Se hace con otro producto</b><small>Ej: Michelada → descuenta la cerveza; Soda michelada → la soda. Si escoges varios, al vender se pregunta con cuál.</small></span></label>
+      </div>
+      <div id="miUsaBox" hidden>
+        <input class="field" id="miBuscar" placeholder="🔎 Buscar producto (ej: águila, soda)">
+        <div class="mi-lista" id="miLista"></div>
+      </div>
+      <div class="error" id="miError"></div>
+      <button class="btn" id="miListo">Listo</button>
+      <button class="btn ghost" id="miCancelar">Cancelar</button>
+    </div>
+  </div>
+
   <div class="savebar" id="savebar">
     <span id="saveMsg">Tienes cambios sin guardar</span>
     <div class="row">
@@ -174,7 +193,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { GRUPOS, SECCIONES, pesos, slug } from '/catalog.js';
+    import { GRUPOS, SECCIONES, pesos, slug, normalizar } from '/catalog.js';
     import { requerirSesion, api, esc, toast, htmlQR, puede, sedeActual } from '/sesion.js';
     import { jornadaActual, horarioDe, horaJornada, textoHora } from '/fechas.js';
 
@@ -230,6 +249,18 @@
         || '<div class="empty">No hay sabores</div>');
     }
 
+    // Cómo se ve el modo de inventario de un producto
+    function modoInv(p) {
+      const cat = cfg.categorias.find((c) => c.id === p.categoria);
+      if (cat?.sinInventario) return { clase: 'no', txt: '🚫 Sin inv. (categoría)' };
+      if (p.sinInventario) return { clase: 'no', txt: '🚫 Sin inventario' };
+      if (p.usa?.length) {
+        const n = (id) => cfg.productos.find((x) => x.id === id)?.nombre || id;
+        return { clase: 'usa', txt: p.usa.length === 1 ? `🔗 Usa: ${n(p.usa[0])}` : `🔗 Escoge: ${p.usa.length} opciones` };
+      }
+      return { clase: '', txt: '📦 Propio' };
+    }
+
     function renderProductos() {
       const q = $('#buscar').value.trim().toLowerCase();
       $('#filtroCat').innerHTML = [{ id: 'todas', nombre: 'Todas', icono: '' }, ...cfg.categorias]
@@ -247,6 +278,7 @@
             ${inp('productos', p.id, 'nombre', p.nombre, 'maxlength="60"')}
             <select class="field" data-l="productos" data-id="${p.id}" data-k="categoria">${opciones(p.categoria)}</select>
             ${precio('productos', p.id, p.precio)}
+            <button class="chip-inv ${modoInv(p).clase}" data-inv="${p.id}" title="Cómo se controla en inventario">${modoInv(p).txt}</button>
             ${borrar('productos', p.id)}
           </div>`).join('') || '<div class="empty">Sin productos</div>');
       }).join('');
@@ -276,14 +308,57 @@
           <input class="field" data-l="categorias" data-id="${c.id}" data-k="icono" value="${esc(c.icono)}" maxlength="4" style="max-width:70px;text-align:center">
           ${inp('categorias', c.id, 'nombre', c.nombre, 'maxlength="30"')}
           <span class="hint" style="white-space:nowrap">${n} prod.</span>
+          <label class="row sin-inv" title="Los productos de esta categoría no se controlan en inventario (ej: copas)"><span class="switch"><input type="checkbox" data-l="categorias" data-id="${c.id}" data-k="sinInventario" ${c.sinInventario ? 'checked' : ''}><span></span></span><small>Sin inventario</small></label>
           ${borrar('categorias', c.id)}</div>`;
       }).join('') || '<div class="empty">No hay categorías</div>';
     }
+
+    // ---------- Modal de inventario por producto ----------
+    let miProd = null, miUsa = [];
+    function abrirInv(id) {
+      miProd = cfg.productos.find((x) => x.id === id); if (!miProd) return;
+      miUsa = [...(miProd.usa || [])];
+      $('#miNombre').textContent = miProd.nombre;
+      const modo = miProd.sinInventario ? 'no' : miUsa.length ? 'usa' : 'propio';
+      document.querySelectorAll('[name=miModo]').forEach((r) => { r.checked = r.value === modo; });
+      $('#miBuscar').value = ''; $('#miError').textContent = '';
+      // sugerencia: si se llama "michelada ..." sugiere las cervezas
+      pintarMi(); $('#modalInv').classList.add('show');
+    }
+    function pintarMi() {
+      const modo = document.querySelector('[name=miModo]:checked')?.value;
+      $('#miUsaBox').hidden = modo !== 'usa';
+      if (modo !== 'usa') return;
+      const q = normalizar($('#miBuscar').value);
+      const cats = cfg.categorias.filter((c) => !c.sinInventario);
+      $('#miLista').innerHTML = cats.map((c) => {
+        const ps = cfg.productos.filter((p) => p.categoria === c.id && p.id !== miProd.id && !p.usa?.length && !p.sinInventario && (!q || normalizar(p.nombre).includes(q)));
+        if (!ps.length) return '';
+        return `<div class="mi-cat">${esc(c.icono)} ${esc(c.nombre)}</div>` + ps.map((p) => `<label class="mi-op"><input type="checkbox" value="${p.id}" ${miUsa.includes(p.id) ? 'checked' : ''}> ${esc(p.nombre)}</label>`).join('');
+      }).join('') || '<p class="hint">No hay productos que coincidan.</p>';
+    }
+    $('#modalInv').addEventListener('change', (e) => {
+      if (e.target.name === 'miModo') return pintarMi();
+      if (e.target.closest('#miLista')) { const id = e.target.value; miUsa = e.target.checked ? [...new Set([...miUsa, id])] : miUsa.filter((x) => x !== id); }
+    });
+    $('#miBuscar').addEventListener('input', pintarMi);
+    $('#miCancelar').addEventListener('click', () => $('#modalInv').classList.remove('show'));
+    $('#miListo').addEventListener('click', () => {
+      const modo = document.querySelector('[name=miModo]:checked')?.value;
+      if (modo === 'usa' && !miUsa.length) return ($('#miError').textContent = 'Marca al menos un producto (ej: la cerveza con la que se hace)');
+      delete miProd.sinInventario; delete miProd.usa;
+      if (modo === 'no') miProd.sinInventario = true;
+      if (modo === 'usa') miProd.usa = miUsa;
+      $('#modalInv').classList.remove('show'); marcar(); renderProductos();
+      toast('Listo · toca Guardar cambios para aplicarlo');
+    });
 
     function renderTodo() { renderSabores(); renderProductos(); renderGranizado(); renderCategorias(); mostrarTab(); }
 
     // ---------- Edición ----------
     const buscarEn = (l, id) => cfg[l].find((x) => x.id === id);
+
+    document.querySelector('main').addEventListener('click', (e) => { const b = e.target.closest('[data-inv]'); if (b) abrirInv(b.dataset.inv); });
 
     document.querySelector('main').addEventListener('input', (e) => {
       const el = e.target;
@@ -298,6 +373,7 @@
       if (k === 'activo') fila?.classList.toggle('apagado', !el.checked);
       if (k === 'precio') fila?.classList.toggle('sinprecio', ['productos', 'tamanos'].includes(el.dataset.l) && !obj.precio);
       if (k === 'activo' && el.dataset.l === 'sabores') renderSabores();
+      if (k === 'sinInventario') renderProductos();
       if (k === 'categoria') renderProductos();
       if (k === 'seccion' && e.type === 'change') renderGranizado();
     });
@@ -450,7 +526,7 @@
       $('#domVerMapa').hidden = !dom.local;
       if (dom.local) $('#domVerMapa').href = `https://www.google.com/maps?q=${dom.local.lat},${dom.local.lng}`;
       let desde = 0;
-      $('#domTarifas').innerHTML = dom.tarifas.map((t, k) => { const fila = `<div class="fila">
+      $('#domTarifas').innerHTML = dom.tarifas.map((t, k) => { const fila = `<div class="fila fila-tarifa">
           <span class="hint" style="min-width:90px">De ${String(desde).replace('.', ',')} a</span>
           <input class="field dia" style="max-width:90px" type="number" min="0" step="0.5" data-tk="${k}" data-tc="hastaKm" value="${t.hastaKm}"><span class="hint">km</span>
           <span class="hint">→</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="500" data-tk="${k}" data-tc="valor" value="${t.valor}"></div>

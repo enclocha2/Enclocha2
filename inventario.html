@@ -26,6 +26,7 @@
   <main class="admin" style="max-width:1100px">
     <div class="kpis" id="kpis"></div>
     <div id="vacio"></div>
+    <div id="sobran"></div>
 
     <section class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:10px;gap:10px">
@@ -161,7 +162,23 @@
     }
 
     // ---------- Pintar ----------
+    // Ítems que ya no hacen falta: su producto quedó "sin inventario" (copas) o "usa" otro (micheladas)
+    function sobrantes() {
+      if (!cfg) return [];
+      const sinCat = new Set(cfg.categorias.filter((c) => c.sinInventario).map((c) => c.id));
+      const noLleva = (id) => { const p = cfg.productos.find((x) => x.id === id); return p && (p.sinInventario || p.usa?.length || sinCat.has(p.categoria)); };
+      return items.filter((i) => i.reglas?.length && i.reglas.every((r) => r.tipo === 'producto' && noLleva(r.id)));
+    }
+    function pintarSobran() {
+      const l = sobrantes();
+      $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
+        <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
+        <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
+      $('#quitarSobran')?.addEventListener('click', () => { const ids = new Set(sobrantes().map((i) => i.id)); items = items.filter((i) => !ids.has(i.id)); marcar(); pintar(); toast('Listo · toca Guardar cambios'); });
+    }
+
     function pintar() {
+      if (admin) pintarSobran();
       const activos = items.filter((i) => i.activo !== false);
       const est = (i) => estadoStock(i, stock[i.id] || 0);
       const bajos = activos.filter((i) => est(i).clase === 'bajo').length;
@@ -241,7 +258,9 @@
     async function crearBase() {
       const nuevos = [];
       const add = (nombre, categoria, unidad, reglas, minimo = 0) => { let id = slug(nombre); while (nuevos.some((x) => x.id === id)) id += '-2'; nuevos.push({ id, nombre, categoria, unidad, minimo, reglas, activo: true, empaques: empaquesSugeridos(nombre) }); };
-      for (const p of cfg.productos.filter((p) => p.activo)) add(p.nombre, p.categoria === 'cervezas' ? 'reventa' : 'reventa', p.categoria === 'cervezas' ? 'und' : 'botella', [{ tipo: 'producto', id: p.id, cantidad: 1 }], 6);
+      // copas (sin inventario) y micheladas (usan el de la cerveza) no llevan ítem propio
+      const sinInvCat = new Set(cfg.categorias.filter((c) => c.sinInventario).map((c) => c.id));
+      for (const p of cfg.productos.filter((p) => p.activo && !p.sinInventario && !p.usa?.length && !sinInvCat.has(p.categoria))) add(p.nombre, p.categoria === 'cervezas' ? 'reventa' : 'reventa', p.categoria === 'cervezas' ? 'und' : 'botella', [{ tipo: 'producto', id: p.id, cantidad: 1 }], 6);
       for (const t of cfg.tamanos.filter((t) => t.activo && (t.seccion || 'Tamaños') === 'Tamaños')) add(`Vasos ${t.nombre}`, 'desechables', 'vaso', [{ tipo: 'tamano', id: t.id, cantidad: 1 }], 25);
       for (const t of cfg.toppings.filter((t) => t.activo)) add(t.nombre, 'toppings', 'und', [{ tipo: 'topping', id: t.id, cantidad: 1 }], 20);
       add('Pitillos', 'desechables', 'und', [{ tipo: 'granizado', cantidad: 1 }], 50);

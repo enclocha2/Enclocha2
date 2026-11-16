@@ -67,7 +67,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos, agruparCuentas, estadoStock, TODOS_PERMISOS } from '/catalog.js';
+    import { pesos, agruparCuentas, estadoStock, TODOS_PERMISOS, partesDe } from '/catalog.js';
     import { requerirSesion, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, SECCIONES_NAV, puede, permitido } from '/sesion.js';
     import { hoy, sumarDias, inicioJornada, fechaLarga, textoHorario, horarioDe, esFestivo, fechaHora } from '/fechas.js';
 
@@ -116,12 +116,13 @@
         const nuevos = ps.filter((p) => p.estado === 'nuevo').length;
         const prep = ps.filter((p) => p.estado === 'preparando' || p.estado === 'encamino').length;
         const suma = (f) => delDia.filter(f).reduce((s, p) => s + p.total, 0);
+        const delDiaPag = () => delDia.filter((p) => p.pago?.pagado);
         if ($('#cntPedidos')) { $('#cntPedidos').hidden = !nuevos; $('#cntPedidos').textContent = nuevos; }
         if ($('#sPedidos')) $('#sPedidos').textContent = nuevos || prep ? `${nuevos} nuevo${nuevos === 1 ? '' : 's'} · ${prep} en preparación` : 'Todo despachado ✨';
         if ($('#numeros')) $('#numeros').innerHTML = `
           <div class="num-card"><span>Vendido</span><b>${pesos(suma(() => true))}</b><small>${delDia.length} pedido${delDia.length === 1 ? '' : 's'}</small></div>
-          <div class="num-card"><span><i class="dot ef"></i>Efectivo</span><b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'efectivo'))}</b></div>
-          <div class="num-card"><span><i class="dot tr"></i>Transferencia</span><b>${pesos(suma((p) => p.pago?.pagado && p.pago.metodo === 'transferencia'))}</b></div>
+          <div class="num-card"><span><i class="dot ef"></i>Efectivo</span><b>${pesos(delDiaPag().reduce((s, p) => s + partesDe(p).efectivo, 0))}</b></div>
+          <div class="num-card"><span><i class="dot tr"></i>Transferencia</span><b>${pesos(delDiaPag().reduce((s, p) => s + partesDe(p).transferencia, 0))}</b></div>
           <div class="num-card"><span>⏳ Por cobrar</span><b>${pesos(suma((p) => !p.pago?.pagado))}</b></div>`;
         const abiertas = agruparCuentas(ps).filter((c) => c.abierta);
         badge('/cuentas', abiertas.length, 'var(--warn)');

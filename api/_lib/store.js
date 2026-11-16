@@ -2,7 +2,7 @@
 // En Vercel usa Upstash Redis (Storage > Marketplace). Sin variables de
 // entorno cae a memoria (solo sirve para pruebas locales).
 import { Redis } from '@upstash/redis';
-import { CONFIG_INICIAL, migrar } from '../../catalog.js';
+import { CONFIG_INICIAL, migrar, partesDe } from '../../catalog.js';
 import { jornadaDe } from '../../fechas.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
@@ -131,6 +131,8 @@ function nombreItem(i) {
 function resumenVenta(p) {
   return {
     id: p.id, n: p.numero, c: p.cliente, t: p.total, m: p.pago.metodo,
+    ...(p.pago.metodo === 'mixto' ? { ef: p.pago.efectivo || 0 } : {}),
+    ...(p.pago.partes?.length ? { pt: p.pago.partes.map((x) => [x.metodo === 'efectivo' ? 'e' : 't', x.valor, x.quien || '']) } : {}),
     pa: p.pago.pagadoEn, cr: p.creado, u: p.tomadoPor || '', cb: p.pago.cobradoPor || '',
     it: [
       ...p.items.map((i) => { const [nombre, cat] = nombreItem(i); return [nombre, i.cantidad || 1, i.subtotal || 0, cat]; }),
@@ -140,11 +142,13 @@ function resumenVenta(p) {
   };
 }
 
-function sumarResumen(dia, metodo, total, signo) {
-  const k = (x) => `${dia}|${x}`;
-  M().resumen[k('total')] = (M().resumen[k('total')] || 0) + signo * total;
-  M().resumen[k(metodo)] = (M().resumen[k(metodo)] || 0) + signo * total;
-  M().resumen[k('n')] = (M().resumen[k('n')] || 0) + signo;
+// Lo que suma una venta en el resumen del día (una venta mixta suma a efectivo y a transferencia)
+function camposResumen(v) {
+  const pt = partesDe(v);
+  return [['total', v.t], ['efectivo', pt.efectivo], ['transferencia', pt.transferencia], ['n', 1]].filter(([, x]) => x);
+}
+function sumarResumen(dia, v, signo) {
+  for (const [c, x] of camposResumen(v)) M().resumen[`${dia}|${c}`] = (M().resumen[`${dia}|${c}`] || 0) + signo * x;
 }
 
 export async function registrarVenta(p) {
@@ -156,13 +160,11 @@ export async function registrarVenta(p) {
   if (redis) {
     const pl = redis.pipeline();
     pl.zadd(K('ventas'), { score: v.pa, member });
-    pl.hincrby(K('ventas:resumen'), `${dia}|total`, v.t);
-    pl.hincrby(K('ventas:resumen'), `${dia}|${v.m}`, v.t);
-    pl.hincrby(K('ventas:resumen'), `${dia}|n`, 1);
+    for (const [c, x] of camposResumen(v)) pl.hincrby(K('ventas:resumen'), `${dia}|${c}`, x);
     await pl.exec();
   } else {
     M().ventas.push({ score: v.pa, member });
-    sumarResumen(dia, v.m, v.t, 1);
+    sumarResumen(dia, v, 1);
   }
 }
 
@@ -174,13 +176,11 @@ export async function anularVenta(p) {
   if (redis) {
     const pl = redis.pipeline();
     pl.zrem(K('ventas'), member);
-    pl.hincrby(K('ventas:resumen'), `${dia}|total`, -v.t);
-    pl.hincrby(K('ventas:resumen'), `${dia}|${v.m}`, -v.t);
-    pl.hincrby(K('ventas:resumen'), `${dia}|n`, -1);
+    for (const [c, x] of camposResumen(v)) pl.hincrby(K('ventas:resumen'), `${dia}|${c}`, -x);
     await pl.exec();
   } else {
     M().ventas = M().ventas.filter((x) => x.member !== member);
-    sumarResumen(dia, v.m, v.t, -1);
+    sumarResumen(dia, v, -1);
   }
   delete p.pago.registro;
 }
@@ -223,7 +223,7 @@ export async function recalcularResumenJornadas() {
   const nuevo = {};
   for (const v of todas) {
     const dia = jornadaDe(v.pa);
-    for (const [campo, val] of [['total', v.t], [v.m, v.t], ['n', 1]]) nuevo[`${dia}|${campo}`] = (nuevo[`${dia}|${campo}`] || 0) + val;
+    for (const [campo, val] of camposResumen(v)) nuevo[`${dia}|${campo}`] = (nuevo[`${dia}|${campo}`] || 0) + val;
   }
   if (redis) {
     await redis.del(K('ventas:resumen'));

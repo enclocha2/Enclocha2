@@ -1030,3 +1030,68 @@ details.plegable[open] > summary { margin-bottom: 10px; }
 .pago-rapido .opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px; text-align: left; }
 .pago-rapido .opt b { font-size: 1.1rem; }
 .pago-rapido .opt span { color: var(--muted); font-size: .85rem; text-align: right; }
+
+/* Inventario por producto (Productos) */
+.chip-inv { flex: 0 0 auto; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--muted); border-radius: 999px; padding: 6px 10px; font: 700 .78rem 'Nunito', sans-serif; cursor: pointer; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+.chip-inv.no { color: #ffb4c6; border-color: rgba(255, 90, 120, .4); }
+.chip-inv.usa { color: #9ff0ff; border-color: rgba(51, 225, 255, .45); }
+.sin-inv { gap: 6px; align-items: center; white-space: nowrap; }
+.sin-inv small { color: var(--muted); }
+.modo-inv { display: grid; gap: 8px; margin: 8px 0 12px; }
+.opt-radio { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1.5px solid var(--line); border-radius: 14px; cursor: pointer; }
+.opt-radio:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.opt-radio input { margin-top: 4px; accent-color: #ff3fd1; }
+.opt-radio span { display: flex; flex-direction: column; gap: 2px; }
+.opt-radio small { color: var(--muted); }
+.mi-lista { max-height: 260px; overflow-y: auto; margin: 8px 0; padding-right: 4px; }
+.mi-cat { font-weight: 800; font-size: .8rem; color: var(--muted); text-transform: uppercase; margin: 10px 0 4px; }
+.mi-op { display: flex; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px dashed rgba(255,255,255,.07); cursor: pointer; }
+.mi-op input { accent-color: #ff3fd1; width: 18px; height: 18px; }
+.stock-tag.usa { color: #9ff0ff; }
+.usa-ops { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.usa-ops .opt { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 8px; }
+.aviso-sobran { margin-bottom: 14px; border-color: rgba(255, 207, 112, .45); background: rgba(255, 207, 112, .07); }
+
+/* Pago dividido */
+.modal-dividir .box { max-width: 520px; }
+.div-rapido { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+.div-rapido button { min-width: 40px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.05); color: inherit; font: 800 .95rem 'Nunito', sans-serif; cursor: pointer; }
+.div-partes { display: grid; gap: 8px; margin-bottom: 8px; }
+.div-fila { display: grid; grid-template-columns: minmax(0, 1fr) 130px auto auto; gap: 6px; align-items: center; }
+.div-fila .precio { margin: 0; }
+.div-met { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.div-met button { border: 0; background: transparent; padding: 8px 10px; font-size: 1.1rem; cursor: pointer; opacity: .45; }
+.div-met button.on { background: var(--brand-soft); opacity: 1; }
+.div-estado { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0; font-size: .92rem; }
+.div-estado .ok { color: #5ee6a8; font-weight: 800; }
+.div-estado .falta { color: #ffb4c6; font-weight: 800; }
+@media (max-width: 480px) {
+  .div-fila { grid-template-columns: minmax(0, 1fr) auto auto; padding: 8px; border: 1px solid var(--line); border-radius: 12px; }
+  .div-fila > input { grid-column: 1 / -1; }
+}
+.div-fila .del { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; }
+.div-met button.on { background: var(--grad); opacity: 1; }
+.div-rapido button { min-width: 36px; padding: 6px 8px; }
+.dividir-btn { width: 100%; margin-top: 8px; padding: 12px; }
+.m-mixto i { background: linear-gradient(90deg, #3987e5 50%, #d95926 50%); }
+
+/* ===================== Sin desplazamiento horizontal (v23) ===================== */
+html, body { max-width: 100%; overflow-x: clip; }
+img, svg, video, canvas, iframe { max-width: 100%; }
+.layout > *, .cols > *, .dos-col > *, .kpis > * { min-width: 0; }
+.card { min-width: 0; overflow-wrap: anywhere; }
+.card input, .card select, .card textarea { max-width: 100%; }
+.fila { min-width: 0; }
+.fila > .field { min-width: 0; }
+.fila-tarifa { flex-wrap: wrap; }
+@media (max-width: 420px) {
+  .fila { flex-wrap: wrap; }
+  .fila .precio { flex: 1 1 110px; }
+  .fila-tarifa .hint:first-child { min-width: 0 !important; }
+}
+/* PC: aprovechar mejor el ancho sin estirar demasiado */
+@media (min-width: 1200px) {
+  main.layout { max-width: 1280px; margin-left: auto; margin-right: auto; grid-template-columns: minmax(0, 1fr) 380px; }
+}
+.metodo.m-mixto { white-space: normal; }
+@media (max-width: 600px) { table.tabla.apilar td .metodo { white-space: normal; text-align: right; } }

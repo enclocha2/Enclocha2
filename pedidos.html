@@ -66,8 +66,8 @@
   </div>
 
   <script type="module">
-    import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe } from '/catalog.js';
-    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario, puede } from '/sesion.js';
+    import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe, partesDe } from '/catalog.js';
+    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario, puede, dividirPago, textoPago, toast } from '/sesion.js';
     import { hoy, inicioJornada } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -188,11 +188,12 @@
         ? `<div class="pago cuenta-linea">🔗 Cuenta de ${esc(p.cliente)}: ${c.pedidos.filter((x) => x.estado !== 'cancelado').map((x) => '#' + x.numero).join(' + ')}${c.pendiente ? ` · por cobrar <b>${pesos(c.pendiente)}</b>` : ' · pagada'}</div>` : '';
       if (pg.pagado) {
         const m = metodo(pg.metodo);
-        return lineaCuenta + `<div class="pago ok"><span>✅ Pagado · ${m?.icono} ${m?.nombre} · cobró ${esc(pg.cobradoPor)}</span>
+        return lineaCuenta + `<div class="pago ok"><span>✅ Pagado · ${textoPago(pg, p.total) || `${m?.icono} ${m?.nombre}`} · cobró ${esc(pg.cobradoPor)}</span>
           ${puede('cobrar') ? `<button class="undo" data-id="${p.id}" data-despagar="1">deshacer</button>` : ''}</div>`;
       }
       const botones = !puede('cobrar') ? '' : METODOS_PAGO.map((m) =>
-        `<button class="${pg.metodo === m.id ? 'sug' : ''}" data-id="${p.id}" data-cobrar="${m.id}" title="${enCuenta ? 'Cobra toda la cuenta' : ''}">Cobrado${enCuenta ? ' todo' : ''} ${m.icono}</button>`).join('');
+        `<button class="${pg.metodo === m.id ? 'sug' : ''}" data-id="${p.id}" data-cobrar="${m.id}" title="${enCuenta ? 'Cobra toda la cuenta' : ''}">Cobrado${enCuenta ? ' todo' : ''} ${m.icono}</button>`).join('')
+        + (puede('cobrar') ? `<button data-id="${p.id}" data-dividir="1" title="Varias personas pagan, unos en efectivo y otros por transferencia">➗ Dividir</button>` : '');
       return lineaCuenta + (pg.ahora
         ? `<div class="pago barra"><span>💰 Paga en barra · ${metodo(pg.metodo)?.icono} ${metodo(pg.metodo)?.nombre}</span><div class="cobrar">${botones}</div></div>`
         : `<div class="pago despues"><span>${p.agregadoACuenta ? '➕ Agregado a la cuenta' : '⏳ Paga después'}</span><div class="cobrar">${botones}</div></div>`);
@@ -266,8 +267,9 @@
       // Resumen del día (sin cancelados)
       const delDia = pedidos.filter((p) => p.creado >= hoy && p.estado !== 'cancelado');
       const suma = (f) => delDia.filter(f).reduce((s, p) => s + p.total, 0);
-      const ef = suma((p) => p.pago?.pagado && p.pago.metodo === 'efectivo');
-      const tr = suma((p) => p.pago?.pagado && p.pago.metodo === 'transferencia');
+      const pagados = delDia.filter((p) => p.pago?.pagado);
+      const ef = pagados.reduce((s, p) => s + partesDe(p).efectivo, 0);
+      const tr = pagados.reduce((s, p) => s + partesDe(p).transferencia, 0);
       const pend = suma((p) => !p.pago?.pagado);
       $('#resumen').innerHTML = `
         <div>Vendido hoy<b>${pesos(ef + tr + pend)}</b></div>
@@ -309,11 +311,23 @@
     $('#mqSi').addEventListener('click', () => { $('#modalQR').classList.remove('show'); if (aCobrarQR) cobrarCuenta(aCobrarQR, 'transferencia'); });
 
     let aCancelar = null;
-    document.querySelector('main').addEventListener('click', (e) => {
+    document.querySelector('main').addEventListener('click', async (e) => {
       const b = e.target.closest('button[data-id]');
       if (!b) return;
       const id = b.dataset.id;
       if (b.dataset.e) return actualizar(id, { estado: b.dataset.e });
+      if (b.dataset.dividir) {
+        const p = pedidos.find((x) => x.id === b.dataset.id); if (!p) return;
+        const c = cuentasMap.get(cuentaDe(p));
+        const enCuenta = c && c.pedidos.filter((x) => x.estado !== 'cancelado').length > 1;
+        const total = enCuenta ? c.pendiente : p.total;
+        const partes = await dividirPago({ total, nombre: p.cliente });
+        if (!partes) return;
+        try {
+          await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify(enCuenta ? { cobrarCuenta: cuentaDe(p), partes } : { id: p.id, pago: { pagado: true, partes } }) });
+        } catch (err) { toast(err.message, true); }
+        estado.rev = null; return cargar();
+      }
       if (b.dataset.cobrar) {
         const p = pedidos.find((x) => x.id === id);
         if (b.dataset.cobrar === 'transferencia') return abrirQR(p);
@@ -337,5 +351,6 @@
     setInterval(() => { if (enHorarioOperacion()) cargar(); }, POLL_MS);
     avisoHorario($('#pausa'), () => { estado.rev = null; cargar(); });
   </script>
+  <div class="toast" id="toast"></div>
 </body>
 </html>
