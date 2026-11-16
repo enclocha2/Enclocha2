@@ -24,6 +24,13 @@
   </header>
 
   <main class="admin" style="max-width:1100px">
+    <nav class="tabs" id="tabs">
+      <button data-tab="registrar">➕ Registrar</button>
+      <button data-tab="lista">🧾 Compras</button>
+      <button data-tab="resumen">📊 Resumen</button>
+      <button data-tab="costos">💲 Costos</button>
+    </nav>
+    <div id="t-registrar">
     <div id="presBanner" class="solo-admin"></div>
     <!-- Registrar -->
     <section class="card" id="formCard">
@@ -35,6 +42,7 @@
             <input class="field" id="buscaInsumo" placeholder="🔍 Buscar insumo (ej: vasos 12, hielo, aguila)" autocomplete="off" style="flex:1">
             <button type="button" class="mini" id="nuevoInsumo" title="Si no está en la lista">➕ Nuevo</button>
           </div>
+          <div class="chips cats-ins" id="catsIns"></div>
           <div class="insumos" id="insumos"></div>
           <div class="insumo-sel" id="insumoSel" hidden></div>
         </div>
@@ -52,39 +60,49 @@
           <span>🧾 Esta compra</span>
           <div class="lineas" id="lineas"></div>
         </div>
-        <label class="campo"><span>Fecha (jornada)</span><input class="field" type="date" name="fecha" required></label>
-        <div class="campo ancho"><span>¿Con qué se pagó?</span><div class="g3" id="pagos"></div></div>
-        <div class="campo"><span>¿A quién se le compró?</span>
-          <select class="field" id="provSel"></select>
-          <small class="hint" id="provInfo"></small></div>
-        <div class="campo ancho"><span>📎 Foto o scan de la factura (opcional)</span>
-          <div class="adj-sel">
-            <label class="btn ghost adj-btn"><input type="file" id="factFile" accept="image/*,application/pdf" hidden>📷 Tomar foto o escoger archivo</label>
-            <span class="hint" id="factInfo">Sin archivo</span>
-            <button type="button" class="del" id="factQuitar" hidden title="Quitar">✕</button>
-          </div></div>
-        <label class="campo"><span>Nota (opcional)</span><input class="field" name="nota" maxlength="200"></label>
+        <div class="campo ancho detalles-compra">
+          <div class="campo"><span>¿Con qué se pagó?</span><div class="seg-pago" id="pagos"></div></div>
+          <div class="campo"><span>¿A quién se le compró?</span>
+            <select class="field" id="provSel"></select>
+            <small class="hint" id="provInfo"></small></div>
+          <label class="campo"><span>Fecha (jornada)</span><input class="field" type="date" name="fecha" required></label>
+        </div>
+        <div class="campo ancho extras-compra">
+          <label class="mini adj-btn"><input type="file" id="factFile" accept="image/*,application/pdf" hidden>📎 Foto de la factura</label>
+          <span class="hint" id="factInfo"></span>
+          <button type="button" class="del" id="factQuitar" hidden title="Quitar">✕</button>
+          <button type="button" class="mini" id="btnNota">📝 Nota</button>
+          <input class="field" name="nota" maxlength="200" placeholder="Nota (opcional)" hidden style="flex:1;min-width:180px">
+        </div>
         <div class="campo ancho row acciones-form">
           <button class="btn" id="btnGuardar">💾 Guardar compra</button>
           <button class="btn ghost" type="button" id="btnCancelarEdicion" hidden>Cancelar edición</button>
         </div>
       </form>
     </section>
+    </div>
 
-    <!-- Lista -->
-    <section class="card">
-      <div class="chips" id="periodos" style="margin-bottom:10px"></div>
-      <div class="filtro-fechas">
-        <span class="hint">Desde</span><input class="field" type="date" id="desde">
-        <span class="hint">hasta</span><input class="field" type="date" id="hasta">
-        <button class="mini" id="aplicar">Ver</button>
-        <select class="field" id="filtroProv" style="max-width:240px"></select>
-        <input class="field" id="buscar" placeholder="🔍 Buscar insumo o proveedor..." style="flex:1;min-width:200px">
+    <!-- Filtros (Compras y Resumen) -->
+    <section class="card filtros-compras" id="filtrosCard">
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <div class="chips" id="periodos" style="flex:1"></div>
+        <button class="mini" id="masFiltros">⚙️ Filtros</button>
       </div>
-      <div class="chips" id="filtroCat"></div>
+      <div id="filtrosMas" hidden>
+        <div class="filtro-fechas" style="margin-top:10px">
+          <span class="hint">Desde</span><input class="field" type="date" id="desde">
+          <span class="hint">hasta</span><input class="field" type="date" id="hasta">
+          <button class="mini" id="aplicar">Ver</button>
+          <select class="field" id="filtroProv" style="max-width:240px"></select>
+        </div>
+        <div class="chips" id="filtroCat" style="margin-top:8px"></div>
+      </div>
+      <input class="field" id="buscar" placeholder="🔍 Buscar insumo, proveedor o NIT..." style="margin-top:10px">
     </section>
 
     <div class="kpis" id="kpis"></div>
+
+    <div id="t-resumen">
 
     <section class="card" id="homoCard" hidden>
       <h2>🔗 Homologar compras anteriores <span class="hint">(escritas a mano)</span></h2>
@@ -99,6 +117,9 @@
       <section class="card"><h2>📊 Por categoría</h2><div id="porCat"></div></section>
       <section class="card"><h2>🏪 Por proveedor</h2><div id="porProv"></div></section>
     </div>
+    </div>
+
+    <div id="t-lista">
 
     <section class="card">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
@@ -107,6 +128,25 @@
       </div>
       <div id="facturas"></div>
     </section>
+    </div>
+
+    <!-- Costos -->
+    <div id="t-costos" hidden>
+      <section class="card">
+        <h2>💲 ¿Cuánto me cuesta cada cosa?</h2>
+        <p class="hint" style="margin-top:0">Sale de lo que pagaste en la <b>última compra</b> de cada insumo. Si algo no tiene compra registrada, ponle el costo a mano abajo en <b>Insumos</b>.</p>
+        <div class="kpis" id="costoKpis"></div>
+        <div class="chips" id="costoSecc"></div>
+        <div id="costoLista"></div>
+      </section>
+      <section class="card">
+        <div class="row" style="justify-content:space-between;gap:8px">
+          <h2 style="margin:0">📦 Insumos <span class="hint">(costo por unidad)</span></h2>
+          <input class="field" id="costoBuscar" placeholder="🔍 Buscar insumo" style="max-width:240px">
+        </div>
+        <div class="tabla-wrap"><table class="tabla" id="costoInsumos"></table></div>
+      </section>
+    </div>
   </main>
 
   <div class="modal" id="modalProv">
@@ -154,7 +194,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA } from '/catalog.js';
+    import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, GRUPOS, recetaDe, itemBase, armarItem, consumoDe, sinReutilizables } from '/catalog.js';
     import { requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
 
@@ -231,11 +271,12 @@
     $('#factFile').addEventListener('change', async (e) => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
-      $('#factInfo').textContent = '⏳ Preparando…';
-      try { factArchivo = await prepararArchivo(f); $('#factInfo').innerHTML = `✅ <b>${esc(f.name)}</b> · ${Math.round(factArchivo.data.length * 0.75 / 1024)} KB`; $('#factQuitar').hidden = false; }
-      catch (err) { factArchivo = null; $('#factInfo').textContent = 'Sin archivo'; toast(err.message, true); }
+      $('#factInfo').textContent = '⏳';
+      try { factArchivo = await prepararArchivo(f); $('#factInfo').innerHTML = `✅ ${esc(f.name.length > 22 ? f.name.slice(0, 20) + '…' : f.name)}`; $('#factQuitar').hidden = false; }
+      catch (err) { factArchivo = null; $('#factInfo').textContent = ''; toast(err.message, true); }
     });
-    const quitarFactura = () => { factArchivo = null; $('#factInfo').textContent = 'Sin archivo'; $('#factQuitar').hidden = true; };
+    const quitarFactura = () => { factArchivo = null; $('#factInfo').textContent = ''; $('#factQuitar').hidden = true; };
+    $('#btnNota').addEventListener('click', () => { form.nota.hidden = false; $('#btnNota').hidden = true; form.nota.focus(); });
     $('#factQuitar').addEventListener('click', quitarFactura);
     async function adjuntarDespues(factura) {
       if (!factArchivo || !factura) return;
@@ -282,7 +323,7 @@
 
     // ---------- Formulario (compras estandarizadas) ----------
     const form = $('#fCompra');
-    const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="opt ${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.nombre}</button>`).join(''); };
+    const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}" title="${esc(p.ayuda || '')}">${p.icono} ${p.corto || p.nombre}</button>`).join(''); };
     $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
 
     // La lista de insumos = ítems del inventario (+ los "solo compras")
@@ -302,17 +343,24 @@
     const pl = (n, u) => (n === 1 || ['und', 'kg', 'g', 'ml'].includes(u) || /s$/.test(u) ? u : u + 's'); // vaso → vasos
     const tapaDe = (it) => it?.tapa && inventario.find((x) => x.id === it.tapa);
 
+    // Primero la categoría (o buscar escribiendo); así no sale la lista entera de una
+    let catIns = '';
     function pintarInsumos() {
       const q = normalizar($('#buscaInsumo').value);
-      if (insumo && !q) { $('#insumos').innerHTML = ''; return; }
-      const lista = inventario.filter((i) => i.activo !== false && !i.reutilizable && (!q || normalizar(i.nombre).includes(q)));
+      const vivos = inventario.filter((i) => i.activo !== false && !i.reutilizable);
+      $('#catsIns').hidden = !!insumo && !q;
+      $('#catsIns').innerHTML = CATEGORIAS_COMPRA.filter((c) => vivos.some((i) => i.categoria === c.id))
+        .map((c) => `<button type="button" class="chip ${catIns === c.id ? 'on' : ''}" data-cat-ins="${c.id}">${c.icono} ${esc(c.nombre)}</button>`).join('');
+      if ((insumo && !q) || (!q && !catIns)) { $('#insumos').innerHTML = ''; return; }
+      const lista = vivos.filter((i) => (q ? normalizar(i.nombre).includes(q) : i.categoria === catIns));
       const grupos = CATEGORIAS_COMPRA.map((c) => [c, lista.filter((i) => i.categoria === c.id)]).filter(([, l]) => l.length);
-      $('#insumos').innerHTML = grupos.map(([c, l]) => `<div class="ins-cat">${c.icono} ${esc(c.nombre)}</div>` +
+      $('#insumos').innerHTML = grupos.map(([c, l]) => (q ? `<div class="ins-cat">${c.icono} ${esc(c.nombre)}</div>` : '') +
         l.map((i) => `<button type="button" class="chip ${insumo?.id === i.id ? 'on' : ''}" data-ins="${i.id}">${esc(i.nombre)}${saborApagado(i) ? ' <small class="hint">(sabor apagado)</small>' : ''}</button>`).join('')).join('')
         || `<p class="hint">No está en la lista. Créalo con <b>➕ Nuevo</b>.</p>`;
     }
+    $('#catsIns').addEventListener('click', (e) => { const b = e.target.closest('[data-cat-ins]'); if (b) { catIns = catIns === b.dataset.catIns ? '' : b.dataset.catIns; $('#buscaInsumo').value = ''; pintarInsumos(); } });
     function escogerInsumo(it, pres = null) {
-      insumo = it; $('#buscaInsumo').value = '';
+      insumo = it; $('#buscaInsumo').value = ''; catIns = ''; $('#recientes').hidden = true;
       const emps = it.empaques || [];
       presSel = pres ?? (emps.find((e) => e.conTapa)?.nombre || emps[0]?.nombre || '');
       $('#insumoSel').hidden = false;
@@ -341,7 +389,7 @@
     }
     $('#buscaInsumo').addEventListener('input', pintarInsumos);
     $('#insumos').addEventListener('click', (e) => { const b = e.target.closest('[data-ins]'); if (b) escogerInsumo(inventario.find((x) => x.id === b.dataset.ins)); });
-    $('#insumoSel').addEventListener('click', (e) => { if (e.target.id === 'cambiarInsumo') { insumo = null; $('#insumoSel').hidden = true; pintarInsumos(); $('#buscaInsumo').focus(); } });
+    $('#insumoSel').addEventListener('click', (e) => { if (e.target.id === 'cambiarInsumo') { insumo = null; $('#insumoSel').hidden = true; $('#recientes').hidden = false; pintarInsumos(); $('#buscaInsumo').focus(); } });
     $('#presentaciones').addEventListener('click', (e) => { const b = e.target.closest('[data-pres]'); if (b) { presSel = b.dataset.pres; pintarPres(); } });
     form.cantidad.addEventListener('input', calcular); form.valor.addEventListener('input', calcular);
 
@@ -374,7 +422,7 @@
     function quitarActual() {
       insumo = null; presSel = ''; form.cantidad.value = ''; form.valor.value = '';
       $('#insumoSel').hidden = true; ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = true; });
-      $('#cantInfo').textContent = ''; $('#valorInfo').textContent = '';
+      $('#cantInfo').textContent = ''; $('#valorInfo').textContent = ''; $('#recientes').hidden = false;
       pintarInsumos(); pintarLineas(); $('#buscaInsumo').focus();
     }
     $('#btnAgregarLinea').addEventListener('click', () => {
@@ -393,7 +441,7 @@
       $('#formTitulo').textContent = '➕ Registrar compra';
       $('#btnGuardar').textContent = '💾 Guardar compra';
       $('#btnCancelarEdicion').hidden = true;
-      provSel = ''; quitarFactura(); pintarProv();
+      provSel = ''; quitarFactura(); pintarProv(); catIns = ''; $('#recientes').hidden = false; form.nota.hidden = true; $('#btnNota').hidden = false;
       pintarPagos(); pintarInsumos(); pintarLineas();
     }
     function llenarForm(c, conFecha = true) {
@@ -401,7 +449,7 @@
       if (it) escogerInsumo(it, c.presentacion ?? '');
       else { limpiarForm(); $('#buscaInsumo').value = c.insumo; pintarInsumos(); toast('Esta compra es de antes: escoge el insumo de la lista', true); }
       provSel = c.proveedorId && PROV()[c.proveedorId] ? c.proveedorId : ''; pintarProv();
-      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; }
+      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; if (c.nota) { form.nota.hidden = false; $('#btnNota').hidden = true; } }
       calcular(); pintarPagos();
     }
     $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
@@ -419,7 +467,7 @@
             lineas: todas.map(({ insumoId, presentacion, cantidad, valor }) => ({ insumoId, presentacion, cantidad, valor })) }) });
           await adjuntarDespues(r.factura);
           toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`);
-          limpiarForm(); cargar(); cargarRecientes();
+          limpiarForm(); cargar(); cargarRecientes(); CD = null;
           if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
         } catch (err) { toast(err.message, true); }
         finally { btn.disabled = false; }
@@ -444,7 +492,7 @@
         } else { const { compra } = await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) }); await adjuntarDespues(compra.factura); }
         if (conFactura) toast('📎 Factura adjuntada');
         toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
-        limpiarForm(); cargar(); cargarRecientes();
+        limpiarForm(); cargar(); cargarRecientes(); CD = null;
         if (puede('presupuesto')) {
           presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
           const extra = presu && antes !== null ? presu.resumen.deVentas - antes : 0;
@@ -460,8 +508,8 @@
         const { compras: cs } = await api(`/api/compras?desde=${sumarDias(H, -60)}&hasta=${H}`);
         const vistos = new Map();
         for (const c of cs) { if (!c.insumoId || !inventario.some((x) => x.id === c.insumoId)) continue; const k = c.insumoId + '|' + (c.presentacion || ''); const v = vistos.get(k) || { ...c, veces: 0 }; v.veces++; vistos.set(k, v); }
-        recientes = [...vistos.values()].sort((a, b) => b.veces - a.veces).slice(0, 10);
-        $('#recientes').innerHTML = recientes.length ? '<span class="hint">Frecuentes:</span> ' + recientes.map((c, i) => `<button type="button" class="chip" data-rec="${i}">${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}${c.presentacion ? ` · ${esc(c.presentacion)}` : ''}</button>`).join('') : '';
+        recientes = [...vistos.values()].sort((a, b) => b.veces - a.veces).slice(0, 6);
+        $('#recientes').innerHTML = recientes.length ? '<span class="hint">⚡ Frecuentes:</span> ' + recientes.map((c, i) => `<button type="button" class="chip" data-rec="${i}">${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}${c.presentacion ? ` · ${esc(c.presentacion)}` : ''}</button>`).join('') : '';
       } catch {}
     }
     $('#recientes').addEventListener('click', (e) => {
@@ -530,7 +578,7 @@
       const por = (fn) => { const m = new Map(); for (const c of lista) m.set(fn(c), (m.get(fn(c)) || 0) + c.valor); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
       const porPago = Object.fromEntries(por((c) => c.pago));
       $('#kpis').innerHTML = `
-        <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${lista.length} registro${lista.length === 1 ? '' : 's'}</small></div>
+        <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${new Set(lista.map((c) => c.factura || c.id)).size} compras</small></div>
         ${PAGOS_COMPRA.map((p) => `<div class="kpi"><span>${p.icono} ${p.nombre}</span><b>${pesos(porPago[p.id] || 0)}</b></div>`).join('')}`;
       $('#porCat').innerHTML = barras(por((c) => c.categoria).map(([k, v]) => [`${CAT[k]?.icono || ''} ${esc(CAT[k]?.nombre || k)}`, v]));
       // Por insumo: unidades compradas y costo por unidad (solo compras de la lista)
@@ -580,6 +628,7 @@
       if (b.dataset.adj) { adjPara = b.dataset.adj; $('#adjFile').click(); }
       if (b.dataset.edit) {
         const c = compras.find((x) => x.id === b.dataset.edit);
+        location.hash = 'registrar';
         editando = c.id; lineas = []; llenarForm(c); pintarLineas();
         $('#formTitulo').textContent = `✏️ Editando: ${c.insumo}`;
         $('#btnGuardar').textContent = '💾 Guardar cambios';
@@ -606,13 +655,149 @@
       a.download = `compras_${$('#desde').value}_a_${$('#hasta').value}.csv`; a.click();
     });
 
+    // ---------- Costos: cuánto cuesta hacer cada cosa ----------
+    // Costo por unidad de cada insumo = lo pagado en su última compra ÷ lo que entró al inventario
+    // (o el que se puso a mano). Con eso y la receta de cada cosa (lo que descuenta del inventario) sale el costo.
+    let CD = null, costoSecc = 'granizados';
+    async function cargarCostos(forzar = false) {
+      if (CD && !forzar) return pintarCostos();
+      $('#costoLista').innerHTML = '<p class="hint">⏳ Calculando…</p>';
+      try {
+        const H = hoy();
+        const [inv, cat, cs, man] = await Promise.all([
+          api('/api/inventario?lite=1&bases=1'), api('/api/catalogo'),
+          api(`/api/compras?desde=${sumarMeses(H, -6)}&hasta=${H}`), api('/api/compras?r=costos'),
+        ]);
+        const ultima = {};
+        for (const c of [...cs.compras].reverse()) if (c.inventario?.id && c.inventario.cantidad > 0 && c.valor > 0) ultima[c.inventario.id] = { costo: c.valor / c.inventario.cantidad, fecha: c.fecha, prov: c.proveedor };
+        CD = { items: inv.items.filter((i) => i.activo !== false), cfg: cat.config, ultima, manual: man.manual };
+        pintarCostos();
+      } catch (e) { $('#costoLista').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+    }
+    const costoUnit = (id) => (id in CD.manual ? CD.manual[id] : CD.ultima[id]?.costo ?? null);
+    // deltas de inventario → { total, partes:[{nombre, cant, unidad, costo}], faltan:[nombres] }
+    function costear(deltas) {
+      const partes = [], faltan = []; let total = 0;
+      for (const [id, d] of Object.entries(deltas)) {
+        if (d >= 0) continue;
+        const it = CD.items.find((x) => x.id === id); if (!it) continue;
+        const u = costoUnit(id), cant = -d;
+        if (u === null) { faltan.push(it.nombre); partes.push({ nombre: it.nombre, cant, unidad: it.unidad, costo: null }); continue; }
+        total += u * cant; partes.push({ nombre: it.nombre, cant, unidad: it.unidad, costo: u * cant });
+      }
+      return { total: Math.round(total), partes: partes.sort((a, b) => (b.costo ?? 0) - (a.costo ?? 0)), faltan };
+    }
+    const consumo = (items, llevar = false) => sinReutilizables(consumoDe(items, CD.items, { llevar }), CD.items);
+    function filasCostos() {
+      const cfg = CD.cfg, out = { granizados: [], productos: [], adiciones: [] };
+      const sabores = cfg.sabores.filter((x) => x.activo);
+      for (const t of cfg.tamanos.filter((x) => x.activo && x.precio)) {
+        const rc = recetaDe(t, cfg), it = itemBase(t, cfg);
+        it.sabores = sabores.map((x) => ({ id: x.id, nombre: x.nombre }));
+        // dulces incluidos: el promedio de lo que hay en cada grupo
+        it.incluidos = [];
+        for (const g of GRUPOS) { const ts = cfg.toppings.filter((x) => x.activo && x.grupo === g.id); for (const x of ts) it.incluidos.push({ id: x.id, grupo: g.id, cantidad: rc.dulces / ts.length }); }
+        const c = costear(consumo([it])), cl = costear(consumo([it], true));
+        out.granizados.push({ nombre: t.nombre, precio: t.precio, ...c, llevar: cl.total - c.total,
+          nota: rc.productoOpcional && rc.producto ? `Sin la ${cfg.productos.find((p) => p.id === rc.producto)?.nombre || 'cerveza'} (si aplica, se cobra aparte)` : '' });
+      }
+      for (const p of cfg.productos.filter((x) => x.activo && x.precio)) {
+        const cat = cfg.categorias.find((c) => c.id === p.categoria);
+        const ops = p.invItem?.ops?.length > 1 ? p.invItem.ops.map((o) => [o.id, o.nombre || o.id]) : p.usa?.length > 1 ? p.usa.map((u) => [u, cfg.productos.find((x) => x.id === u)?.nombre || u]) : [[undefined, '']];
+        for (const [usa, n] of ops) {
+          let it; try { it = armarItem({ tipo: 'producto', productoId: p.id, usa }, cfg); } catch { continue; }
+          const c = costear(consumo([it]));
+          const sinInv = !it.inv && !it.invDirecto;
+          out.productos.push({ nombre: p.nombre + (n ? ` (${n})` : ''), grupo: `${cat?.icono || ''} ${cat?.nombre || ''}`, precio: p.precio, ...c, sinInv: sinInv || (!c.partes.length) });
+        }
+      }
+      for (const t of cfg.toppings.filter((x) => x.activo && x.precio)) {
+        const it = { tipo: 'granizado', cantidad: 1, sabores: [], incluidos: [], adicionales: [{ id: t.id, cantidad: 1 }], receta: { vasos: 0, pitillos: 0, litros: 0 } };
+        out.adiciones.push({ nombre: t.nombre, precio: t.precio, ...costear(consumo([it])) });
+      }
+      return out;
+    }
+    const margenTxt = (precio, costo) => {
+      const m = precio ? (precio - costo) / precio : 0;
+      const ic = m >= 0.6 ? '🟢' : m >= 0.4 ? '🟡' : '🔴';
+      return `${ic} ${Math.round(m * 100)}%`;
+    };
+    function tablaCostos(filas, extra) {
+      if (!filas.length) return '<p class="hint">No hay nada activo con precio en esta sección.</p>';
+      return `<div class="costos-lista">${filas.map((f) => {
+        const sinCosto = f.sinInv || (!f.partes.length);
+        const det = f.partes.map((x) => `<div class="costo-parte"><span>${esc(x.nombre)} <span class="hint">× ${fmt(Math.round(x.cant * 1000) / 1000)} ${esc(x.unidad)}</span></span><b>${x.costo === null ? '<span class="hint">sin costo</span>' : pesos(Math.round(x.costo))}</b></div>`).join('');
+        return `<details class="costo-fila">
+          <summary>
+            <span class="costo-nombre"><b>${esc(f.nombre)}</b>${f.grupo ? ` <span class="hint">${esc(f.grupo)}</span>` : ''}${f.faltan.length ? `<br><span class="hint">⚠️ falta el costo de ${esc(f.faltan.join(', '))}</span>` : ''}</span>
+            <span class="costo-num"><small>Vende</small>${pesos(f.precio)}</span>
+            <span class="costo-num"><small>Cuesta</small>${sinCosto ? '—' : `<b>${f.faltan.length ? '+' : ''}${pesos(f.total)}</b>`}</span>
+            <span class="costo-num"><small>Ganas</small>${sinCosto ? '—' : f.faltan.length ? '<span class="hint">⚠️ incompleto</span>' : `<b>${pesos(f.precio - f.total)}</b><br><span class="hint">${margenTxt(f.precio, f.total)}</span>`}</span>
+          </summary>
+          <div class="costo-det">${sinCosto ? '<p class="hint">No descuenta nada del inventario, así que no hay cómo saber su costo.</p>' : det}
+            ${f.llevar ? `<p class="hint">🥡 Para llevar o domicilio suma ${pesos(f.llevar)} (tapas).</p>` : ''}${f.nota ? `<p class="hint">ℹ️ ${esc(f.nota)}</p>` : ''}${extra || ''}</div>
+        </details>`;
+      }).join('')}</div>`;
+    }
+    function pintarCostos() {
+      if (!CD) return;
+      const F = filasCostos();
+      const SECC = [['granizados', '🍧 Granizados', F.granizados], ['productos', '🍺 Productos', F.productos], ['adiciones', '🍬 Adiciones', F.adiciones]];
+      const conCosto = F.granizados.filter((f) => f.partes.length && !f.faltan.length);
+      const prom = conCosto.length ? conCosto.reduce((t, f) => t + (f.precio - f.total) / f.precio, 0) / conCosto.length : 0;
+      const usados = new Set(); [...F.granizados, ...F.productos, ...F.adiciones].forEach((f) => f.faltan.forEach((n) => usados.add(n)));
+      $('#costoKpis').innerHTML = `<div class="kpi"><span>Margen promedio granizados</span><b>${conCosto.length ? Math.round(prom * 100) + '%' : '—'}</b><small>${conCosto.length ? 'lo que te queda de cada $100' : 'faltan costos de insumos'}</small></div>
+        <div class="kpi"><span>Insumos sin costo</span><b>${usados.size}</b><small>${usados.size ? 'ponlo a mano abajo' : 'todo tiene costo ✅'}</small></div>`;
+      $('#costoSecc').innerHTML = SECC.map(([id, n, l]) => `<button class="chip ${costoSecc === id ? 'on' : ''}" data-costo-secc="${id}">${n} <span class="hint">${l.length}</span></button>`).join('');
+      const filas = SECC.find((x) => x[0] === costoSecc)[2];
+      $('#costoLista').innerHTML = `<p class="hint" style="margin:8px 0">${costoSecc === 'granizados' ? 'Con el promedio de los sabores activos y de los dulces incluidos. Toca una fila para ver el desglose.' : 'Toca una fila para ver el desglose.'}</p>` + tablaCostos(filas);
+      pintarInsumosCosto();
+    }
+    function pintarInsumosCosto() {
+      const q = normalizar($('#costoBuscar').value);
+      const l = CD.items.filter((i) => !i.reutilizable && !i.soloCompras && (!q || normalizar(i.nombre).includes(q)))
+        .sort((a, b) => (costoUnit(a.id) === null ? 0 : 1) - (costoUnit(b.id) === null ? 0 : 1) || a.nombre.localeCompare(b.nombre));
+      const edita = puede('compras') || admin;
+      $('#costoInsumos').innerHTML = `<thead><tr><th>Insumo</th><th class="num">Última compra</th><th class="num">Costo a mano</th></tr></thead><tbody>` + l.map((i) => {
+        const u = CD.ultima[i.id], m = CD.manual[i.id];
+        return `<tr class="${costoUnit(i.id) === null ? 'sin-costo' : ''}">
+          <td><b>${esc(i.nombre)}</b><br><span class="hint">por ${esc(i.unidad)}${costoUnit(i.id) === null ? ' · ⚠️ sin costo' : ''}</span></td>
+          <td class="num">${u ? `${pesos(Math.round(u.costo * 100) / 100)}<br><span class="hint">${fechaCorta(u.fecha)}</span>` : '—'}</td>
+          <td class="num">${edita ? `<div class="precio costo-manual"><span>$</span><input class="field" type="number" min="0" step="any" inputmode="decimal" data-costo-id="${i.id}" value="${m ?? ''}" placeholder="${u ? 'auto' : '0'}"></div>` : m != null ? pesos(m) : '—'}</td>
+        </tr>`;
+      }).join('') + '</tbody>';
+    }
+    $('#costoBuscar').addEventListener('input', () => CD && pintarInsumosCosto());
+    $('#costoSecc').addEventListener('click', (e) => { const b = e.target.closest('[data-costo-secc]'); if (b) { costoSecc = b.dataset.costoSecc; pintarCostos(); } });
+    $('#costoInsumos').addEventListener('change', async (e) => {
+      const i = e.target.closest('[data-costo-id]'); if (!i) return;
+      try { ({ manual: CD.manual } = await api('/api/compras?r=costos', { method: 'PUT', body: JSON.stringify({ id: i.dataset.costoId, costo: i.value === '' ? null : Number(i.value) }) })); toast(i.value === '' ? 'Costo a mano quitado' : '✅ Costo guardado'); pintarCostos(); }
+      catch (err) { toast(err.message, true); }
+    });
+
+    // ---------- Pestañas ----------
+    const TABS = ['registrar', 'lista', 'resumen', 'costos'];
+    const tabOk = (t) => t !== 'registrar' || puede('compras');
+    function mostrarTab() {
+      const permitidas = TABS.filter(tabOk);
+      const t = permitidas.includes(location.hash.slice(1)) ? location.hash.slice(1) : permitidas[0];
+      TABS.forEach((x) => { $('#t-' + x).hidden = x !== t; });
+      $('#filtrosCard').hidden = $('#kpis').hidden = !['lista', 'resumen'].includes(t);
+      document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+      if (t === 'costos') cargarCostos();
+    }
+    document.querySelectorAll('#tabs [data-tab]').forEach((b) => { if (!tabOk(b.dataset.tab)) b.remove(); });
+    window.addEventListener('hashchange', mostrarTab);
+    $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) location.hash = b.dataset.tab; });
+    $('#masFiltros').addEventListener('click', () => { $('#filtrosMas').hidden = !$('#filtrosMas').hidden; });
+
     let presu = null;
     if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
     await cargarProveedores();
     limpiarForm();
     const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);
     $('#desde').value = d0; $('#hasta').value = h0;
-    pintarFiltros(); cargar(); cargarRecientes(); cargarHomologar();
+    pintarFiltros(); mostrarTab(); cargar(); cargarRecientes(); cargarHomologar();
   </script>
 </body>
 </html>

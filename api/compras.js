@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sesion } from './_lib/auth.js';
 import gastosFijos from './_lib/gastosfijos.js';
 import presupuesto from './_lib/presupuesto.js';
-import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock, leerProveedores, guardarProveedores, guardarAdjunto, leerAdjunto, borrarAdjunto, metaAdjuntos } from './_lib/store.js';
+import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock, leerProveedores, guardarProveedores, guardarAdjunto, leerAdjunto, borrarAdjunto, metaAdjuntos, leerCostosManual, guardarCostosManual } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, normalizar, slug, empaquesSugeridos } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
@@ -135,6 +135,18 @@ async function handler(req, res) {
         Object.assign(p, datos);
         await guardarProveedores(lista);
         return res.status(200).json({ proveedor: p, proveedores: lista });
+      }
+    }
+    // ---------- Costos a mano (por unidad del insumo) ----------
+    if (r === 'costos') {
+      if (req.method === 'GET') return res.status(200).json({ manual: await leerCostosManual() });
+      if (req.method === 'PUT') {
+        if (!yo.puede('compras_editar') && !yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso' });
+        const b = leer(req), o = await leerCostosManual(), id = String(b.id || '').slice(0, 80);
+        if (!id) return res.status(400).json({ error: 'Falta el insumo' });
+        const v = Number(b.costo);
+        if (b.costo === null || b.costo === '' || !(v >= 0)) delete o[id]; else o[id] = Math.round(v * 100) / 100;
+        return res.status(200).json({ manual: await guardarCostosManual(o) });
       }
     }
     // ---------- Foto o scan de la factura ----------

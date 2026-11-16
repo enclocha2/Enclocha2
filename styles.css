@@ -1184,3 +1184,32 @@ img, svg, video, canvas, iframe { max-width: 100%; }
   .factura-linea { grid-template-columns: 1fr auto; }
   .factura-acc { grid-column: 1 / -1; justify-self: end; }
 }
+
+/* ---------- Compras más cómoda + Costos ---------- */
+.cats-ins { margin-top: 8px; }
+.cats-ins .chip { padding: 6px 12px; font-size: .88rem; }
+.detalles-compra { display: grid; grid-template-columns: 1.4fr 1fr .8fr; gap: 12px; align-items: start; }
+.detalles-compra .campo { margin: 0; }
+.seg-pago { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg-pago button { flex: 1 1 auto; border: 2px solid var(--line); background: rgba(255, 255, 255, .04); color: var(--ink); border-radius: 12px; padding: 10px 12px; font-weight: 700; }
+.seg-pago button.on { background: var(--grad); border-color: transparent; color: #fff; }
+.extras-compra { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.extras-compra .adj-btn { padding: 8px 12px; }
+.filtros-compras .chips { margin: 0; }
+.costos-lista { display: grid; gap: 6px; }
+.costo-fila { border: 1px solid rgba(255, 255, 255, .1); border-radius: 12px; background: rgba(255, 255, 255, .03); }
+.costo-fila summary { display: grid; grid-template-columns: 1fr 90px 90px 100px; gap: 8px; align-items: center; padding: 10px 12px; cursor: pointer; list-style: none; }
+.costo-fila summary::-webkit-details-marker { display: none; }
+.costo-fila[open] summary { border-bottom: 1px dashed rgba(255, 255, 255, .12); }
+.costo-num { text-align: right; }
+.costo-num small { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; }
+.costo-det { padding: 8px 12px 10px; }
+.costo-parte { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.costo-manual { max-width: 140px; margin-left: auto; }
+tr.sin-costo td:first-child b { color: #ffd166; }
+@media (max-width: 700px) {
+  .detalles-compra { grid-template-columns: 1fr; }
+  .costo-fila summary { grid-template-columns: 1fr 1fr 1fr; }
+  .costo-nombre { grid-column: 1 / -1; }
+  .costo-num { text-align: left; }
+}

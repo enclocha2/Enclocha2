@@ -155,3 +155,9 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - En **Compras**, "¿A quién se le compró?": por defecto *🏪 Tienda de barrio* (no hay que llenar nada); o se escoge un proveedor fijo (queda guardado nombre + NIT en la compra). Se puede registrar uno nuevo ahí mismo.
 - **Foto o scan de la factura** (JPG/PNG/PDF): se adjunta al registrar o después con "📎 Adjuntar factura". Las fotos se achican en el celular (máx. 1600 px) antes de subir; PDF máx. 700 KB. Se guardan por sede en Redis (`factura:archivo:<id>`).
 - La lista de compras sale **separada por compra/factura**: cada tarjeta con proveedor, NIT, fecha, pago, total y sus productos. Filtro por proveedor y el Excel trae # de compra, NIT y si tiene factura.
+
+## v51 · Compras más cómoda y Costos
+- Compras dividida en pestañas: **➕ Registrar**, **🧾 Compras** (por factura), **📊 Resumen** (por insumo, categoría, proveedor y homologar) y **💲 Costos**.
+- Registrar: primero la categoría (o buscar), frecuentes solo 6, pago/proveedor/fecha en una fila, factura y nota como botones pequeños. Filtros extra escondidos tras "⚙️ Filtros".
+- "Plata de la caja" ahora se llama **Efectivo** (sigue descontándose en el cierre).
+- **Costos** (también en el menú): costo por unidad de cada insumo = última compra (6 meses) ÷ lo que entró al inventario, o un costo a mano (llave compartida `costos:manual`, el manual manda). Con las recetas (lo que descuenta del inventario) calcula el costo, la ganancia y el margen de cada presentación de granizado (promedio de sabores activos y dulces), cada producto y cada adición. Muestra el extra de tapas para llevar y avisa qué insumos no tienen costo.

@@ -502,3 +502,13 @@ export async function metaAdjuntos(ids) {
   }
   const o = {}; for (const id of ids) if (M().adjuntos?.[id]) { const { data, ...m } = M().adjuntos[id]; o[id] = m; } return o;
 }
+
+// ---------- Costos puestos a mano (insumos sin compra registrada) — iguales en todas las sedes ----------
+export async function leerCostosManual() {
+  const o = redis ? await redis.get('costos:manual') : mem.costosManual;
+  return o && typeof o === 'object' ? o : {};
+}
+export async function guardarCostosManual(o) {
+  if (redis) await redis.set('costos:manual', o); else mem.costosManual = o;
+  return o;
+}

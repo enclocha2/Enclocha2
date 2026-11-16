@@ -345,9 +345,9 @@ export const CATEGORIAS_COMPRA = [
 ];
 export const UNIDADES = ['und', 'bolsa', 'paca', 'caja', 'media caja', 'kg', 'lb', 'litro', 'botella', 'paquete'];
 export const PAGOS_COMPRA = [
-  { id: 'caja', nombre: 'Plata de la caja', icono: '💵' },
+  { id: 'caja', nombre: 'Efectivo', icono: '💵', ayuda: 'Sale de la caja: se descuenta en el cierre' },
   { id: 'transferencia', nombre: 'Transferencia', icono: '📲' },
-  { id: 'otro', nombre: 'Otro (bolsillo propio)', icono: '👛' },
+  { id: 'otro', nombre: 'Otro (bolsillo propio)', corto: 'Otro', icono: '👛' },
 ];
 
 // ---------- Gastos fijos ----------

@@ -55,7 +55,7 @@
 
     <!-- 3. Gastos -->
     <section class="card">
-      <h2><span class="n">3</span> Gastos y salidas de caja <span class="hint">(lo que se pagó con plata de la caja)</span></h2>
+      <h2><span class="n">3</span> Gastos y salidas de caja <span class="hint">(lo que se pagó en efectivo de la caja)</span></h2>
       <div id="gastos"></div>
       <form class="add" id="fGasto">
         <input class="field" name="concepto" placeholder="Concepto, ej: hielo, vasos, domicilio" maxlength="80" required>
@@ -182,7 +182,7 @@
 
     function pintarGastos() {
       const cc = sis.comprasCaja || { n: 0, total: 0, lista: [] };
-      const compras = cc.n ? `<h3 class="sub">🛒 Compras pagadas con plata de la caja <span class="hint">(se descuentan solas · se registran en Compras)</span></h3>` +
+      const compras = cc.n ? `<h3 class="sub">🛒 Compras pagadas en efectivo <span class="hint">(se descuentan solas · se registran en Compras)</span></h3>` +
         cc.lista.map((c) => `<div class="fila"><span style="flex:1">${esc(c.insumo)} <span class="hint">· ${esc(c.por)}</span></span><b>${pesos(c.valor)}</b><span style="width:42px"></span></div>`).join('') +
         `<div class="fila"><span style="flex:1"><b>Total compras de caja</b></span><b>${pesos(cc.total)}</b><span style="width:42px"></span></div><h3 class="sub">Otros gastos de caja</h3>` : '';
       $('#gastos').innerHTML = compras + (f.gastos.length ? f.gastos.map((g, i) => `
