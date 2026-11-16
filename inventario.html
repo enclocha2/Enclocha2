@@ -210,7 +210,7 @@
       if (!cfg) return [];
       return items.filter((i) => i.reglas?.length === 1 && i.reglas[0].tipo === 'producto').map((i) => {
         const p = cfg.productos.find((x) => x.id === i.reglas[0].id);
-        return p && unidadDe(p) !== i.unidad ? { i, u: unidadDe(p) } : null;
+        return p && !esCopa(p) && unidadDe(p) !== i.unidad ? { i, u: unidadDe(p) } : null;
       }).filter(Boolean);
     }
     // Productos que deberían controlarse ("📦 Propio") pero no tienen ítem en el inventario: se venden sin límite
@@ -307,10 +307,36 @@
         toast('🍬 Listo. Haz el conteo de Gomitas, Chicles, Okaloka y Jeringas, y quita los ítems que sobran.');
       } catch (e) { toast(e.message, true); cfg = (await api('/api/catalogo')).config; }
     }
+    // Copas: no llevan inventario (se sirven de la botella). Si tienen ítem, se ofrece dejarlas sin inventario.
+    const esCopa = (p) => /^copa/.test(normalizar(p.nombre)) || /copa/.test(normalizar(cfg.categorias.find((c) => c.id === p.categoria)?.nombre || ''));
+    function copasContadas() {
+      if (!cfg) return [];
+      const sinCat = new Set(cfg.categorias.filter((c) => c.sinInventario).map((c) => c.id));
+      return cfg.productos.filter((p) => esCopa(p) && !p.sinInventario && !sinCat.has(p.categoria));
+    }
+    function sugerirCopas() {
+      const l = copasContadas();
+      return l.length ? `<div class="card aviso-sobran"><b>🥃 Las copas se están contando en el inventario</b>
+        <p class="hint" style="margin:4px 0 8px">Las copas no llevan inventario (se sirven de la botella), pero ${l.length} tienen su propio ítem: ${l.slice(0, 6).map((p) => esc(p.nombre)).join(', ')}${l.length > 6 ? '…' : ''}. Así nunca se bloquean ni descuentan.</p>
+        <button class="btn" id="copasSinInv" style="width:auto;padding:8px 16px">No contar las copas</button></div>` : '';
+    }
+    async function copasSinInventario() {
+      const l = copasContadas();
+      for (const c of cfg.categorias) if (/copa/.test(normalizar(c.nombre))) c.sinInventario = true;
+      for (const p of l) if (!cfg.categorias.find((c) => c.id === p.categoria)?.sinInventario) p.sinInventario = true;
+      try {
+        const r = await api('/api/catalogo', { method: 'PUT', body: JSON.stringify({ config: cfg, version: cfg.version }) });
+        cfg = r.config || (await api('/api/catalogo')).config;
+        // y sus ítems sobran: se quitan
+        const ids = new Set(sobrantes().map((i) => i.id));
+        if (ids.size) { const g = await api('/api/inventario', { method: 'PUT', body: JSON.stringify({ items: items.filter((i) => !ids.has(i.id)) }) }); original = g.items; items = structuredClone(g.items); marcar(false); }
+        pintar(); toast('🥃 Listo: las copas ya no se cuentan en el inventario');
+      } catch (e) { toast(e.message, true); cfg = (await api('/api/catalogo')).config; }
+    }
     function sugerirUnidades() {
       const l = unidadesMal();
-      return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos con la unidad equivocada</b>
-        <p class="hint" style="margin:4px 0 8px">Al vender 1 se descuenta 1 de su unidad: ${l.slice(0, 8).map(({ i, u }) => `${esc(i.nombre)}: ${esc(i.unidad)} → <b>${u}</b>`).join(' · ')}${l.length > 8 ? '…' : ''}</p>
+      return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos se están contando con la unidad equivocada</b>
+        <p class="hint" style="margin:4px 0 8px">Cuando se vende 1, se descuenta 1 de la unidad con que se cuenta en el inventario. Estos están contados por una unidad que no corresponde y se cambiarían así: ${l.slice(0, 8).map(({ i, u }) => `${esc(i.nombre)}: ${esc(i.unidad)} → <b>${u}</b>`).join(' · ')}${l.length > 8 ? '…' : ''}</p>
         <button class="btn" id="corregirUnidades" style="width:auto;padding:8px 16px">Corregir unidades</button></div>` : '';
     }
     function pintarSobran() {
@@ -318,8 +344,9 @@
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
-      $('#sobran').insertAdjacentHTML('beforeend', sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
       $('#organizarDulces')?.addEventListener('click', organizarDulces);
+      $('#copasSinInv')?.addEventListener('click', copasSinInventario);
       $('#crearProdItems')?.addEventListener('click', () => {
         const ids = [...document.querySelectorAll('[data-crear-prod]:checked')].map((x) => x.dataset.crearProd);
         if (!ids.length) return toast('Marca al menos un producto', true);
