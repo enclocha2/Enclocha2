@@ -188,7 +188,9 @@ export function recetaAuto(t, cfg) {
   const oz = (n.match(/\b(8|12|16|20)\b/) || [])[1];
   const vasoDe = (o) => o && (cfg.tamanos.find((x) => (x.seccion || 'Tamaños') === 'Tamaños' && new RegExp(`\\b${o}\\b`).test(normalizar(x.nombre)))?.id || null);
   const litrosNombre = Number((n.match(/(\d+(?:[.,]\d+)?)\s*(l|lt|litro)/) || [])[1]?.replace(',', '.')) || 0; // "Nevera 3 litros"
-  if (/pecera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 2, producto: buscarProd(/^coronita/), productoOpcional: false, litros: litrosNombre };
+  // Pecera: se llena con 3 granizados de 12 oz + 1 de 8 oz (≈ 1,365 L de base)
+  // Pecera: se llena con 4 granizados de 12 oz (= 1,5 L de base)
+  if (/pecera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 2, producto: buscarProd(/^coronita/), productoOpcional: false, litros: litrosNombre || Math.round(4 * litrosOz(12) * 1000) / 1000 };
   if (/nevera/.test(n)) return { vasos: 0, vaso: null, pitillos: 4, dulces: 4, producto: buscarProd(/^corona(?!ita)/), productoOpcional: true, litros: litrosNombre };
   if (/recarga/.test(n)) return { vasos: 0, vaso: null, pitillos: 1, dulces: 1, producto: null, productoOpcional: false, litros: litrosOz(oz) };
   const doble = /(\*|x)\s*2\b|\b2\s*(\*|x)|2\s*granizados/.test(n);
