@@ -135,7 +135,7 @@
     const CAT = Object.fromEntries(CATEGORIAS_COMPRA.map((c) => [c.id, c]));
     const TIPOS_MOV = {
       venta: ['🧾', 'Venta'], cancelado: ['↩️', 'Pedido cancelado'], compra: ['🛒', 'Compra'], 'compra-borrada': ['🗑', 'Compra borrada'],
-      'compra-editada': ['✏️', 'Compra editada'], entrada: ['➕', 'Entrada'], salida: ['➖', 'Salida'], merma: ['💥', 'Merma / daño'], conteo: ['📋', 'Ajuste por conteo'],
+      'compra-editada': ['✏️', 'Compra editada'], entrada: ['➕', 'Entrada'], salida: ['➖', 'Salida'], merma: ['💥', 'Daño'], conteo: ['📋', 'Ajuste por conteo'],
     };
     let prestados = {}, items = [], original = [], stock = {}, movs = [], cfg = null, sucio = false, filtro = 'todos', movItem = null, aMover = null, tipoMov = 'entrada', enReglas = null;
     const fmt = (n) => Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: 2 });
@@ -178,7 +178,7 @@
       if (!peceras.length) return '';
       const ya = items.some((i) => i.reutilizable && i.reglas?.some((r) => r.tipo === 'tamano' && peceras.some((t) => t.id === r.id)));
       return ya ? '' : `<div class="card aviso-sobran"><b>🐟 ¿Agregar las peceras de vidrio?</b>
-        <p class="hint" style="margin:4px 0 8px">Se crea "Peceras de vidrio" con 3 unidades, marcada como ♻️ reutilizable: al vender una pecera revisa que haya, pero no se descuenta. Si se rompe una, la registras como merma.</p>
+        <p class="hint" style="margin:4px 0 8px">Se crea "Peceras de vidrio" con 3 unidades, marcada como ♻️ reutilizable: al vender una pecera revisa que haya, pero no se descuenta. Si se rompe una, la registras como daño.</p>
         <button class="btn" id="crearPeceras" style="width:auto;padding:8px 16px">Agregar peceras (3)</button></div>`;
     }
     // Vasos icopor por tamaño: "paquete con tapa" (20 vasos + 20 tapas) y "paquete sin tapa" (20 vasos),
@@ -292,7 +292,7 @@
           <div class="inv-stock"><b>${fmt(s)}</b><span>${esc(i.unidad)}${enEmpaques(s, i) ? `<br>${enEmpaques(s, i)}` : ''}</span><em class="estado-pago ${e.clase === 'ok' ? 'ok' : e.clase === 'bajo' ? 'pend' : 'venc'}">${e.icono} ${e.txt}</em></div>
           <div class="inv-acts">
             <button class="mini" data-mov="${i.id}" data-t="entrada">➕</button>
-            <button class="mini" data-mov="${i.id}" data-t="merma">➖</button>
+            <button class="mini" data-mov="${i.id}" data-t="merma" title="Daño">➖</button>
             <button class="mini" data-mov="${i.id}" data-t="conteo">📋</button>
             <button class="mini" data-hist="${i.id}">📜</button>
           </div></div>`;
@@ -398,7 +398,7 @@
     });
 
     // ---------- Movimiento manual ----------
-    const TIPOS = [['entrada', '➕ Entrada'], ['merma', '💥 Merma / daño'], ['salida', '➖ Otra salida'], ['conteo', '📋 Conteo (hay realmente)']];
+    const TIPOS = [['entrada', '➕ Entrada'], ['merma', '💥 Daño'], ['salida', '➖ Otra salida'], ['conteo', '📋 Conteo (hay realmente)']];
     function abrirMov(id, tipo) {
       aMover = items.find((i) => i.id === id); tipoMov = tipo;
       $('#mmTitulo').textContent = aMover.nombre;

@@ -9,7 +9,7 @@
 | `/presupuesto` | Presupuesto del mes para compras y gastos: cuánto queda y desde cuándo se paga con las ventas |
 | `/compras` | Compras de insumos (las pagadas con plata de la caja se descuentan solas en el cierre) |
 | `/gastos` | Gastos fijos: arriendo, servicios, sueldos… y control de pagos por mes |
-| `/inventario` | Inventario: stock, descuentos automáticos al vender, entradas por compras, conteo físico, mermas |
+| `/inventario` | Inventario: stock, descuentos automáticos al vender, entradas por compras, conteo físico, daños |
 | `/domicilio` | **Página pública para clientes** (sin login): pedir granizados a domicilio y seguir el pedido |
 | `/ventas` | Historial de ventas (todo lo cobrado), filtros y descarga para Excel |
 | `/reportes` | Ventas por día, semana, mes y año · efectivo vs transferencia · lo más vendido |
