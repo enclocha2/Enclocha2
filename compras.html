@@ -45,6 +45,13 @@
         <label class="campo" id="valorBox" hidden><span>4. Valor total pagado</span>
           <div class="precio" style="flex:1"><span>$</span><input class="field" name="valor" type="number" min="0" step="100" inputmode="numeric" placeholder="0"></div>
           <small class="hint" id="valorInfo"></small></label>
+        <div class="campo ancho" id="agregarBox" hidden>
+          <button type="button" class="btn ghost" id="btnAgregarLinea" style="margin:0">➕ Agregar a la lista y seguir con otro</button>
+        </div>
+        <div class="campo ancho" id="lineasBox" hidden>
+          <span>🧾 Esta compra</span>
+          <div class="lineas" id="lineas"></div>
+        </div>
         <label class="campo"><span>Fecha (jornada)</span><input class="field" type="date" name="fecha" required></label>
         <div class="campo ancho"><span>¿Con qué se pagó?</span><div class="g3" id="pagos"></div></div>
         <label class="campo"><span>Proveedor (opcional)</span><input class="field" name="proveedor" maxlength="60" list="dlProveedores" placeholder="Ej: D1, Makro, Don Pedro"></label>
@@ -172,7 +179,7 @@
       $('#insumoSel').hidden = false;
       $('#insumoSel').innerHTML = `<b>${CAT[it.categoria]?.icono || '📦'} ${esc(it.nombre)}</b> ${it.soloCompras ? '<span class="hint">· 🧾 no lleva inventario</span>' : '<span class="hint">· 📦 entra al inventario</span>'} <button type="button" class="mini" id="cambiarInsumo">Cambiar</button>`;
       ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = false; });
-      pintarInsumos(); pintarPres(); form.cantidad.focus();
+      pintarInsumos(); pintarPres(); pintarLineas(); form.cantidad.focus();
     }
     function pintarPres() {
       if (!insumo) return;
@@ -212,14 +219,42 @@
       } catch (e) { $('#niError').textContent = e.message; }
     });
 
+    // ---------- Compra grande: varios productos en una sola compra ----------
+    let lineas = [];
+    const lineaActual = () => insumo && Number(form.cantidad.value) > 0 && Number(form.valor.value) >= 0 && form.valor.value !== ''
+      ? { insumoId: insumo.id, nombre: insumo.nombre, presentacion: presSel, cantidad: Number(form.cantidad.value), valor: Number(form.valor.value) } : null;
+    function pintarLineas() {
+      $('#lineasBox').hidden = !lineas.length;
+      $('#agregarBox').hidden = !!editando || !insumo;
+      const total = lineas.reduce((t, l) => t + l.valor, 0);
+      $('#lineas').innerHTML = lineas.map((l, k) => `<div class="linea"><span><b>${esc(l.nombre)}</b><br><span class="hint">${fmt(l.cantidad)} × ${esc(l.presentacion || 'unidad')}</span></span><b>${pesos(l.valor)}</b><button type="button" class="del" data-quitar-linea="${k}" title="Quitar">✕</button></div>`).join('')
+        + (lineas.length ? `<div class="linea total"><span>${lineas.length} producto${lineas.length === 1 ? '' : 's'}</span><b>${pesos(total)}</b><span></span></div>` : '');
+      const extra = lineaActual() ? 1 : 0;
+      $('#btnGuardar').textContent = editando ? '💾 Guardar cambios' : lineas.length ? `💾 Guardar compra (${lineas.length + extra} productos · ${pesos(total + (extra ? lineaActual().valor : 0))})` : '💾 Guardar compra';
+    }
+    function quitarActual() {
+      insumo = null; presSel = ''; form.cantidad.value = ''; form.valor.value = '';
+      $('#insumoSel').hidden = true; ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = true; });
+      $('#cantInfo').textContent = ''; $('#valorInfo').textContent = '';
+      pintarInsumos(); pintarLineas(); $('#buscaInsumo').focus();
+    }
+    $('#btnAgregarLinea').addEventListener('click', () => {
+      const l = lineaActual();
+      if (!l) return toast('Completa cuántos y el valor pagado', true);
+      lineas.push(l); toast(`➕ ${l.nombre} agregado a la lista`); quitarActual();
+    });
+    $('#lineas').addEventListener('click', (e) => { const b = e.target.closest('[data-quitar-linea]'); if (b) { lineas.splice(Number(b.dataset.quitarLinea), 1); pintarLineas(); } });
+    form.addEventListener('input', () => pintarLineas());
+
     function limpiarForm() {
+      lineas = [];
       form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; insumo = null; presSel = '';
       $('#insumoSel').hidden = true; ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = true; });
       $('#cantInfo').textContent = ''; $('#valorInfo').textContent = '';
       $('#formTitulo').textContent = '➕ Registrar compra';
       $('#btnGuardar').textContent = '💾 Guardar compra';
       $('#btnCancelarEdicion').hidden = true;
-      pintarPagos(); pintarInsumos();
+      pintarPagos(); pintarInsumos(); pintarLineas();
     }
     function llenarForm(c, conFecha = true) {
       const it = c.insumoId && inventario.find((x) => x.id === c.insumoId);
@@ -233,6 +268,22 @@
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      // Varias líneas: se guarda todo junto (lo que esté a medio llenar entra si está completo)
+      if (!editando && lineas.length) {
+        const l = lineaActual();
+        if (insumo && !l) return toast('Completa el producto que estás llenando o quítalo con "Cambiar"', true);
+        const todas = [...lineas, ...(l ? [l] : [])];
+        const btn = $('#btnGuardar'); btn.disabled = true;
+        try {
+          await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, proveedor: form.proveedor.value, nota: form.nota.value,
+            lineas: todas.map(({ insumoId, presentacion, cantidad, valor }) => ({ insumoId, presentacion, cantidad, valor })) }) });
+          toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`);
+          limpiarForm(); cargar(); cargarRecientes();
+          if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
+        } catch (err) { toast(err.message, true); }
+        finally { btn.disabled = false; }
+        return;
+      }
       if (!insumo) return toast('Escoge qué se compró', true);
       const datos = {
         insumoId: insumo.id, presentacion: presSel, cantidad: form.cantidad.value, valor: form.valor.value, fecha: form.fecha.value,
@@ -369,7 +420,7 @@
       if (b.dataset.fc) { filtroCat = b.dataset.fc; pintarFiltros(); render(); }
       if (b.dataset.edit) {
         const c = compras.find((x) => x.id === b.dataset.edit);
-        editando = c.id; llenarForm(c);
+        editando = c.id; lineas = []; llenarForm(c); pintarLineas();
         $('#formTitulo').textContent = `✏️ Editando: ${c.insumo}`;
         $('#btnGuardar').textContent = '💾 Guardar cambios';
         $('#btnCancelarEdicion').hidden = false;

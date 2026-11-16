@@ -1157,3 +1157,8 @@ img, svg, video, canvas, iframe { max-width: 100%; }
 .dl-otros summary { cursor: pointer; color: var(--muted); }
 .dl-dia { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .chip .quedan { display: block; font-size: .7rem; color: #ffcf70; font-weight: 700; }
+/* Compra con varios productos */
+.lineas { display: grid; gap: 6px; margin-top: 6px; }
+.linea { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+.linea.total { background: var(--brand-soft); border-color: rgba(255, 63, 209, .5); }
+.linea .del { width: 32px; height: 32px; padding: 0; }

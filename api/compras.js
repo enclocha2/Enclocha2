@@ -137,8 +137,28 @@ async function handler(req, res) {
 
     if (req.method === 'POST') {
       if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso para registrar compras' });
+      const b = leer(req);
+      // Compra grande: varias líneas con la misma fecha, pago, proveedor y nota → se validan TODAS antes de guardar
+      if (Array.isArray(b.lineas)) {
+        if (!b.lineas.length) return res.status(400).json({ error: 'La compra no tiene productos' });
+        if (b.lineas.length > 60) return res.status(400).json({ error: 'Máximo 60 productos por compra' });
+        const comun = { fecha: b.fecha, pago: b.pago, proveedor: b.proveedor, nota: b.nota };
+        const lista = [];
+        for (const [k, l] of b.lineas.entries()) {
+          try { const x = { ...comun, ...l }; let d = validar(x); d.inventario = await validarInventario(x); d = await estandarizar(x, d); lista.push(d); }
+          catch (e) { return res.status(400).json({ error: `Producto ${k + 1}: ${e.message}` }); }
+        }
+        const factura = randomUUID(), t = Date.now(), compras = [];
+        for (const d of lista) {
+          const compra = { id: randomUUID(), ...d, factura, registradoPor: usuario, creado: t };
+          await guardarCompra(compra);
+          await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
+          compras.push(compra);
+        }
+        return res.status(201).json({ compras, factura });
+      }
       let datos;
-      try { const b = leer(req); datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
+      try { datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
       const compra = { id: randomUUID(), ...datos, registradoPor: usuario, creado: Date.now() };
       await guardarCompra(compra);
       await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });

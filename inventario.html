@@ -355,17 +355,6 @@
     }
     // Bases de granizado: una por sabor, en litros (bolsa de 6 L). Cada granizado descuenta según su tamaño
     // (8 oz 0,24 L · 12 oz 0,375 L · 16 oz 0,5 L · 20 oz 0,6 L) repartido entre los sabores que lleva.
-    function saboresSinBase() {
-      if (!cfg) return [];
-      return cfg.sabores.filter((s) => s.activo && !items.some((i) => i.reglas?.some((r) => r.tipo === 'sabor' && r.id === s.id)));
-    }
-    function sugerirBases() {
-      const l = saboresSinBase();
-      return l.length ? `<div class="card aviso-sobran"><b>🧊 Agregar las bases de granizado</b>
-        <p class="hint" style="margin:4px 0 8px">Un ítem por sabor (${l.map((s) => esc(s.nombre)).join(', ')}), contado en <b>litros</b>, con la bolsa de 6 litros como empaque.
-        Cada granizado descuenta la base según su tamaño (de una bolsa salen 25 de 8 oz, 16 de 12 oz, 12 de 16 oz y 10 de 20 oz) y, si mezcla sabores, se reparte por partes iguales entre ellos.</p>
-        <button class="btn" id="crearBases" style="width:auto;padding:8px 16px">Agregar bases</button></div>` : '';
-    }
     function sugerirUnidades() {
       const l = unidadesMal();
       return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos se están contando con la unidad equivocada</b>
@@ -380,16 +369,7 @@
       $('#sobran').insertAdjacentHTML('beforeend', sugerirRepetidos() + sugerirCopas() + sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
       $('#organizarDulces')?.addEventListener('click', organizarDulces);
       $('#copasSinInv')?.addEventListener('click', copasSinInventario);
-      $('#crearBases')?.addEventListener('click', () => {
-        for (const sb of saboresSinBase()) {
-          const nombre = 'Base ' + sb.nombre;
-          const ya = items.find((i) => !i.reutilizable && claveNombre(i.nombre) === claveNombre(nombre));
-          if (ya) { ya.reglas = [...(ya.reglas || []), { tipo: 'sabor', id: sb.id, cantidad: 1 }]; ya.unidad = 'litro'; continue; }
-          let id = slug(nombre); while (items.some((i) => i.id === id)) id += '-2';
-          items.push({ id, nombre, categoria: 'sabores', unidad: 'litro', minimo: 6, activo: true, empaques: [{ nombre: 'bolsa', unidades: 6 }], reglas: [{ tipo: 'sabor', id: sb.id, cantidad: 1 }] });
-        }
-        marcar(); pintar(); toast('🧊 Bases agregadas · toca Guardar cambios y haz el conteo (en bolsas o litros)');
-      });
+
       document.querySelectorAll('[data-unir]').forEach((b) => b.addEventListener('click', async () => {
         const g = gruposRepetidos(items)[Number(b.dataset.unir)]; if (!g) return;
         const queda = document.querySelector(`input[name="rep${b.dataset.unir}"]:checked`)?.value;
