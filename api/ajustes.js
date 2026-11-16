@@ -13,7 +13,7 @@ async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const a = await leerAjustes(true);
+      const a = await leerAjustes();
       return res.status(200).json({ qr: a.qr || null, qrTexto: a.qrTexto || '', qrDePrincipal: !!a.qrDePrincipal, domicilio: { ...DOM_DEFECTO, ...(a.domicilio || {}) } });
     }
 

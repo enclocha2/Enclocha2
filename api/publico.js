@@ -49,7 +49,7 @@ async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
     const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
-    const ajustes = await leerAjustes(true);
+    const ajustes = await leerAjustes();
     const dom = { ...DOM_DEFECTO, ...(ajustes.domicilio || {}) };
 
     // GET ?lat=..&lng=..  o  ?zona=..  → cuánto vale el domicilio

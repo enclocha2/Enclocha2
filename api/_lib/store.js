@@ -236,18 +236,32 @@ export async function recalcularResumenJornadas() {
 }
 
 // ---------- Ajustes (QR de transferencia) ----------
-export async function leerAjustes(conQR = false) {
-  const a = (redis ? await redis.get(K('ajustes')) : M().ajustes) || {};
-  // Una sede sin QR propio usa el QR de la sede principal
-  if (conQR && !a.qr && sedeActual() !== SEDE_PRINCIPAL) {
-    const p = await enSede(SEDE_PRINCIPAL, () => leerAjustes());
-    return { ...a, qr: p.qr || null, qrTexto: a.qrTexto || p.qrTexto || '', qrDePrincipal: !!p.qr };
+// Los AJUSTES (QR de pago, configuración de domicilios…) son los mismos en todas las sedes: lo que se
+// cambie en una se aplica en todas. Lo único propio de cada sede es la UBICACIÓN del local (desde ahí se
+// mide la distancia de cada domicilio), que se guarda aparte por sede.
+export async function leerAjustes() {
+  let a = (redis ? await redis.get('ajustes') : mem.ajustes) || {};
+  if (sedeActual() !== SEDE_PRINCIPAL) {
+    // versiones anteriores: la sede tenía sus propios ajustes → se conserva solo su ubicación
+    const vieja = redis ? await redis.get(K('ajustes')) : M().ajustes;
+    let local = redis ? await redis.get(K('ajustes:local')) : M().ajustesLocal;
+    if (vieja) {
+      if (local === null || local === undefined) { local = vieja.domicilio?.local || null; if (redis) await redis.set(K('ajustes:local'), local ?? 0); else M().ajustesLocal = local ?? 0; }
+      if (redis) await redis.del(K('ajustes')); else delete M().ajustes;
+    }
+    a = { ...a, domicilio: a.domicilio ? { ...a.domicilio, local: local || null } : a.domicilio };
   }
   return a;
 }
 export async function guardarAjustes(a) {
-  if (redis) await redis.set(K('ajustes'), a);
-  else M().ajustes = a;
+  const { domicilio } = a;
+  if (sedeActual() !== SEDE_PRINCIPAL && domicilio) {
+    // la ubicación es de esta sede; el resto es para todas (se conserva la ubicación de San Pío)
+    const comun = (redis ? await redis.get('ajustes') : mem.ajustes) || {};
+    if (redis) await redis.set(K('ajustes:local'), domicilio.local || 0); else M().ajustesLocal = domicilio.local || 0;
+    a = { ...a, domicilio: { ...domicilio, local: comun.domicilio?.local || null } };
+  }
+  if (redis) await redis.set('ajustes', a); else mem.ajustes = a;
   return a;
 }
 
@@ -332,12 +346,34 @@ export async function pagosFijosAnio(anio) {
 // Definiciones (nombre, unidad, mínimo, reglas) en "inventario"; el stock en un hash
 // aparte ("inv:stock") que se suma/resta de forma atómica, para que dos ventas al
 // mismo tiempo no se pisen. Movimientos en una lista (últimos 3000).
+// La LISTA de ítems del inventario (nombres, unidades, empaques, reglas, tapas, reutilizables) es la misma
+// para todas las sedes: se guarda en la llave de siempre ("inventario"). Lo que va por sede es el STOCK,
+// los movimientos y las peceras prestadas. Si una sede tenía su propia lista (versiones anteriores),
+// sus ítems se suman a la lista común una sola vez.
 export async function leerInventario() {
-  if (redis) return (await redis.get(K('inventario'))) || [];
-  return M().inventario || [];
+  const otraSede = sedeActual() !== SEDE_PRINCIPAL;
+  if (redis) {
+    let lista = (await redis.get('inventario')) || [];
+    if (otraSede) {
+      const vieja = await redis.get(K('inventario'));
+      if (vieja?.length) {
+        const ids = new Set(lista.map((i) => i.id));
+        const nuevos = vieja.filter((i) => !ids.has(i.id));
+        if (nuevos.length) { lista = [...lista, ...nuevos]; await redis.set('inventario', lista); }
+      }
+      if (vieja) await redis.del(K('inventario'));
+    }
+    return lista;
+  }
+  if (otraSede && M().inventario?.length) {
+    const ids = new Set((mem.inventario || []).map((i) => i.id));
+    mem.inventario = [...(mem.inventario || []), ...M().inventario.filter((i) => !ids.has(i.id))];
+    delete M().inventario;
+  }
+  return mem.inventario || [];
 }
 export async function guardarInventario(lista) {
-  if (redis) await redis.set(K('inventario'), lista); else M().inventario = lista;
+  if (redis) await redis.set('inventario', lista); else mem.inventario = lista;
   return lista;
 }
 export async function leerStock() {

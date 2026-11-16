@@ -1,4 +1,4 @@
-# 🍧 Enclocha 2 Granizados – App de pedidos (v32)
+# 🍧 Enclocha 2 Granizados – App de pedidos (v35)
 
 | Ruta | Qué es |
 |---|---|
@@ -137,7 +137,8 @@ El inicio muestra las acciones principales, los números de la jornada y los **p
 - La sede principal es **Enclocha 2 San Pío** y conserva todo lo que ya existía (usa las mismas llaves de la base de datos).
 - Se crean en **Usuarios → 🏢 Sedes** (permiso "Crear y editar sedes"). Una sede nueva arranca vacía.
 - **Compartido** entre sedes: menú, precios, sabores, usuarios y roles.
-- **Separado** por sede: pedidos, ventas, cierre de caja, inventario, compras, gastos fijos, presupuesto y domicilios (cada sede tiene su link `/domicilio?sede=<id>`; la principal es `/domicilio`). Si una sede no tiene QR propio usa el de San Pío.
+- **Compartido** también (todo lo que se configura): la lista de ítems del inventario (nombres, unidades, empaques, reglas, tapas, peceras), el QR de pago y la configuración de domicilios (tarifas, barrios, mínimo, WhatsApp, modo). Solo la **ubicación del local** es de cada sede.
+- **Separado** por sede: pedidos, ventas, cierre de caja, cantidades del inventario (stock, movimientos, peceras prestadas), compras, gastos fijos, presupuesto y domicilios (cada sede tiene su link `/domicilio?sede=<id>`; la principal es `/domicilio`). Si una sede no tiene QR propio usa el de San Pío.
 - Usuario con sede asignada: solo trabaja en esa sede. Usuario en "Todas": escoge la sede en el menú (se guarda en la cookie `sede`).
 - Reportes → Mensual muestra la comparación por sede (para quien no está fijo en una sede).
 - En la base de datos, las sedes nuevas usan llaves con prefijo `s:<sede>:`.
