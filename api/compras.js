@@ -24,6 +24,8 @@ function validar(b) {
     unidad: UNIDADES.includes(b.unidad) ? b.unidad : 'und',
     valor,
     pago: PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja',
+    // efectivo: de la caja (cierre) o del presupuesto; transferencia/otro: siempre presupuesto
+    origen: (PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja') === 'caja' && b.origen !== 'presupuesto' ? 'caja' : 'presupuesto',
     proveedor: txt(b.proveedor, 60),
     nota: txt(b.nota, 200),
   };
@@ -207,7 +209,7 @@ async function handler(req, res) {
       if (Array.isArray(b.lineas)) {
         if (!b.lineas.length) return res.status(400).json({ error: 'La compra no tiene productos' });
         if (b.lineas.length > 60) return res.status(400).json({ error: 'Máximo 60 productos por compra' });
-        const comun = { fecha: b.fecha, pago: b.pago, proveedor: b.proveedor, nota: b.nota };
+        const comun = { fecha: b.fecha, pago: b.pago, origen: b.origen, proveedor: b.proveedor, nota: b.nota };
         const lista = [];
         for (const [k, l] of b.lineas.entries()) {
           try { const x = { ...comun, ...l, proveedorId: b.proveedorId }; let d = validar(x); d.inventario = await validarInventario(x); d = await estandarizar(x, d); d = await conProveedor(x, d); lista.push(d); }

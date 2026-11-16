@@ -53,7 +53,7 @@
     </div>
 
     <section class="card">
-      <h2>🧾 Movimientos del mes <span class="hint">(las compras gastan primero el presupuesto y luego las ventas; los gastos fijos salen siempre de las ventas)</span></h2>
+      <h2>🧾 Movimientos del mes <span class="hint">(las compras gastan primero el presupuesto y luego las ventas; lo pagado con efectivo de la caja y los gastos fijos no usan el presupuesto)</span></h2>
       <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
     </section>
   </main>
@@ -62,7 +62,7 @@
   <div class="modal" id="modal">
     <div class="box">
       <h3>💼 Presupuesto de <span id="mMes"></span></h3>
-      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras (insumos, hielo, vasos, licor...) y gastos de caja. Los gastos fijos (arriendo, servicios, sueldos) no usan el presupuesto: se pagan con las ventas.</p>
+      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras (insumos, hielo, vasos, licor...). Lo que se paga con el efectivo de la caja del día se descuenta en el cierre y no gasta presupuesto. Los gastos fijos (arriendo, servicios, sueldos) no usan el presupuesto: se pagan con las ventas.</p>
       <label class="campo"><span>Valor</span><div class="precio"><span>$</span><input class="field" id="mMonto" type="number" min="0" step="10000" inputmode="numeric"></div></label>
       <label class="campo"><span>Nota (opcional)</span><input class="field" id="mNota" maxlength="160" placeholder="Ej: lo que sobró de octubre"></label>
       <label class="campo row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="mRepetir"><span></span></span>Usar este mismo presupuesto todos los meses</label>
@@ -117,6 +117,7 @@
         <div class="kpi"><span>🛒 Compras del mes</span><b>${pesos(s.gastado)}</b><small>${datos.movimientos.filter((m) => !m.fueraPresupuesto).length} movimientos</small></div>
         <div class="kpi"><span>💼 Del presupuesto</span><b>${pesos(s.delPresupuesto)}</b><small>quedan ${pesos(s.queda)}</small></div>
         <div class="kpi"><span>💰 Compras pagadas con ventas</span><b>${pesos(s.deVentas)}</b><small>lo que se pasó del presupuesto</small></div>
+        <div class="kpi"><span>🔒 Pagado con la caja</span><b>${pesos(s.caja || 0)}</b><small>efectivo del día, no usa presupuesto</small></div>
         <div class="kpi"><span>🏦 Gastos fijos</span><b>${pesos(s.fijos || 0)}</b><small>no usan el presupuesto</small></div>`;
 
       const porTipo = Object.keys(TIPO).map((t) => [t, datos.movimientos.filter((m) => m.tipo === t).reduce((x, m) => x + m.valor, 0)]).filter(([, v]) => v);
@@ -127,6 +128,7 @@
       $('#ventas').innerHTML = `
         <div class="fila"><span>Vendido en el mes</span><b>${pesos(s.ventasMes)}</b></div>
         <div class="fila"><span>− Compras que se pasaron del presupuesto</span><b>${pesos(s.deVentas)}</b></div>
+        <div class="fila"><span>− Compras y gastos pagados con la caja</span><b>${pesos(s.caja || 0)}</b></div>
         <div class="fila"><span>− Gastos fijos pagados</span><b>${pesos(s.fijos || 0)}</b></div>
         <div class="fila total"><span>Te quedan de las ventas</span><b class="${s.quedanVentas < 0 ? 'neg-txt' : 'pos-txt'}">${pesos(s.quedanVentas)}</b></div>
         ${s.quedanVentas < 0 ? '<p class="hint">⚠️ Los gastos fijos y las compras por encima del presupuesto son más que lo vendido.</p>' : ''}`;
@@ -136,7 +138,8 @@
         <tbody>${datos.movimientos.map((m, i) => {
           const prev = datos.movimientos.slice(0, i).filter((x) => !x.fueraPresupuesto).pop();
           const primero = !m.fueraPresupuesto && m.deVentas > 0 && (!prev || prev.deVentas === 0);
-          const sale = m.fueraPresupuesto ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(fijo, no usa presupuesto)</span>'
+          const sale = m.deCaja ? '<span class="tag-ventas">🔒 Caja del día</span> <span class="hint">(se descontó en el cierre, no usa presupuesto)</span>'
+            : m.fueraPresupuesto ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(fijo, no usa presupuesto)</span>'
             : m.deVentas === 0 ? '<span class="tag-pres">💼 Presupuesto</span>'
             : m.delPresupuesto === 0 ? '<span class="tag-ventas">💰 Ventas</span>'
             : `<span class="tag-pres">💼 ${pesos(m.delPresupuesto)}</span> + <span class="tag-ventas">💰 ${pesos(m.deVentas)}</span>`;

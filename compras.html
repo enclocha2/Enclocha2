@@ -61,7 +61,8 @@
           <div class="lineas" id="lineas"></div>
         </div>
         <div class="campo ancho detalles-compra">
-          <div class="campo"><span>¿Con qué se pagó?</span><div class="seg-pago" id="pagos"></div></div>
+          <div class="campo"><span>¿Con qué se pagó?</span><div class="seg-pago" id="pagos"></div>
+            <div class="origen-ef" id="origenBox"><span class="hint">El efectivo sale de:</span> <div class="seg-pago seg-mini" id="origenes"></div></div></div>
           <div class="campo"><span>¿A quién se le compró?</span>
             <select class="field" id="provSel"></select>
             <small class="hint" id="provInfo"></small></div>
@@ -194,7 +195,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, GRUPOS, recetaDe, itemBase, armarItem, consumoDe, sinReutilizables } from '/catalog.js';
+    import { saleDeCaja, pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, GRUPOS, recetaDe, itemBase, armarItem, consumoDe, sinReutilizables } from '/catalog.js';
     import { requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
 
@@ -323,8 +324,15 @@
 
     // ---------- Formulario (compras estandarizadas) ----------
     const form = $('#fCompra');
-    const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}" title="${esc(p.ayuda || '')}">${p.icono} ${p.corto || p.nombre}</button>`).join(''); };
+    const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.corto || p.nombre}</button>`).join(''); pintarOrigen(); };
     $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
+    // Efectivo: o sale de la caja del día (se descuenta en el cierre) o del presupuesto. Nunca de los dos.
+    let origenSel = 'caja';
+    const pintarOrigen = () => {
+      $('#origenBox').hidden = pagoSel !== 'caja';
+      $('#origenes').innerHTML = [['caja', '🔒 La caja del día'], ['presupuesto', '💼 El presupuesto']].map(([id, n]) => `<button type="button" class="${origenSel === id ? 'on' : ''}" data-origen="${id}">${n}</button>`).join('');
+    };
+    $('#origenes').addEventListener('click', (e) => { const b = e.target.closest('[data-origen]'); if (b) { origenSel = b.dataset.origen; pintarOrigen(); } });
 
     // La lista de insumos = ítems del inventario (+ los "solo compras")
     let inventario = [], insumo = null, presSel = '';
@@ -435,7 +443,7 @@
 
     function limpiarForm() {
       lineas = [];
-      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; editando = null; insumo = null; presSel = '';
+      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; origenSel = 'caja'; editando = null; insumo = null; presSel = '';
       $('#insumoSel').hidden = true; ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = true; });
       $('#cantInfo').textContent = ''; $('#valorInfo').textContent = '';
       $('#formTitulo').textContent = '➕ Registrar compra';
@@ -449,7 +457,7 @@
       if (it) escogerInsumo(it, c.presentacion ?? '');
       else { limpiarForm(); $('#buscaInsumo').value = c.insumo; pintarInsumos(); toast('Esta compra es de antes: escoge el insumo de la lista', true); }
       provSel = c.proveedorId && PROV()[c.proveedorId] ? c.proveedorId : ''; pintarProv();
-      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; if (c.nota) { form.nota.hidden = false; $('#btnNota').hidden = true; } }
+      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; origenSel = c.origen === 'presupuesto' ? 'presupuesto' : 'caja'; if (c.nota) { form.nota.hidden = false; $('#btnNota').hidden = true; } }
       calcular(); pintarPagos();
     }
     $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
@@ -463,7 +471,7 @@
         const todas = [...lineas, ...(l ? [l] : [])];
         const btn = $('#btnGuardar'); btn.disabled = true;
         try {
-          const r = await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, proveedorId: provSel, nota: form.nota.value,
+          const r = await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, origen: origenSel, proveedorId: provSel, nota: form.nota.value,
             lineas: todas.map(({ insumoId, presentacion, cantidad, valor }) => ({ insumoId, presentacion, cantidad, valor })) }) });
           await adjuntarDespues(r.factura);
           toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`);
@@ -476,7 +484,7 @@
       if (!insumo) return toast('Escoge qué se compró', true);
       const datos = {
         insumoId: insumo.id, presentacion: presSel, cantidad: form.cantidad.value, valor: form.valor.value, fecha: form.fecha.value,
-        pago: pagoSel, proveedorId: provSel, nota: form.nota.value,
+        pago: pagoSel, origen: origenSel, proveedorId: provSel, nota: form.nota.value,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
       const antes = presu?.resumen.deVentas ?? null;
@@ -491,7 +499,7 @@
           await adjuntarDespues(compra.factura || compra.id);
         } else { const { compra } = await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) }); await adjuntarDespues(compra.factura); }
         if (conFactura) toast('📎 Factura adjuntada');
-        toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' ? ' · se descontará en el cierre de caja' : ''}`);
+        toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' && origenSel === 'caja' ? ' · se descuenta en el cierre de caja' : ' · sale del presupuesto'}`);
         limpiarForm(); cargar(); cargarRecientes(); CD = null;
         if (puede('presupuesto')) {
           presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
@@ -579,7 +587,8 @@
       const porPago = Object.fromEntries(por((c) => c.pago));
       $('#kpis').innerHTML = `
         <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${new Set(lista.map((c) => c.factura || c.id)).size} compras</small></div>
-        ${PAGOS_COMPRA.map((p) => `<div class="kpi"><span>${p.icono} ${p.nombre}</span><b>${pesos(porPago[p.id] || 0)}</b></div>`).join('')}`;
+        <div class="kpi"><span>🔒 Salió de la caja</span><b>${pesos(lista.filter(saleDeCaja).reduce((t, c) => t + c.valor, 0))}</b><small>efectivo del día · en el cierre</small></div>
+        <div class="kpi"><span>💼 Salió del presupuesto</span><b>${pesos(lista.filter((c) => !saleDeCaja(c)).reduce((t, c) => t + c.valor, 0))}</b><small>efectivo aparte, transferencia u otro</small></div>`;
       $('#porCat').innerHTML = barras(por((c) => c.categoria).map(([k, v]) => [`${CAT[k]?.icono || ''} ${esc(CAT[k]?.nombre || k)}`, v]));
       // Por insumo: unidades compradas y costo por unidad (solo compras de la lista)
       const ins = new Map();
@@ -599,7 +608,7 @@
         const prov = c0.proveedorId ? `🚚 <b>${esc(PROV()[c0.proveedorId]?.nombre || c0.proveedor)}</b> <span class="hint">· NIT ${esc(c0.nit || PROV()[c0.proveedorId]?.nit || '')}</span>` : `🏪 <b>${esc(c0.proveedor || 'Tienda de barrio')}</b>`;
         return `<article class="factura-card">
           <header>
-            <div><div>${prov}</div><span class="hint">${fechaCorta(c0.fecha)} · ${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.nombre || '')} · ${esc(c0.registradoPor)}${c0.nota && cs.length > 1 ? ` · 📝 ${esc(c0.nota)}` : ''}</span></div>
+            <div><div>${prov}</div><span class="hint">${fechaCorta(c0.fecha)} · ${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.nombre || '')} ${saleDeCaja(c0) ? '<span class="tag-ventas">🔒 caja</span>' : '<span class="tag-pres">💼 presupuesto</span>'} · ${esc(c0.registradoPor)}${c0.nota && cs.length > 1 ? ` · 📝 ${esc(c0.nota)}` : ''}</span></div>
             <div class="factura-der">
               <b class="factura-total">${pesos(tot)}</b>
               ${adj ? `<button class="mini adj-on" data-ver-fact="${esc(fid)}">📎 Ver factura</button>` : subir ? `<button class="mini" data-adj="${esc(fid)}">📎 Adjuntar factura</button>` : '<span class="hint">sin factura</span>'}

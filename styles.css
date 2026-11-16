@@ -1213,3 +1213,5 @@ tr.sin-costo td:first-child b { color: #ffd166; }
   .costo-nombre { grid-column: 1 / -1; }
   .costo-num { text-align: left; }
 }
+.origen-ef { margin-top: 8px; display: grid; gap: 4px; }
+.seg-mini button { padding: 7px 10px; font-size: .85rem; }

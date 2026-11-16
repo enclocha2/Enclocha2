@@ -6,6 +6,7 @@ import { sesion } from './auth.js';
 import { leerPresupuesto, guardarPresupuesto, leerPresupuestoBase, guardarPresupuestoBase,
   comprasEntre, leerPagosFijos, listarCierres, leerResumen } from './store.js';
 import { finMes } from '../../fechas.js';
+import { saleDeCaja } from '../../catalog.js';
 
 const MES = /^\d{4}-\d{2}$/;
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
@@ -36,10 +37,10 @@ export default async function handler(req, res) {
 
       // Todos los gastos del mes, en orden
       const movimientos = [
-        ...compras.map((c) => ({ fecha: c.fecha, en: c.creado, tipo: 'compra', concepto: c.insumo, valor: c.valor, por: c.registradoPor, pago: c.pago, categoria: c.categoria })),
+        ...compras.map((c) => ({ fecha: c.fecha, en: c.creado, tipo: 'compra', concepto: c.insumo, valor: c.valor, por: c.registradoPor, pago: c.pago, categoria: c.categoria, ...(saleDeCaja(c) ? { deCaja: true } : {}) })),
         ...pagos.map((p) => ({ fecha: p.fecha, en: p.creado, tipo: 'fijo', concepto: p.nombre, valor: p.valor, por: p.registradoPor, pago: p.metodo })),
         ...cierres.filter((c) => c.jornada.startsWith(q.mes)).flatMap((c) => (c.gastos || []).map((g, i) => ({
-          fecha: c.jornada, en: (c.cerradoEn || 0) + i, tipo: 'caja', concepto: g.concepto, valor: g.valor, por: c.cerradoPor, pago: 'caja',
+          fecha: c.jornada, en: (c.cerradoEn || 0) + i, tipo: 'caja', concepto: g.concepto, valor: g.valor, por: c.cerradoPor, pago: 'caja', deCaja: true,
         }))),
       ].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.en - b.en);
 
@@ -47,6 +48,8 @@ export default async function handler(req, res) {
       let queda = presupuesto.monto, agotadoEl = null;
       for (const m of movimientos) {
         if (m.tipo === 'fijo') { m.fueraPresupuesto = true; m.delPresupuesto = 0; m.deVentas = m.valor; m.saldo = queda; continue; }
+        // pagado con el efectivo de la caja del día: ya se descontó en el cierre, no gasta presupuesto
+        if (m.deCaja) { m.fueraPresupuesto = true; m.delPresupuesto = 0; m.deVentas = 0; m.saldo = queda; continue; }
         m.delPresupuesto = Math.min(queda, m.valor);
         m.deVentas = m.valor - m.delPresupuesto;
         queda -= m.delPresupuesto;
@@ -57,10 +60,11 @@ export default async function handler(req, res) {
       const conPres = movimientos.filter((m) => !m.fueraPresupuesto);
       const gastado = conPres.reduce((s, m) => s + m.valor, 0);          // lo que cuenta contra el presupuesto
       const deVentas = conPres.reduce((s, m) => s + m.deVentas, 0);      // lo que se pasó del presupuesto
-      const fijos = movimientos.filter((m) => m.fueraPresupuesto).reduce((s, m) => s + m.valor, 0);
+      const fijos = movimientos.filter((m) => m.tipo === 'fijo').reduce((s, m) => s + m.valor, 0);
+      const caja = movimientos.filter((m) => m.deCaja).reduce((s, m) => s + m.valor, 0);
       return res.status(200).json({
         mes: q.mes, presupuesto, base: base || { monto: 0, repetir: false },
-        resumen: { gastado, delPresupuesto: gastado - deVentas, deVentas, fijos, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - fijos },
+        resumen: { gastado, delPresupuesto: gastado - deVentas, deVentas, fijos, caja, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - fijos - caja },
         movimientos,
       });
     }

@@ -1,5 +1,6 @@
 import { partesDe } from '../catalog.js';
 import { sesion } from './_lib/auth.js';
+import { saleDeCaja } from '../catalog.js';
 import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas, comprasEntre } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
 import { conSede } from './_lib/sede.js';
@@ -22,7 +23,7 @@ async function sistema(jornada) {
     u.efectivo += pt.efectivo; u.transferencia += pt.transferencia; u.n++;
   }
   const pendientes = (await listar(300)).filter((p) => p.creado >= ini && p.creado <= fin && p.estado !== 'cancelado' && !p.pago?.pagado);
-  const compras = (await comprasEntre(jornada, jornada)).filter((c) => c.pago === 'caja');
+  const compras = (await comprasEntre(jornada, jornada)).filter(saleDeCaja);
   r.comprasCaja = { n: compras.length, total: compras.reduce((s, c) => s + c.valor, 0), lista: compras.map((c) => ({ insumo: c.insumo, valor: c.valor, por: c.registradoPor })) };
   r.pendientes = { n: pendientes.length, total: pendientes.reduce((s, p) => s + p.total, 0), clientes: [...new Set(pendientes.map((p) => p.cliente))].slice(0, 20) };
   return r;

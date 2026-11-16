@@ -344,6 +344,9 @@ export const CATEGORIAS_COMPRA = [
   { id: 'otros', nombre: 'Otros', icono: '📦' },
 ];
 export const UNIDADES = ['und', 'bolsa', 'paca', 'caja', 'media caja', 'kg', 'lb', 'litro', 'botella', 'paquete'];
+// Una compra en efectivo sale de la caja del día (se descuenta en el cierre) o del presupuesto (plata aparte).
+// Nunca de los dos: lo que sale de la caja no gasta presupuesto y lo del presupuesto no se descuenta en el cierre.
+export const saleDeCaja = (c) => c.pago === 'caja' && c.origen !== 'presupuesto';
 export const PAGOS_COMPRA = [
   { id: 'caja', nombre: 'Efectivo', icono: '💵', ayuda: 'Sale de la caja: se descuenta en el cierre' },
   { id: 'transferencia', nombre: 'Transferencia', icono: '📲' },

@@ -161,3 +161,8 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - Registrar: primero la categoría (o buscar), frecuentes solo 6, pago/proveedor/fecha en una fila, factura y nota como botones pequeños. Filtros extra escondidos tras "⚙️ Filtros".
 - "Plata de la caja" ahora se llama **Efectivo** (sigue descontándose en el cierre).
 - **Costos** (también en el menú): costo por unidad de cada insumo = última compra (6 meses) ÷ lo que entró al inventario, o un costo a mano (llave compartida `costos:manual`, el manual manda). Con las recetas (lo que descuenta del inventario) calcula el costo, la ganancia y el margen de cada presentación de granizado (promedio de sabores activos y dulces), cada producto y cada adición. Muestra el extra de tapas para llevar y avisa qué insumos no tienen costo.
+
+## v52 · Caja y presupuesto nunca a la vez
+- Cada compra sale de **un solo lado** (`saleDeCaja` en catalog.js): efectivo de la caja del día (se descuenta en el cierre y NO gasta presupuesto) o del presupuesto (efectivo aparte, transferencia u otro; NO se descuenta en el cierre).
+- Al escoger Efectivo aparece "El efectivo sale de: 🔒 La caja del día / 💼 El presupuesto" (campo `origen`). Compras viejas en efectivo cuentan como caja.
+- Los gastos anotados en el cierre de caja tampoco gastan presupuesto. En Presupuesto se ven aparte ("🔒 Pagado con la caja") y se restan de "Te quedan de las ventas".
