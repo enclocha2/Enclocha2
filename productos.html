@@ -190,11 +190,12 @@
       <div class="modo-inv">
         <label class="opt-radio"><input type="radio" name="miModo" value="propio"><span><b>📦 Tiene su propio inventario</b><small>Ej: una cerveza, una botella. Se descuenta al venderlo.</small></span></label>
         <label class="opt-radio"><input type="radio" name="miModo" value="no"><span><b>🚫 No lleva inventario</b><small>Ej: copas. Nunca se bloquea ni descuenta.</small></span></label>
-        <label class="opt-radio"><input type="radio" name="miModo" value="item"><span><b>📦 Descuenta de un ítem del inventario</b><small>Ej: Adición gusano → descuenta 1 del ítem "Gusano" (el mismo de los toppings).</small></span></label>
+        <label class="opt-radio"><input type="radio" name="miModo" value="item"><span><b>📦 Descuenta de un ítem del inventario</b><small>Ej: Adición gusano → 1 de "Gomitas" (la misma bolsa de los toppings). Si marcas varios, al vender se pregunta cuál (ej. Adición jeringa → tequila, ginebra, whisky o vodka).</small></span></label>
         <label class="opt-radio"><input type="radio" name="miModo" value="usa"><span><b>🔗 Se hace con otro producto</b><small>Ej: Michelada → descuenta la cerveza; Soda michelada → la soda. Si escoges varios, al vender se pregunta con cuál.</small></span></label>
       </div>
       <div id="miItemBox" hidden>
-        <div class="row" style="gap:8px;flex-wrap:nowrap"><select class="field" id="miItem" style="flex:1"></select><span class="hint">×</span><input class="field" id="miItemN" type="number" min="0.001" step="any" value="1" style="max-width:80px"></div>
+        <div class="row" style="gap:8px;flex-wrap:nowrap"><input class="field" id="miItemBuscar" placeholder="🔍 Buscar ítem (ej: gomitas, jeringa)" style="flex:1"><span class="hint">descuenta</span><input class="field" id="miItemN" type="number" min="0.001" step="any" value="1" style="max-width:80px"></div>
+        <div class="mi-lista" id="miItems"></div>
       </div>
       <div id="miUsaBox" hidden>
         <input class="field" id="miBuscar" placeholder="🔎 Buscar producto (ej: águila, soda)">
@@ -278,7 +279,8 @@
       const cat = cfg.categorias.find((c) => c.id === p.categoria);
       if (cat?.sinInventario) return { clase: 'no', txt: '🚫 Sin inv. (categoría)' };
       if (p.sinInventario) return { clase: 'no', txt: '🚫 Sin inventario' };
-      if (p.invItem) return { clase: 'usa', txt: `📦 Descuenta: ${invItems.find((x) => x.id === p.invItem.id)?.nombre || p.invItem.id}${p.invItem.cantidad !== 1 ? ' ×' + p.invItem.cantidad : ''}` };
+      if (p.invItem) { const ops = p.invItem.ops?.length ? p.invItem.ops : [{ id: p.invItem.id }]; const nom = (o) => invItems.find((x) => x.id === o.id)?.nombre || o.nombre || o.id;
+        return { clase: 'usa', txt: ops.length > 1 ? `📦 Escoge: ${ops.length} ítems` : `📦 Descuenta: ${nom(ops[0])}${p.invItem.cantidad !== 1 ? ' ×' + p.invItem.cantidad : ''}` }; }
       if (p.usa?.length) {
         const n = (id) => cfg.productos.find((x) => x.id === id)?.nombre || id;
         return { clase: 'usa', txt: p.usa.length === 1 ? `🔗 Usa: ${n(p.usa[0])}` : `🔗 Escoge: ${p.usa.length} opciones` };
@@ -343,17 +345,28 @@
     let invItems = [];
     api('/api/inventario?lite=1').then((r) => { invItems = r.items || []; renderProductos(); }).catch(() => {});
     // ---------- Modal de inventario por producto ----------
-    let miProd = null, miUsa = [];
+    let miProd = null, miUsa = [], miSel = [];
+    function pintarMiItems() {
+      const q = normalizar($('#miItemBuscar').value);
+      $('#miItems').innerHTML = invItems.filter((i) => !i.reutilizable && (!q || normalizar(i.nombre).includes(q) || miSel.includes(i.id)))
+        .map((i) => `<label class="mi-op"><input type="checkbox" data-mi-item="${i.id}" ${miSel.includes(i.id) ? 'checked' : ''}> ${esc(i.nombre)} <span class="hint">(${esc(i.unidad)})</span></label>`).join('') || '<p class="hint">No hay ítems que coincidan.</p>';
+    }
     function abrirInv(id) {
       miProd = cfg.productos.find((x) => x.id === id); if (!miProd) return;
       miUsa = [...(miProd.usa || [])];
+      // Micheladas: se preparan con cerveza o con soda (la "soda michelada", solo con soda)
+      if (!miUsa.length && /michelada/.test(normalizar(miProd.nombre))) {
+        const cats = cfg.categorias.filter((c) => (/soda/.test(normalizar(miProd.nombre)) ? /soda/ : /cerveza|soda/).test(normalizar(c.nombre))).map((c) => c.id);
+        miUsa = cfg.productos.filter((x) => cats.includes(x.categoria) && x.id !== miProd.id && !x.usa?.length).map((x) => x.id);
+      }
       $('#miNombre').textContent = miProd.nombre;
       const modo = miProd.sinInventario ? 'no' : miProd.invItem ? 'item' : miUsa.length ? 'usa' : 'propio';
       // sugerencia: "Adición gusano" → el ítem "Gusano"
       const nn = normalizar(miProd.nombre).replace(/^adicion(es)?\s+(de\s+)?/, '');
-      const sug = miProd.invItem?.id || invItems.find((i) => normalizar(i.nombre) === nn)?.id || invItems.find((i) => nn && normalizar(i.nombre).startsWith(nn.slice(0, 5)))?.id || '';
-      $('#miItem').innerHTML = '<option value="">Escoge el ítem…</option>' + invItems.filter((i) => !i.reutilizable).map((i) => `<option value="${i.id}" ${i.id === sug ? 'selected' : ''}>${esc(i.nombre)} (${esc(i.unidad)})</option>`).join('');
-      $('#miItemN').value = miProd.invItem?.cantidad || 1;
+      const sug = invItems.find((i) => normalizar(i.nombre) === nn)?.id || invItems.find((i) => nn && normalizar(i.nombre).startsWith(nn.slice(0, 5)))?.id || '';
+      miSel = miProd.invItem ? (miProd.invItem.ops?.length ? miProd.invItem.ops.map((o) => o.id) : [miProd.invItem.id]) : sug ? [sug] : [];
+      $('#miItemN').value = miProd.invItem?.cantidad || 1; $('#miItemBuscar').value = '';
+      pintarMiItems();
       document.querySelectorAll('[name=miModo]').forEach((r) => { r.checked = r.value === modo; });
       $('#miBuscar').value = ''; $('#miError').textContent = '';
       // sugerencia: si se llama "michelada ..." sugiere las cervezas
@@ -377,14 +390,16 @@
       if (e.target.closest('#miLista')) { const id = e.target.value; miUsa = e.target.checked ? [...new Set([...miUsa, id])] : miUsa.filter((x) => x !== id); }
     });
     $('#miBuscar').addEventListener('input', pintarMi);
+    $('#miItemBuscar').addEventListener('input', pintarMiItems);
+    $('#miItems').addEventListener('change', (e) => { const id = e.target.dataset.miItem; if (!id) return; miSel = e.target.checked ? [...new Set([...miSel, id])] : miSel.filter((x) => x !== id); });
     $('#miCancelar').addEventListener('click', () => $('#modalInv').classList.remove('show'));
     $('#miListo').addEventListener('click', () => {
       const modo = document.querySelector('[name=miModo]:checked')?.value;
       if (modo === 'usa' && !miUsa.length) return ($('#miError').textContent = 'Marca al menos un producto (ej: la cerveza con la que se hace)');
-      if (modo === 'item' && !$('#miItem').value) return ($('#miError').textContent = 'Escoge el ítem del inventario');
+      if (modo === 'item' && !miSel.length) return ($('#miError').textContent = 'Marca el ítem del inventario del que se descuenta');
       delete miProd.sinInventario; delete miProd.usa; delete miProd.invItem;
       if (modo === 'no') miProd.sinInventario = true;
-      if (modo === 'item') miProd.invItem = { id: $('#miItem').value, cantidad: Number($('#miItemN').value) || 1 };
+      if (modo === 'item') miProd.invItem = { id: miSel[0], ops: miSel.map((id) => ({ id, nombre: invItems.find((x) => x.id === id)?.nombre || id })), cantidad: Number($('#miItemN').value) || 1 };
       if (modo === 'usa') miProd.usa = miUsa;
       $('#modalInv').classList.remove('show'); marcar(); renderProductos();
       toast('Listo · toca Guardar cambios para aplicarlo');

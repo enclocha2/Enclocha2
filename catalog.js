@@ -146,7 +146,13 @@ export function normalizarConfig(raw) {
     if (!cats.has(p.categoria)) throw new Error(`"${nombre}" no tiene una categoría válida`);
     const extra = {};
     if (p.sinInventario) extra.sinInventario = true;
-    else if (p.invItem?.id) extra.invItem = { id: txt(p.invItem.id, 48), cantidad: Math.max(0.001, Number(p.invItem.cantidad) || 1) }; // descuenta de un ítem (ej. Adición gusano → Gusano)
+    else if (p.invItem?.id || p.invItem?.ops?.length) {
+      // descuenta de un ítem del inventario (ej. Adición gusano → Gomitas). Con varias opciones se escoge al vender
+      // (ej. Adición jeringa → Jeringa de tequila / ginebra / whisky / vodka)
+      const ops = (p.invItem.ops?.length ? p.invItem.ops : [{ id: p.invItem.id, nombre: p.invItem.nombre || '' }])
+        .map((o) => ({ id: txt(o.id, 48), nombre: txt(o.nombre, 60) })).filter((o) => o.id).slice(0, 20);
+      if (ops.length) extra.invItem = { id: ops[0].id, ops, cantidad: Math.max(0.001, Number(p.invItem.cantidad) || 1) };
+    }
     else if (Array.isArray(p.usa) && p.usa.length) extra.usa = [...new Set(p.usa.map((x) => txt(x, 48)))].filter((x) => x && x !== p.id).slice(0, 30);
     if (extra.usa && !extra.usa.length) delete extra.usa;
     return { id: txt(p.id, 48), nombre, categoria: p.categoria, precio: precioOk(p.precio, nombre), activo: !!p.activo, ...extra };
@@ -205,7 +211,14 @@ export function armarItem(raw, cfg) {
     let inv = p.id, nombre = p.nombre, usa;
     let invDirecto;
     if (p.sinInventario || cat?.sinInventario) inv = null;
-    else if (p.invItem) { inv = null; invDirecto = p.invItem; }
+    else if (p.invItem) {
+      inv = null;
+      const ops = p.invItem.ops?.length ? p.invItem.ops : [{ id: p.invItem.id, nombre: '' }];
+      const op = ops.length === 1 ? ops[0] : ops.find((o) => o.id === raw.usa);
+      if (!op) throw new Error(`Escoge cuál "${p.nombre}"`);
+      invDirecto = { id: op.id, cantidad: p.invItem.cantidad || 1 };
+      if (ops.length > 1) { usa = op.id; nombre = `${p.nombre} (${op.nombre || op.id})`; }
+    }
     else if (p.usa?.length) {
       inv = p.usa.length === 1 ? p.usa[0] : p.usa.includes(raw.usa) ? raw.usa : null;
       if (!inv) throw new Error(`Escoge con qué va "${p.nombre}"`);
@@ -352,7 +365,7 @@ export const PERIODOS_FIJO = [
 //   { tipo: 'topping', id }   → por cada topping (incluido o adicional) de ese tipo
 //   { tipo: 'granizado' }     → por cada granizado de cualquier tamaño (ej: pitillos)
 // cantidad = cuánto se descuenta por cada uno.
-export const UNIDADES_INV = ['und', 'vaso', 'bolsa', 'kg', 'g', 'litro', 'ml', 'botella', 'lata', 'paquete'];
+export const UNIDADES_INV = ['und', 'vaso', 'cucharada', 'bolsa', 'kg', 'g', 'litro', 'ml', 'botella', 'lata', 'paquete'];
 
 // ctx.llevar: pedido para llevar o a domicilio → también se gastan las tapas (una por vaso, según su tamaño)
 export function consumoDe(items, inventario, ctx = {}) {

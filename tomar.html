@@ -226,15 +226,18 @@
     const cantProd = (id) => carrito.filter((d) => d.tipo === 'producto' && d.productoId === id).reduce((t, d) => t + d.cantidad, 0);
     const prodDe = (id) => cfg.productos.find((x) => x.id === id);
     const sinInv = (p) => !!(p.sinInventario || cfg.categorias.find((c) => c.id === p.categoria)?.sinInventario);
-    const eligeOpcion = (p) => !sinInv(p) && (p.usa?.length || 0) > 1;
+    // Opciones al vender: Michelada → con qué cerveza/soda; Adición jeringa → de qué licor
+    const opcionesDe = (p) => p.invItem?.ops?.length > 1 ? p.invItem.ops.map((o) => ({ id: o.id, nombre: o.nombre || inv.items.find((x) => x.id === o.id)?.nombre || o.id }))
+      : (p.usa || []).map((u) => ({ id: u, nombre: prodDe(u)?.nombre || u }));
+    const eligeOpcion = (p) => !sinInv(p) && opcionesDe(p).length > 1;
     const faltaProd = (id, usa) => { const a = armar({ tipo: 'producto', productoId: id, cantidad: 1, usa }); return a ? faltaPara([a]) : [{ nombre: '?' }]; };
-    const opcionesLibres = (p) => p.usa.filter((u) => !faltaProd(p.id, u).length);
+    const opcionesLibres = (p) => opcionesDe(p).filter((o) => !faltaProd(p.id, o.id).length);
     const tagItem = (p) => { // producto que descuenta directo de un ítem (ej. Adición gusano → Gusano)
       const it = inv.items.find((x) => x.id === p.invItem.id && x.activo !== false); if (!it) return '';
       const n = Math.floor((restante()[it.id] || 0) / (p.invItem.cantidad || 1));
       return n <= 0 ? '<em class="stock-tag agotado">🔴 Agotado</em>' : n <= Math.max(it.minimo || 0, 5) ? `<em class="stock-tag bajo">🟠 Quedan ${n}</em>` : '';
     };
-    const tagProd = (p) => sinInv(p) ? '' : p.invItem ? tagItem(p) : eligeOpcion(p) ? `<em class="stock-tag usa">🔗 ${opcionesLibres(p).length} de ${p.usa.length} opciones</em>` : tagStock('producto', p.usa?.[0] || p.id);
+    const tagProd = (p) => sinInv(p) ? '' : eligeOpcion(p) ? `<em class="stock-tag usa">🔗 ${opcionesLibres(p).length} de ${opcionesDe(p).length} opciones</em>` : p.invItem ? tagItem(p) : tagStock('producto', p.usa?.[0] || p.id);
 
     // ---------- Cuentas abiertas ----------
     const estadoPed = { rev: null, pedidos: [] };
@@ -391,10 +394,10 @@
     // Michelada y similares: escoger con qué producto va (y que haya en inventario)
     function elegirOpcion(p) {
       $('#muTitulo').textContent = `🔗 ${p.nombre}: ¿con cuál?`;
-      $('#muOps').innerHTML = p.usa.map((u) => {
-        const o = prodDe(u); if (!o) return '';
-        const falta = faltaProd(p.id, u).length > 0;
-        return `<button class="opt ${falta ? 'off' : ''}" data-usa-de="${p.id}" data-usa="${u}" ${falta ? 'disabled' : ''}><b>${esc(o.nombre)}</b>${falta ? '<em class="stock-tag agotado">🔴 Agotado</em>' : tagStock('producto', u)}</button>`;
+      $('#muOps').innerHTML = opcionesDe(p).map((o) => {
+        const falta = faltaProd(p.id, o.id).length > 0;
+        const tag = p.invItem ? '' : tagStock('producto', o.id);
+        return `<button class="opt ${falta ? 'off' : ''}" data-usa-de="${p.id}" data-usa="${o.id}" ${falta ? 'disabled' : ''}><b>${esc(o.nombre)}</b>${falta ? '<em class="stock-tag agotado">🔴 Agotado</em>' : tag}</button>`;
       }).join('');
       $('#modalUsa').classList.add('show');
     }

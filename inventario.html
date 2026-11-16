@@ -230,6 +230,79 @@
         <div class="prod-sin-item">${l.map((p) => `<label class="reu"><input type="checkbox" data-crear-prod="${p.id}" ${pareceServicio(p) ? '' : 'checked'}> ${esc(cat(p)?.icono || '')} ${esc(p.nombre)}</label>`).join('')}</div>
         <button class="btn" id="crearProdItems" style="width:auto;padding:8px 16px;margin-top:8px">Crear ítems de los marcados</button></div>`;
     }
+    // ---------- Dulces, adiciones, jeringas y micheladas ----------
+    // · Aros y gusanos salen de la misma bolsa de gomitas (toppings y adiciones descuentan 1 gomita)
+    // · Chicles y okaloka se cuentan por cucharada (1 bolsa ≈ 120 cucharadas)
+    // · Jeringas: un ítem por licor (tequila, ginebra, whisky, vodka); la "Adición jeringa" pregunta cuál
+    // · Micheladas: descuentan la cerveza o la soda con que se preparan (no tienen ítem propio)
+    const conTopping = (id) => items.find((i) => i.reglas?.some((r) => r.tipo === 'topping' && r.id === id));
+    const JERINGAS = ['tequila', 'ginebra', 'whisky', 'vodka'];
+    function planDulces() {
+      if (!cfg) return null;
+      const n = (p) => normalizar(p.nombre);
+      const aro = conTopping('aro'), gus = conTopping('gusano'), chi = conTopping('chicle'), oka = conTopping('okaloka');
+      const prods = cfg.productos.filter((p) => p.activo);
+      const adiciones = prods.filter((p) => /adicion/.test(n(p)) && !p.invItem && !p.sinInventario);
+      const jeringa = prods.filter((p) => /jeringa/.test(n(p)) && !p.invItem);
+      const mich = prods.filter((p) => /michelada/.test(n(p)) && !p.usa?.length && !p.invItem && !p.sinInventario);
+      const pend = [];
+      if (aro && gus && aro !== gus) pend.push('Aros y gusanos en una sola bolsa de gomitas');
+      if ([chi, oka].some((x) => x && x.unidad !== 'cucharada')) pend.push('Chicles y okaloka por cucharada (bolsa de 120)');
+      if (adiciones.length) pend.push(`${adiciones.length} adiciones descontando de su dulce`);
+      if (jeringa.length || (prods.some((p) => /jeringa/.test(n(p))) && !JERINGAS.every((l) => items.some((i) => normalizar(i.nombre) === 'jeringa de ' + l)))) pend.push('Jeringas de tequila, ginebra, whisky y vodka');
+      if (mich.length) pend.push(`${mich.length} micheladas descontando la cerveza o la soda`);
+      return pend.length ? { pend, aro, gus, chi, oka, adiciones, jeringa, mich } : null;
+    }
+    function sugerirDulces() {
+      const p = planDulces(); if (!p) return '';
+      return `<div class="card aviso-sobran"><b>🍬 Organizar dulces, adiciones, jeringas y micheladas</b>
+        <p class="hint" style="margin:4px 0 8px">${p.pend.map((x) => '• ' + esc(x)).join('<br>')}</p>
+        <button class="btn" id="organizarDulces" style="width:auto;padding:8px 16px">Organizar</button></div>`;
+    }
+    async function organizarDulces() {
+      const p = planDulces(); if (!p) return;
+      const nuevoItem = (nombre, extra) => { let id = slug(nombre); while (items.some((i) => i.id === id)) id += '-2'; const it = { id, nombre, categoria: 'toppings', unidad: 'und', minimo: 10, activo: true, empaques: [], reglas: [], ...extra }; items.push(it); return it; };
+      // 1) Gomitas: una sola bolsa para aros y gusanos
+      let gom = p.aro || p.gus;
+      if (gom) {
+        const otro = gom === p.aro ? p.gus : p.aro;
+        gom.nombre = 'Gomitas (aros y gusanos)'; gom.unidad = 'und'; gom.empaques = [{ nombre: 'bolsa', unidades: 100 }];
+        for (const t of ['aro', 'gusano']) if (!gom.reglas.some((r) => r.tipo === 'topping' && r.id === t)) gom.reglas.push({ tipo: 'topping', id: t, cantidad: 1 });
+        if (otro && otro !== gom) { otro.reglas = otro.reglas.filter((r) => !(r.tipo === 'topping' && ['aro', 'gusano'].includes(r.id))); if (!otro.reglas.length) items = items.filter((i) => i !== otro); }
+      } else gom = nuevoItem('Gomitas (aros y gusanos)', { empaques: [{ nombre: 'bolsa', unidades: 100 }], reglas: [{ tipo: 'topping', id: 'aro', cantidad: 1 }, { tipo: 'topping', id: 'gusano', cantidad: 1 }] });
+      // 2) Chicles y okaloka por cucharada
+      for (const it of [p.chi, p.oka].filter(Boolean)) { it.unidad = 'cucharada'; it.empaques = [{ nombre: 'bolsa', unidades: 120 }]; }
+      // 3) Jeringas
+      const jer = JERINGAS.map((l) => items.find((i) => normalizar(i.nombre) === 'jeringa de ' + l) || nuevoItem('Jeringa de ' + l, { categoria: 'reventa', minimo: 5 }));
+      // 4) Productos (se guardan en el catálogo)
+      const n = (x) => normalizar(x.nombre);
+      for (const prod of cfg.productos) {
+        if (!prod.activo) continue;
+        let dest = null;
+        if (/adicion/.test(n(prod)) && !prod.invItem && !prod.sinInventario) {
+          if (/aro|gusano|gomita/.test(n(prod))) dest = gom;
+          else if (/okaloka/.test(n(prod))) dest = p.oka;
+          else if (/chicle/.test(n(prod))) dest = p.chi;
+          else if (/sandia/.test(n(prod)) && /paleta/.test(n(prod))) dest = conTopping('paleta-sandia');
+          else if (/chamoy/.test(n(prod))) dest = conTopping('paleta-chamoy');
+          else if (/bandera/.test(n(prod))) dest = conTopping('bandera');
+          if (dest) prod.invItem = { id: dest.id, ops: [{ id: dest.id, nombre: dest.nombre }], cantidad: 1 };
+        }
+        if (/jeringa/.test(n(prod)) && !prod.invItem) prod.invItem = { id: jer[0].id, ops: jer.map((j) => ({ id: j.id, nombre: j.nombre })), cantidad: 1 };
+        if (/michelada/.test(n(prod)) && !prod.usa?.length && !prod.invItem && !prod.sinInventario) {
+          const cats = cfg.categorias.filter((c) => (/soda/.test(n(prod)) ? /soda/ : /cerveza|soda/).test(normalizar(c.nombre))).map((c) => c.id);
+          const usa = cfg.productos.filter((x) => cats.includes(x.categoria) && x.id !== prod.id && !x.usa?.length).map((x) => x.id);
+          if (usa.length) prod.usa = usa;
+        }
+      }
+      try {
+        const r = await api('/api/catalogo', { method: 'PUT', body: JSON.stringify({ config: cfg, version: cfg.version }) });
+        cfg = r.config || (await api('/api/catalogo')).config;
+        const g = await api('/api/inventario', { method: 'PUT', body: JSON.stringify({ items }) });
+        original = g.items; items = structuredClone(g.items); marcar(false); pintar();
+        toast('🍬 Listo. Haz el conteo de Gomitas, Chicles, Okaloka y Jeringas, y quita los ítems que sobran.');
+      } catch (e) { toast(e.message, true); cfg = (await api('/api/catalogo')).config; }
+    }
     function sugerirUnidades() {
       const l = unidadesMal();
       return l.length ? `<div class="card aviso-sobran"><b>📏 ${l.length} productos con la unidad equivocada</b>
@@ -241,7 +314,8 @@
       $('#sobran').innerHTML = l.length ? `<div class="card aviso-sobran"><b>🧹 ${l.length} ítems ya no hacen falta</b>
         <p class="hint" style="margin:4px 0 8px">Son de productos que no llevan inventario o que descuentan de otro producto: ${l.slice(0, 8).map((i) => esc(i.nombre)).join(', ')}${l.length > 8 ? '…' : ''}.</p>
         <button class="btn" id="quitarSobran" style="width:auto;padding:8px 16px">Quitarlos</button></div>` : '';
-      $('#sobran').insertAdjacentHTML('beforeend', sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#sobran').insertAdjacentHTML('beforeend', sugerirDulces() + sugerirPeceras() + sugerirTapas() + sugerirUnidades() + sugerirProductos());
+      $('#organizarDulces')?.addEventListener('click', organizarDulces);
       $('#crearProdItems')?.addEventListener('click', () => {
         const ids = [...document.querySelectorAll('[data-crear-prod]:checked')].map((x) => x.dataset.crearProd);
         if (!ids.length) return toast('Marca al menos un producto', true);
