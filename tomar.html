@@ -465,10 +465,10 @@
 
     // "Para llevar" solo se muestra si hay granizados o neveras (o se está armando uno)
     function pintarLlevar() {
-      const armando = tab === 'granizados' && (!item?.tamano || vaParaLlevar({ tipo: 'granizado', tamanoNombre: cfg.tamanos.find((t) => t.id === item.tamano)?.nombre }));
-      const aplica = armando || carrito.some((d) => vaParaLlevar(armar(d)));
-      $('#llevarSel').hidden = !aplica;
-      if (!aplica && !carrito.some((d) => vaParaLlevar(armar(d))) && llevar) ponerLlevar(false);
+      // el botón solo se ve en la pestaña Granizados (y no con pecera); lo escogido se mantiene si hay granizados en el pedido
+      const t = item?.tamano && cfg.tamanos.find((x) => x.id === item.tamano);
+      $('#llevarSel').hidden = !(tab === 'granizados' && (!t || vaParaLlevar({ tipo: 'granizado', tamanoNombre: t.nombre })));
+      if (llevar && tab !== 'granizados' && !carrito.some((d) => vaParaLlevar(armar(d)))) ponerLlevar(false);
     }
     function render() {
       pintarLlevar();
