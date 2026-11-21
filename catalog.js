@@ -363,12 +363,12 @@ export function asegurarMezclador(items, cfg) {
 export const esStiv = (u) => normalizar(u || '') === 'stiv';
 export const ORIGENES_COMPRA = [
   { id: 'presupuesto', nombre: 'Presupuesto', icono: '💼', ayuda: 'Lo del mes para compras. Si no alcanza, lo que falte sale de ventas.' },
-  { id: 'ventas', nombre: 'Plata de ventas', icono: '💰', ayuda: 'Plata de las ventas que ya está guardada o consignada.' },
-  { id: 'caja', nombre: 'Caja del día', icono: '🔒', ayuda: 'Efectivo del cajón, solo cosas pequeñas del diario (limones, hielo…). Se descuenta en el cierre.' },
+  { id: 'ventas', nombre: 'Ventas', icono: '💰', ayuda: 'Plata de lo vendido. Si se paga en efectivo, sale del cajón y se descuenta en el cierre de caja.' },
 ];
-export const TOPE_CAJA = 60000; // de ahí para arriba se avisa que no es compra "del diario"
-export const origenDe = (c) => c.origen === 'ventas' ? 'ventas' : c.origen === 'caja' ? 'caja' : c.origen === 'presupuesto' ? 'presupuesto' : c.pago === 'caja' ? 'caja' : 'presupuesto';
-export const saleDeCaja = (c) => origenDe(c) === 'caja';
+// Solo hay dos lados: presupuesto o ventas. (Compras viejas marcadas "caja" = ventas en efectivo.)
+export const origenDe = (c) => c.origen === 'presupuesto' ? 'presupuesto' : c.origen === 'ventas' || c.origen === 'caja' ? 'ventas' : c.pago === 'caja' ? 'ventas' : 'presupuesto';
+// Ventas + efectivo = la plata salió del cajón → se descuenta en el cierre de caja de ese día
+export const saleDeCaja = (c) => origenDe(c) === 'ventas' && c.pago === 'caja';
 // Reparte el presupuesto del mes entre sus compras en orden (fecha, hora de registro, línea).
 // Devuelve { [idCompra]: { pres, ventas, caja } }. El presupuesto nunca se pasa del monto.
 export function repartirPresupuesto(compras, monto) {
@@ -376,7 +376,6 @@ export function repartirPresupuesto(compras, monto) {
   const orden = [...compras].sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.creado || 0) - (b.creado || 0) || (a.linea || 0) - (b.linea || 0));
   for (const c of orden) {
     const o = origenDe(c);
-    if (o === 'caja') { out[c.id] = { pres: 0, ventas: 0, caja: c.valor }; continue; }
     if (o === 'ventas') { out[c.id] = { pres: 0, ventas: c.valor, caja: 0 }; continue; }
     const p = Math.min(queda, c.valor); queda -= p;
     out[c.id] = { pres: p, ventas: c.valor - p, caja: 0 };

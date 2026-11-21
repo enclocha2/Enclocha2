@@ -24,8 +24,8 @@ function validar(b) {
     cantidad: cantidad || null,
     unidad: UNIDADES.includes(b.unidad) ? b.unidad : 'und',
     valor,
-    pago: b.origen === 'caja' ? 'caja' : PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja',
-    origen: ['presupuesto', 'ventas', 'caja'].includes(b.origen) ? b.origen : 'presupuesto',
+    pago: PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja',
+    origen: b.origen === 'ventas' || b.origen === 'caja' ? 'ventas' : 'presupuesto',
     proveedor: txt(b.proveedor, 60),
     nota: txt(b.nota, 200),
   };

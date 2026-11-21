@@ -186,3 +186,8 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - Reportes mensual: tabla 💵 vs 📲 mes a mes (ventas y compras) y **📥 Meses anteriores** para escribir totales viejos (`/api/ventas?r=historico`, por sede).
 - Gastos fijos: foto o PDF de la factura de cada pago (al pagar o después).
 - Los campos de valores aceptan cualquier número (antes pedían múltiplos de 100).
+
+## v56 · Solo dos lados: Presupuesto o Ventas
+- Se quitó "Caja del día" como opción aparte. Ahora cada compra sale de 💼 Presupuesto (con tope) o 💰 Ventas.
+- Ventas + Efectivo = salió del cajón → se descuenta en el cierre de caja (`saleDeCaja`). Ventas + transferencia/otro no toca el cierre.
+- Compras viejas marcadas "caja" quedan como Ventas en efectivo (se siguen descontando igual en su cierre).
