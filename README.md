@@ -201,3 +201,8 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - `verArchivo` (sesion.js) ahora es un visor grande: título con proveedor, fecha, NIT, total y # de productos; la foto cabe completa y al tocarla se acerca; ✕, Esc o tocar afuera cierra. En celular ocupa toda la pantalla.
 - Acciones en el visor: 🔄 Cambiar, 🗑 Quitar (pide confirmar) y ⬇️ Descargar. Lo usan Compras, Gastos fijos, Pedidos y Ventas.
 - Compras en celular: los filtros ya no se tapan con el botón ⚙️ Filtros y los cuadros de totales quedan ordenados.
+
+## v58 · PDF en el visor
+- Los PDF se muestran ajustados al ancho (enlace blob), sin desplazamiento de lado. Botón "↗️ Abrir aparte".
+- En celular (que no muestra PDF dentro de páginas) sale un botón grande "📖 Abrir el PDF".
+- Aviso: si el PDF pide contraseña, normalmente es el NIT (sin dígito de verificación) o la cédula.

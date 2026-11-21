@@ -88,7 +88,7 @@ export function cadaTanto(fn, ms) {
 }
 import { enHorarioOperacion, textoPausa, fijarDiasCerrados, cerradoHoy } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '57';
+export const VERSION = '58';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
@@ -426,15 +426,19 @@ export async function prepararArchivo(f) {
 export function verArchivo(a, titulo = '🧾 Archivo', { sub = '', acciones = [] } = {}) {
   const m = document.createElement('div');
   m.className = 'modal show visor';
-  const pdf = a.tipo === 'application/pdf';
+  const celular = matchMedia('(pointer: coarse)').matches;
+  const pdf = a.tipo === 'application/pdf' || /^data:application\/pdf/.test(a.data);
+  // PDF: se muestra desde un enlace "blob" (más liviano y compatible) ajustado al ancho, sin barra lateral
+  let url = a.data;
+  if (pdf) { try { const bin = atob(a.data.split(',')[1]); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' })); } catch {} }
   m.innerHTML = `<div class="visor-box">
     <header class="visor-top"><div class="visor-tit"><b>${esc(titulo)}</b>${sub ? `<small>${sub}</small>` : ''}</div><button type="button" class="visor-x" title="Cerrar">✕</button></header>
-    <div class="visor-cuerpo">${pdf ? `<iframe src="${a.data}" title="Archivo"></iframe>` : `<img src="${a.data}" alt="">`}</div>
-    <footer class="visor-pie"><span class="hint">${pdf ? 'PDF · si no se ve, descárgalo' : '🔍 Toca la foto para acercar'}</span>
-      <div class="visor-acc">${acciones.map((x, k) => `<button type="button" class="mini ${x.peligro ? 'del-txt' : ''}" data-k="${k}">${x.txt}</button>`).join('')}<a class="mini" href="${a.data}" download="${esc(a.nombre || 'archivo')}">⬇️ Descargar</a></div></footer>
+    <div class="visor-cuerpo ${pdf ? 'es-pdf' : ''}">${!pdf ? `<img src="${a.data}" alt="">` : celular ? `<div class="visor-pdf-cel"><div style="font-size:3rem">📄</div><b>Factura en PDF</b><span class="hint">El celular no muestra PDF dentro de la página.</span><a class="btn" href="${url}" target="_blank" rel="noopener">📖 Abrir el PDF</a></div>` : `<iframe src="${url}#view=FitH&navpanes=0" title="Archivo"></iframe>`}</div>
+    <footer class="visor-pie"><span class="hint">${pdf ? '🔒 Si pide contraseña, casi siempre es el NIT (sin dígito de verificación) o la cédula' : '🔍 Toca la foto para acercar'}</span>
+      <div class="visor-acc">${acciones.map((x, k) => `<button type="button" class="mini ${x.peligro ? 'del-txt' : ''}" data-k="${k}">${x.txt}</button>`).join('')}${pdf ? `<a class="mini" href="${url}" target="_blank" rel="noopener">↗️ Abrir aparte</a>` : ''}<a class="mini" href="${a.data}" download="${esc(a.nombre || 'archivo')}">⬇️ Descargar</a></div></footer>
   </div>`;
   document.body.appendChild(m);
-  const cerrar = () => { m.remove(); document.removeEventListener('keydown', tecla); };
+  const cerrar = () => { m.remove(); document.removeEventListener('keydown', tecla); if (url !== a.data) setTimeout(() => URL.revokeObjectURL(url), 60000); };
   const tecla = (e) => { if (e.key === 'Escape') cerrar(); };
   document.addEventListener('keydown', tecla);
   m.addEventListener('click', async (e) => {

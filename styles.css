@@ -1312,3 +1312,10 @@ tr.sin-costo td:first-child b { color: #ffd166; }
   #kpis .kpi:first-child { grid-column: 1 / -1; }
   #kpis .kpi b { font-size: 1.15rem; }
 }
+.visor-cuerpo.es-pdf { padding: 0; display: block; overflow: hidden; }
+.visor-cuerpo.es-pdf iframe { display: block; width: 100%; height: 100%; border-radius: 0; }
+.visor-box, .visor-top, .visor-pie { max-width: 100%; }
+.visor-pie .hint { flex: 1 1 240px; min-width: 0; }
+.visor-pdf-cel { height: 100%; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 20px; text-align: center; }
+.visor-pdf-cel b { word-break: break-all; max-width: 90%; }
+.visor-pdf-cel .btn { width: auto; padding: 12px 24px; text-decoration: none; }
