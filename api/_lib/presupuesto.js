@@ -6,12 +6,12 @@ import { sesion } from './auth.js';
 import { leerPresupuesto, guardarPresupuesto, leerPresupuestoBase, guardarPresupuestoBase,
   comprasEntre, leerPagosFijos, listarCierres, leerResumen } from './store.js';
 import { finMes } from '../../fechas.js';
-import { saleDeCaja } from '../../catalog.js';
+import { repartirPresupuesto, origenDe } from '../../catalog.js';
 
 const MES = /^\d{4}-\d{2}$/;
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
 
-async function presupuestoDe(mes) {
+export async function presupuestoDe(mes) {
   const propio = await leerPresupuesto(mes);
   if (propio) return { ...propio, origen: 'mes' };
   const base = await leerPresupuestoBase();
@@ -35,36 +35,33 @@ export default async function handler(req, res) {
         presupuestoDe(q.mes), leerPresupuestoBase(), comprasEntre(desde, hasta), leerPagosFijos(q.mes), listarCierres(62), leerResumen(),
       ]);
 
-      // Todos los gastos del mes, en orden
+      // Compras: el presupuesto se reparte en orden y nunca se pasa; lo que no alcance sale de ventas
+      const { reparto, queda } = repartirPresupuesto(compras, presupuesto.monto);
       const movimientos = [
-        ...compras.map((c) => ({ fecha: c.fecha, en: c.creado, tipo: 'compra', concepto: c.insumo, valor: c.valor, por: c.registradoPor, pago: c.pago, categoria: c.categoria, ...(saleDeCaja(c) ? { deCaja: true } : {}) })),
-        ...pagos.map((p) => ({ fecha: p.fecha, en: p.creado, tipo: 'fijo', concepto: p.nombre, valor: p.valor, por: p.registradoPor, pago: p.metodo })),
+        ...compras.map((c) => { const r = reparto[c.id]; return { fecha: c.fecha, en: c.creado, linea: c.linea || 0, tipo: 'compra', origen: origenDe(c), concepto: c.insumo, proveedor: c.proveedor || '', valor: c.valor, por: c.registradoPor, pago: c.pago, categoria: c.categoria, delPresupuesto: r.pres, deVentas: r.ventas, deCaja: r.caja }; }),
+        ...pagos.map((p) => ({ fecha: p.fecha, en: p.creado, tipo: 'fijo', origen: 'ventas', concepto: p.nombre, valor: p.valor, por: p.registradoPor, pago: p.metodo, delPresupuesto: 0, deVentas: p.valor, deCaja: 0 })),
         ...cierres.filter((c) => c.jornada.startsWith(q.mes)).flatMap((c) => (c.gastos || []).map((g, i) => ({
-          fecha: c.jornada, en: (c.cerradoEn || 0) + i, tipo: 'caja', concepto: g.concepto, valor: g.valor, por: c.cerradoPor, pago: 'caja', deCaja: true,
+          fecha: c.jornada, en: (c.cerradoEn || 0) + i, tipo: 'caja', origen: 'caja', concepto: g.concepto, valor: g.valor, por: c.cerradoPor, pago: 'caja', delPresupuesto: 0, deVentas: 0, deCaja: g.valor,
         }))),
-      ].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.en - b.en);
-
-      // Repartir: primero sale del presupuesto, después de las ventas
-      let queda = presupuesto.monto, agotadoEl = null;
+      ].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.en - b.en || (a.linea || 0) - (b.linea || 0));
+      let saldo = presupuesto.monto, agotadoEl = null;
       for (const m of movimientos) {
-        if (m.tipo === 'fijo') { m.fueraPresupuesto = true; m.delPresupuesto = 0; m.deVentas = m.valor; m.saldo = queda; continue; }
-        // pagado con el efectivo de la caja del día: ya se descontó en el cierre, no gasta presupuesto
-        if (m.deCaja) { m.fueraPresupuesto = true; m.delPresupuesto = 0; m.deVentas = 0; m.saldo = queda; continue; }
-        m.delPresupuesto = Math.min(queda, m.valor);
-        m.deVentas = m.valor - m.delPresupuesto;
-        queda -= m.delPresupuesto;
-        m.saldo = queda;
-        if (!agotadoEl && m.deVentas > 0) agotadoEl = m.fecha;
+        m.fueraPresupuesto = m.origen !== 'presupuesto';
+        if (!m.fueraPresupuesto) { saldo -= m.delPresupuesto; if (!agotadoEl && m.deVentas > 0) agotadoEl = m.fecha; }
+        m.saldo = saldo;
       }
-      const ventasMes = Object.entries(resumen).filter(([d]) => d.startsWith(q.mes)).reduce((s, [, v]) => s + (v.total || 0), 0);
-      const conPres = movimientos.filter((m) => !m.fueraPresupuesto);
-      const gastado = conPres.reduce((s, m) => s + m.valor, 0);          // lo que cuenta contra el presupuesto
-      const deVentas = conPres.reduce((s, m) => s + m.deVentas, 0);      // lo que se pasó del presupuesto
-      const fijos = movimientos.filter((m) => m.tipo === 'fijo').reduce((s, m) => s + m.valor, 0);
-      const caja = movimientos.filter((m) => m.deCaja).reduce((s, m) => s + m.valor, 0);
+      const suma = (f, k) => movimientos.filter(f).reduce((t, m) => t + m[k], 0);
+      const ventasMes = Object.entries(resumen).filter(([d]) => d.startsWith(q.mes)).reduce((t, [, v]) => t + (v.total || 0), 0);
+      const delPresupuesto = suma((m) => m.tipo === 'compra', 'delPresupuesto');
+      const excedente = suma((m) => m.tipo === 'compra' && m.origen === 'presupuesto', 'deVentas'); // lo que no alcanzó
+      const comprasVentas = suma((m) => m.tipo === 'compra' && m.origen === 'ventas', 'deVentas');  // compradas con plata de ventas
+      const caja = suma(() => true, 'deCaja');                                                         // cositas del diario
+      const fijos = suma((m) => m.tipo === 'fijo', 'valor');
+      const gastado = suma((m) => m.tipo !== 'fijo', 'valor');
+      const deVentas = excedente + comprasVentas;
       return res.status(200).json({
         mes: q.mes, presupuesto, base: base || { monto: 0, repetir: false },
-        resumen: { gastado, delPresupuesto: gastado - deVentas, deVentas, fijos, caja, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - fijos - caja },
+        resumen: { gastado, delPresupuesto, deVentas, excedente, comprasVentas, caja, fijos, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - caja - fijos },
         movimientos,
       });
     }

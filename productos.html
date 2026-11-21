@@ -59,7 +59,7 @@
       <form class="add add-prod" id="fProducto">
         <input class="field" name="nombre" placeholder="Nombre del producto" maxlength="60" required />
         <select class="field" name="categoria" id="selCatNuevo"></select>
-        <input class="field" name="precio" type="number" min="0" step="100" placeholder="Precio" required />
+        <input class="field" name="precio" type="number" min="0" step="1" placeholder="Precio" required />
         <button class="btn alt">+ Agregar</button>
       </form>
     </section>
@@ -74,7 +74,7 @@
         <form class="add" id="fTamano">
           <input class="field" name="nombre" placeholder="Nueva presentación, ej: Promoción 2x1" maxlength="40" required />
           <input class="field" name="seccion" list="dlSecciones" placeholder="Sección" maxlength="30" style="max-width:150px" />
-          <input class="field" name="precio" type="number" min="0" step="100" placeholder="Precio" style="max-width:120px" required />
+          <input class="field" name="precio" type="number" min="0" step="1" placeholder="Precio" style="max-width:120px" required />
           <button class="btn alt">+ Agregar</button>
         </form>
         <datalist id="dlSecciones"></datalist>
@@ -117,7 +117,7 @@
           <div class="estado-dom" id="domEstado"></div>
           <input type="checkbox" id="domActivo" hidden><input type="checkbox" id="domHorario" hidden>
         </div>
-        <label class="campo"><span>Pedido mínimo (granizados)</span><div class="precio"><span>$</span><input class="field" id="domMinimo" type="number" min="0" step="1000" inputmode="numeric"></div></label>
+        <label class="campo"><span>Pedido mínimo (granizados)</span><div class="precio"><span>$</span><input class="field" id="domMinimo" type="number" min="0" step="1" inputmode="numeric"></div></label>
         <label class="campo"><span>WhatsApp del negocio (para comprobantes)</span><input class="field" id="domWhatsapp" inputmode="tel" placeholder="3001234567"></label>
         <label class="campo ancho"><span>Mensaje para los clientes (opcional)</span><input class="field" id="domMensaje" maxlength="200" placeholder="Ej: Domicilios solo en el barrio X y alrededores · tiempo aprox. 30 min"></label>
       </div>
@@ -173,7 +173,7 @@
         <label class="campo"><span>🥤 Vasos</span><input class="field" type="number" min="0" max="20" id="mrVasos"></label>
         <label class="campo"><span>de qué tamaño</span><select class="field" id="mrVaso"></select></label>
         <label class="campo"><span>🥢 Pitillos</span><input class="field" type="number" min="0" max="20" id="mrPitillos"></label>
-        <label class="campo"><span>🧊 Litros de base</span><input class="field" type="number" min="0" max="50" step="0.01" id="mrLitros"><small class="hint" id="mrLitrosTxt"></small></label>
+        <label class="campo"><span>🧊 Litros de base</span><input class="field" type="number" min="0" max="50" step="any" id="mrLitros"><small class="hint" id="mrLitrosTxt"></small></label>
         <label class="campo"><span>🍬 Dulces de cada grupo</span><input class="field" type="number" min="1" max="10" id="mrDulces"><small class="hint" id="mrDulcesTxt"></small></label>
         <label class="campo ancho"><span>🍺 Cerveza o producto que va incluido</span><select class="field" id="mrProducto"></select></label>
         <label class="ancho opcional"><input type="checkbox" id="mrOpcional" style="width:18px;height:18px;accent-color:#ff3fd1"> Es opcional (al vender se pregunta "¿lleva …?")</label>
@@ -253,7 +253,7 @@
     };
     const sw = (l, id, on) => `<label class="switch" title="Disponible"><input type="checkbox" data-l="${l}" data-id="${id}" data-k="activo" ${on ? 'checked' : ''}><span></span></label>`;
     const inp = (l, id, k, v, extra = '') => `<input class="field" data-l="${l}" data-id="${id}" data-k="${k}" value="${esc(v)}" ${extra}>`;
-    const precio = (l, id, v) => `<div class="precio"><span>$</span><input class="field" type="number" min="0" step="100" data-l="${l}" data-id="${id}" data-k="precio" value="${v}"></div>`;
+    const precio = (l, id, v) => `<div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" data-l="${l}" data-id="${id}" data-k="precio" value="${v}"></div>`;
     const borrar = (l, id) => `<button class="del" data-del="${l}" data-id="${id}" title="Eliminar">🗑</button>`;
 
     // ---------- Pestañas (#sabores, #productos, ...) ----------
@@ -617,12 +617,12 @@
       let desde = 0;
       $('#domTarifas').innerHTML = dom.tarifas.map((t, k) => { const fila = `<div class="fila fila-tarifa">
           <span class="hint" style="min-width:90px">De ${String(desde).replace('.', ',')} a</span>
-          <input class="field dia" style="max-width:90px" type="number" min="0" step="0.5" data-tk="${k}" data-tc="hastaKm" value="${t.hastaKm}"><span class="hint">km</span>
-          <span class="hint">→</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="500" data-tk="${k}" data-tc="valor" value="${t.valor}"></div>
+          <input class="field dia" style="max-width:90px" type="number" min="0" step="any" data-tk="${k}" data-tc="hastaKm" value="${t.hastaKm}"><span class="hint">km</span>
+          <span class="hint">→</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" data-tk="${k}" data-tc="valor" value="${t.valor}"></div>
           <button class="del" data-tdel="${k}" type="button">🗑</button></div>`; desde = t.hastaKm; return fila; }).join('') || '<p class="hint">Sin rangos: solo se podrá pedir escogiendo barrio.</p>';
       $('#domZonas').innerHTML = dom.zonas.map((z, k) => `<div class="fila">
           <input class="field" data-zk="${k}" data-zc="nombre" value="${esc(z.nombre)}" maxlength="50" placeholder="Barrio" style="flex:1">
-          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="500" data-zk="${k}" data-zc="valor" value="${z.valor}"></div>
+          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" data-zk="${k}" data-zc="valor" value="${z.valor}"></div>
           <button class="del" data-zdel="${k}" type="button">🗑</button></div>`).join('') || '<p class="hint">Sin barrios.</p>';
     }
     $('#t-domicilios').addEventListener('input', (e) => {

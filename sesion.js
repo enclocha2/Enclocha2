@@ -88,7 +88,7 @@ export function cadaTanto(fn, ms) {
 }
 import { enHorarioOperacion, textoPausa, fijarDiasCerrados, cerradoHoy } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '54';
+export const VERSION = '55';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
@@ -261,9 +261,9 @@ export async function bannerPresupuesto(el, mes) {
     const pesos = (n) => '$' + Number(n || 0).toLocaleString('es-CO');
     if (!p) { el.innerHTML = `<a href="/presupuesto" class="pres-mini sin">💼 Aún no definiste el presupuesto de este mes · <b>Definir →</b></a>`; return r; }
     const pct = Math.min(100, Math.round((s.delPresupuesto / p) * 100));
-    const estado = s.deVentas > 0 ? 'agotado' : pct >= 80 ? 'alerta' : 'ok';
+    const estado = s.excedente > 0 ? 'agotado' : pct >= 80 ? 'alerta' : 'ok';
     el.innerHTML = `<a href="/presupuesto" class="pres-mini ${estado}">
-      <span>💼 ${s.deVentas > 0 ? `<b>Presupuesto agotado</b> · ya van <b>${pesos(s.deVentas)}</b> con plata de las ventas` : `Presupuesto del mes: quedan <b>${pesos(s.queda)}</b> de ${pesos(p)}`}</span>
+      <span>💼 ${s.excedente > 0 ? `<b>Presupuesto agotado</b> · lo que siga sale de ventas (van <b>${pesos(s.excedente)}</b>)` : `Presupuesto del mes: quedan <b>${pesos(s.queda)}</b> de ${pesos(p)}`}</span>
       <span class="pres-barra"><i style="width:${pct}%"></i></span></a>`;
     return r;
   } catch { el.innerHTML = ''; return null; }
@@ -363,7 +363,7 @@ export function dividirPago({ total, nombre = '' }) {
     function pintar() {
       q('#divPartes').innerHTML = partes.map((x, i) => `<div class="div-fila">
         <input class="field" data-i="${i}" data-k="quien" placeholder="Persona ${i + 1}" value="${esc(x.quien)}" maxlength="40">
-        <div class="precio"><span>$</span><input class="field" type="number" inputmode="numeric" min="0" step="100" data-i="${i}" data-k="valor" value="${x.valor || ''}"></div>
+        <div class="precio"><span>$</span><input class="field" type="number" inputmode="numeric" min="0" step="1" data-i="${i}" data-k="valor" value="${x.valor || ''}"></div>
         <div class="div-met"><button type="button" class="${x.metodo === 'efectivo' ? 'on' : ''}" data-i="${i}" data-met="efectivo" title="Efectivo">💵</button><button type="button" class="${x.metodo === 'transferencia' ? 'on' : ''}" data-i="${i}" data-met="transferencia" title="Transferencia">📲</button></div>
         ${partes.length > 1 ? `<button type="button" class="del" data-quitar="${i}" title="Quitar">✕</button>` : ''}
       </div>`).join('');
@@ -397,3 +397,114 @@ export function textoPago(pg, total) {
   const det = pg.partes?.length ? ' · ' + pg.partes.map((x) => `${x.quien}: ${x.metodo === 'efectivo' ? '💵' : '📲'} ${$p(x.valor)}`).join(', ') : '';
   return `➗ Dividido: 💵 ${$p(ef)} + 📲 ${$p(total - ef)}${det}`;
 }
+
+// ---------- Archivos (fotos de facturas y comprobantes) ----------
+// Las fotos se achican en el celular (máx 1600 px, JPG) para que pesen poco.
+function leerArchivoComo(f) { return new Promise((ok, mal) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = mal; r.readAsDataURL(f); }); }
+export async function prepararArchivo(f) {
+  if (f.type === 'application/pdf') {
+    if (f.size > 700 * 1024) throw new Error('El PDF pesa mucho (máx. 700 KB). Mejor toma una foto.');
+    return { data: await leerArchivoComo(f), nombre: f.name };
+  }
+  if (!f.type.startsWith('image/')) throw new Error('Sube una foto o un PDF');
+  const url = await leerArchivoComo(f);
+  const img = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => mal(new Error('No se pudo leer la foto')); i.src = url; });
+  let lado = 1600, calidad = 0.72, data;
+  for (let k = 0; k < 5; k++) {
+    const e = Math.min(1, lado / Math.max(img.width, img.height));
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * e); c.height = Math.round(img.height * e);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+    data = c.toDataURL('image/jpeg', calidad);
+    if (data.length < 900 * 1024) break;
+    lado *= 0.8; calidad = Math.max(0.5, calidad - 0.08);
+  }
+  return { data, nombre: f.name.replace(/\.[^.]+$/, '') + '.jpg' };
+}
+
+// Ver un archivo guardado (imagen o PDF) en un modal
+export function verArchivo(a, titulo = '🧾 Archivo') {
+  const m = document.createElement('div');
+  m.className = 'modal show';
+  m.innerHTML = `<div class="box box-factura"><h3>${esc(titulo)}</h3><div class="factura-ver">${a.tipo === 'application/pdf' ? `<iframe src="${a.data}" title="Archivo"></iframe>` : `<img src="${a.data}" alt="">`}</div>
+    <a class="btn ghost" href="${a.data}" download="${esc(a.nombre || 'archivo')}" style="text-align:center">⬇️ Descargar</a><button class="btn" type="button">Cerrar</button></div>`;
+  document.body.appendChild(m);
+  m.querySelector('button').addEventListener('click', () => m.remove());
+}
+
+// ---------- Pago con efectivo + transferencia (una sola persona) ----------
+// Devuelve las partes [{metodo, valor, quien}] o null si se cancela.
+export function pagoMixto({ total, nombre = '', efectivo = 0 }) {
+  return new Promise((resolver) => {
+    const m = document.createElement('div');
+    m.className = 'modal show';
+    m.innerHTML = `<div class="box">
+      <h3>💵 + 📲 Efectivo y transferencia${nombre ? ' · ' + esc(nombre) : ''}</h3>
+      <div class="total" style="margin:0"><span>Total</span><span>${$p(total)}</span></div>
+      <label class="campo"><span>¿Cuánto paga en efectivo?</span><div class="precio"><span>$</span><input class="field" id="mxEf" type="number" inputmode="numeric" min="0" step="1" placeholder="0"></div></label>
+      <div class="chips" id="mxRap"></div>
+      <div class="div-estado" id="mxEstado"></div>
+      <div id="mxQR"></div>
+      <button type="button" class="btn" id="mxOk" disabled>Cobrar</button>
+      <button type="button" class="btn ghost" id="mxNo">Cancelar</button>
+    </div>`;
+    document.body.appendChild(m);
+    const q = (s) => m.querySelector(s);
+    const cerrar = (r) => { m.remove(); resolver(r); };
+    const rapidos = [...new Set([10000, 20000, 50000, Math.round(total / 2 / 50) * 50].filter((v) => v > 0 && v < total))].sort((a, b) => a - b);
+    q('#mxRap').innerHTML = rapidos.map((v) => `<button type="button" class="chip" data-v="${v}">💵 ${$p(v)}</button>`).join('');
+    let qrPara = -1;
+    function estado() {
+      const ef = Math.max(0, Math.round(Number(q('#mxEf').value) || 0)), tr = total - ef;
+      const ok = ef > 0 && tr > 0;
+      q('#mxEstado').innerHTML = `<span>💵 Efectivo <b>${$p(ef)}</b></span><span>📲 Transferencia <b>${$p(Math.max(0, tr))}</b></span>` + (tr <= 0 ? '<span class="falta">El efectivo debe ser menos que el total</span>' : '');
+      q('#mxOk').disabled = !ok;
+      q('#mxOk').textContent = ok ? `Cobrar ${$p(ef)} 💵 + ${$p(tr)} 📲` : 'Cobrar';
+      if (ok && qrPara !== tr) { qrPara = tr; leerQR().then((a) => { if (m.isConnected && qrPara === tr) q('#mxQR').innerHTML = htmlQR(a, $p(tr)); }); }
+      if (!ok) { qrPara = -1; q('#mxQR').innerHTML = ''; }
+    }
+    q('#mxEf').addEventListener('input', estado);
+    m.addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.v) { q('#mxEf').value = b.dataset.v; return estado(); }
+      if (b.id === 'mxNo') return cerrar(null);
+      if (b.id === 'mxOk' && !b.disabled) {
+        const ef = Math.round(Number(q('#mxEf').value));
+        return cerrar([{ metodo: 'efectivo', valor: ef, quien: nombre || 'Efectivo' }, { metodo: 'transferencia', valor: total - ef, quien: nombre || 'Transferencia' }]);
+      }
+    });
+    if (efectivo > 0 && efectivo < total) q('#mxEf').value = efectivo;
+    estado(); setTimeout(() => q('#mxEf').focus(), 50);
+  });
+}
+
+// ---------- Foto del comprobante de una transferencia ----------
+// Cada vez que se cobra algo por transferencia se pide la foto. ids = pedidos cobrados.
+export function pedirComprobante({ ids, monto, nombre = '' }) {
+  return new Promise((resolver) => {
+    const m = document.createElement('div');
+    m.className = 'modal show';
+    m.innerHTML = `<div class="box">
+      <h3>📲 Foto del comprobante</h3>
+      <p style="margin-top:0">Transferencia de <b>${$p(monto)}</b>${nombre ? ` · ${esc(nombre)}` : ''}. Tómale foto al comprobante para tenerlo guardado.</p>
+      <label class="btn" style="text-align:center;cursor:pointer"><input type="file" id="cpFile" accept="image/*,application/pdf" capture="environment" hidden>📷 Tomar foto</label>
+      <label class="btn ghost" style="text-align:center;cursor:pointer"><input type="file" id="cpGal" accept="image/*,application/pdf" hidden>🖼️ Escoger de la galería</label>
+      <p class="hint" id="cpEstado"></p>
+      <button type="button" class="btn ghost" id="cpNo">Ahora no</button>
+    </div>`;
+    document.body.appendChild(m);
+    const q = (s) => m.querySelector(s);
+    const cerrar = (r) => { m.remove(); resolver(r); };
+    q('#cpNo').addEventListener('click', () => cerrar(false));
+    const subir = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      q('#cpEstado').textContent = '⏳ Subiendo…';
+      try {
+        const a = await prepararArchivo(f);
+        await api('/api/pedidos?r=comprobante', { method: 'PUT', body: JSON.stringify({ ids, ...a }) });
+        toast('✅ Comprobante guardado'); cerrar(true);
+      } catch (err) { q('#cpEstado').textContent = '⚠️ ' + err.message; }
+    };
+    q('#cpFile').addEventListener('change', subir); q('#cpGal').addEventListener('change', subir);
+  });
+}
+export const transferenciaDe = (metodo, partes, total) => partes ? partes.filter((x) => x.metodo === 'transferencia').reduce((t, x) => t + x.valor, 0) : metodo === 'transferencia' ? total : 0;

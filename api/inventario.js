@@ -1,12 +1,12 @@
 import { sesion } from './_lib/auth.js';
 import { leerInventario, guardarInventario, leerStock, moverStock, listarMovs, marcaUnaVez, leerPrestados, configActual, guardarConfig, leerSedes, enSede } from './_lib/store.js';
-import { UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos, stockDisponible, normalizar, asegurarBases } from '../catalog.js';
+import { asegurarMezclador, UNIDADES_INV, CATEGORIAS_COMPRA, slug, empaquesSugeridos, stockDisponible, normalizar, asegurarBases } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
 const txt = (s, n) => String(s ?? '').trim().slice(0, n);
 const num = (v) => Math.round((Number(v) || 0) * 1000) / 1000;
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
-const TIPOS_REGLA = ['producto', 'tamano', 'topping', 'granizado', 'tapa', 'sabor'];
+const TIPOS_REGLA = ['producto', 'vendido', 'tamano', 'topping', 'granizado', 'tapa', 'sabor'];
 
 async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -56,7 +56,9 @@ async function handler(req, res) {
         if (cambio) { cfg.version = (cfg.version || 1) + 1; await guardarConfig(cfg); }
       }
       // cada sabor con su base (solo al abrir Inventario, no en Tomar pedido)
-      if (!q.lite || q.bases) { const cb = asegurarBases(items, await configActual()); if (cb) { items = cb; await guardarInventario(items); } }
+      const cfgInv = await configActual();
+      if (!q.lite || q.bases) { const cb = asegurarBases(items, cfgInv); if (cb) { items = cb; await guardarInventario(items); } }
+      { const cm = asegurarMezclador(items, cfgInv); if (cm) { items = cm; await guardarInventario(items); } }
       const [stock, movs, prestados] = await Promise.all([leerStock(), q.lite ? [] : listarMovs(300), leerPrestados()]);
       // lite (tomar pedido): el stock de los reutilizables ya viene sin los prestados
       return res.status(200).json({ items, stock: q.lite ? stockDisponible(stock, items, prestados) : stock, prestados, movs, admin: yo.puede('inventario_config') });

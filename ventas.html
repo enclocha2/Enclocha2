@@ -53,7 +53,7 @@
 
   <script type="module">
     import { pesos, partesDe } from '/catalog.js';
-    import { requerirSesion, api, esc, toast } from '/sesion.js';
+    import { requerirSesion, api, esc, toast, verArchivo } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaHora, fechaLarga, jornadaDe, diaDe, nombreDia, textoHorario } from '/fechas.js';
     import { normalizar } from '/catalog.js';
 
@@ -69,7 +69,7 @@
       ['mespasado', 'Mes pasado', sumarMeses(H, -1), finMes(sumarMeses(H, -1))],
     ];
     const METODOS = [['todos', 'Todos'], ['efectivo', '💵 Efectivo'], ['transferencia', '📲 Transferencia']];
-    let periodo = 'hoy', metodo = 'todos', ventas = [];
+    let periodo = 'hoy', metodo = 'todos', ventas = [], comprobantes = {};
 
     function pintarFiltros() {
       $('#periodos').innerHTML = PERIODOS.map(([id, n]) => `<button class="chip ${periodo === id ? 'on' : ''}" data-p="${id}">${n}</button>`).join('');
@@ -81,6 +81,8 @@
       $('#tabla').innerHTML = '<tr><td class="empty">Cargando...</td></tr>';
       try {
         ({ ventas } = await api(`/api/ventas?desde=${desde}&hasta=${hasta}`));
+        const conTr = ventas.filter((v) => v.m !== 'efectivo').map((v) => v.id);
+        comprobantes = conTr.length ? (await api(`/api/pedidos?r=comprobante&ids=${conTr.join(',')}`).catch(() => ({ comprobantes: {} }))).comprobantes : {};
         ventas.sort((a, b) => b.pa - a.pa);
         $('#titulo').textContent = desde === hasta ? `Jornada ${fechaLarga(desde)} · ${textoHorario(desde)}` : `Jornadas ${fechaLarga(desde)} → ${fechaLarga(hasta)}`;
         render();
@@ -112,7 +114,7 @@
           <td>#${v.n}</td>
           <td><b>${esc(v.c)}</b></td>
           <td>${v.it.map((i) => `${i[1]}× ${esc(i[0])}`).join('<br>')}</td>
-          <td><span class="metodo m-${v.m}"><i></i>${v.m === 'efectivo' ? 'Efectivo' : v.m === 'transferencia' ? 'Transferencia' : `Dividido: 💵 ${pesos(partesDe(v).efectivo)} + 📲 ${pesos(partesDe(v).transferencia)}`}</span>${v.pt ? `<br><span class="hint">${v.pt.map(([m, x, q]) => `${esc(q)} ${m === 'e' ? '💵' : '📲'} ${pesos(x)}`).join(' · ')}</span>` : ''}</td>
+          <td><span class="metodo m-${v.m}"><i></i>${v.m === 'efectivo' ? 'Efectivo' : v.m === 'transferencia' ? 'Transferencia' : `Dividido: 💵 ${pesos(partesDe(v).efectivo)} + 📲 ${pesos(partesDe(v).transferencia)}`}</span>${v.pt ? `<br><span class="hint">${v.pt.map(([m, x, q]) => `${esc(q)} ${m === 'e' ? '💵' : '📲'} ${pesos(x)}`).join(' · ')}</span>` : ''}${comprobantes[v.id] ? ` <button class="mini adj-on" data-comp="${esc(comprobantes[v.id])}">📎</button>` : v.m !== 'efectivo' ? ' <span class="hint" title="Sin foto del comprobante">· sin comprobante</span>' : ''}</td>
           <td class="hint">${esc(v.u)} / ${esc(v.cb)}</td>
           <td class="num"><b>${pesos(v.t)}</b></td></tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="6"><b>Total</b></td><td class="num"><b>${pesos(total)}</b></td></tr></tfoot>`
@@ -149,6 +151,7 @@
     $('#buscar').addEventListener('input', render);
 
     $('#desde').value = H; $('#hasta').value = H;
+    $('#tabla').addEventListener('click', async (e) => { const b = e.target.closest('[data-comp]'); if (!b) return; try { verArchivo(await api(`/api/pedidos?r=comprobante&clave=${encodeURIComponent(b.dataset.comp)}`), '📲 Comprobante'); } catch (err) { toast(err.message, true); } });
     pintarFiltros(); cargar();
   </script>
 </body>

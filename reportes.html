@@ -59,6 +59,24 @@
         <div class="kpis" id="mCompraKpis" style="margin:0 0 12px"></div>
         <div class="tabla-wrap"><table class="tabla" id="mCompraTabla"></table></div>
       </section>
+      <section class="card">
+        <h2>💵 Efectivo vs 📲 Transferencia · mes a mes</h2>
+        <div class="leyenda-ef"><span><i class="c-ef"></i>Efectivo</span><span><i class="c-tr"></i>Transferencia</span></div>
+        <div class="tabla-wrap"><table class="tabla" id="mEfTr"></table></div>
+      </section>
+      <section class="card">
+        <h2>📥 Meses anteriores <span class="hint">(antes de usar la app)</span></h2>
+        <p class="hint" style="margin-top:0">Escribe los totales de un mes viejo y aparecen en las comparaciones. Solo se usan si ese mes no tiene ventas ni compras registradas en la app.</p>
+        <form id="fHist" class="hist-form">
+          <label class="campo"><span>Mes</span><input class="field" type="month" name="mes" required></label>
+          <label class="campo"><span>💵 Ventas en efectivo</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" inputmode="numeric" name="ventasEf"></div></label>
+          <label class="campo"><span>📲 Ventas por transferencia</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" inputmode="numeric" name="ventasTr"></div></label>
+          <label class="campo"><span>💵 Compras en efectivo</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" inputmode="numeric" name="comprasEf"></div></label>
+          <label class="campo"><span>📲 Compras por transferencia</span><div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" inputmode="numeric" name="comprasTr"></div></label>
+          <button class="btn" style="align-self:end">💾 Guardar mes</button>
+        </form>
+        <div class="tabla-wrap"><table class="tabla" id="mHist"></table></div>
+      </section>
       <div class="dos-col">
         <section class="card"><h2>📅 Promedio por jornada según el día</h2><div id="mSemana"></div></section>
         <section class="card"><h2>💸 ¿En qué se fue la plata?</h2><div id="mGastos"></div></section>
@@ -309,6 +327,33 @@
     };
     let sufijoDelta = '';
 
+    // ---------- Meses anteriores (a mano) ----------
+    let historico = {};
+    async function cargarHistorico() { try { ({ historico } = await api('/api/ventas?r=historico')); pintarHistorico(); } catch {} }
+    function pintarHistorico() {
+      const l = Object.entries(historico).sort((a, b) => b[0].localeCompare(a[0]));
+      $('#mHist').innerHTML = l.length ? `<thead><tr><th>Mes</th><th class="num">Ventas 💵</th><th class="num">Ventas 📲</th><th class="num">Compras 💵</th><th class="num">Compras 📲</th><th></th></tr></thead><tbody>` +
+        l.map(([m, h]) => `<tr><td>${mesTxt(m)}</td><td class="num">${pesos(h.ventasEf)}</td><td class="num">${pesos(h.ventasTr)}</td><td class="num">${pesos(h.comprasEf)}</td><td class="num">${pesos(h.comprasTr)}</td>
+          <td style="white-space:nowrap"><button class="mini" data-hedit="${m}">✏️</button> <button class="del" data-hdel="${m}">🗑</button></td></tr>`).join('') + '</tbody>'
+        : '<tr><td class="empty">Aún no has escrito meses anteriores.</td></tr>';
+    }
+    const fH = $('#fHist');
+    fH.mes.max = sumarMeses(hoy().slice(0, 7) + '-01', -1).slice(0, 7);
+    fH.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { ({ historico } = await api('/api/ventas?r=historico', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(fH))) })); toast(`✅ ${mesTxt(fH.mes.value)} guardado`); fH.reset(); pintarHistorico(); cargarMensual(); }
+      catch (err) { toast(err.message, true); }
+    });
+    $('#mHist').addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.hedit) { const h = historico[b.dataset.hedit]; fH.mes.value = b.dataset.hedit; for (const k of ['ventasEf', 'ventasTr', 'comprasEf', 'comprasTr']) fH[k].value = h[k] || ''; fH.scrollIntoView({ behavior: 'smooth' }); }
+      if (b.dataset.hdel) {
+        if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
+        try { ({ historico } = await api('/api/ventas?r=historico', { method: 'DELETE', body: JSON.stringify({ mes: b.dataset.hdel }) })); pintarHistorico(); cargarMensual(); } catch (err) { toast(err.message, true); }
+      }
+    });
+    cargarHistorico();
+
     async function cargarMensual() {
       const mes = ancla.slice(0, 7);
       try {
@@ -406,6 +451,15 @@
             <td class="num">${pc(x) === null ? '—' : pc(x) + '%'}</td><td class="num ${x.ventas - x.compras < 0 ? 'neg' : 'pos'}">${pesos(x.ventas - x.compras)}</td>
             <td>${top ? `${CATS[top[0]] || top[0]} · ${pesos(top[1])}` : '<span class="hint">—</span>'}</td></tr>`;
         }).join('') + '</tbody>';
+
+      // ---------- Efectivo vs transferencia ----------
+      const barraEf = (ef, tr) => { const t = ef + tr; return t ? `<div class="barra-eftr" title="${Math.round((ef / t) * 100)}% efectivo"><i class="c-ef" style="width:${(ef / t) * 100}%"></i><i class="c-tr" style="width:${(tr / t) * 100}%"></i></div><small class="hint">${Math.round((ef / t) * 100)}% 💵 · ${Math.round((tr / t) * 100)}% 📲</small>` : '<span class="hint">—</span>'; };
+      $('#mEfTr').innerHTML = `<thead><tr><th>Mes</th><th class="num">Ventas 💵</th><th class="num">Ventas 📲</th><th>Ventas</th><th class="num">Compras 💵</th><th class="num">Compras 📲</th><th>Compras</th></tr></thead><tbody>` +
+        [...M].reverse().filter((x) => x.ventas || x.compras).map((x) => `<tr ${x.mes === act.mes ? 'class="fila-sel"' : ''}>
+          <td>${mesTxt(x.mes)}${x.manual ? ' <span class="hint" title="Escrito a mano">📥</span>' : ''}</td>
+          <td class="num">${pesos(x.efectivo)}</td><td class="num">${pesos(x.transferencia)}</td><td style="min-width:120px">${barraEf(x.efectivo, x.transferencia)}</td>
+          <td class="num">${pesos(x.comprasEf || 0)}</td><td class="num">${pesos(x.comprasTr || 0)}${x.comprasOtro ? `<br><small class="hint">+ ${pesos(x.comprasOtro)} otro</small>` : ''}</td><td style="min-width:120px">${barraEf(x.comprasEf || 0, x.comprasTr || 0)}</td>
+        </tr>`).join('') + '</tbody>';
 
       // ---------- Por día de la semana ----------
       const filasSem = d.detalle.porDiaSemana.filter((x) => x.jornadas).map((x) => [`${DIAS[x.dia]} <span class="hint">(${x.jornadas})</span>`, x.promedio, pesos(x.promedio)]);

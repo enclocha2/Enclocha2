@@ -170,3 +170,19 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 ## v53 · Para llevar solo granizados y neveras
 - `vaParaLlevar` (catalog.js): solo granizados en vaso (gastan tapa) y neveras (traen su propia tapa, no gastan). Peceras, cervezas, licor, copas, sodas, etc. no.
 - En Tomar pedido el selector "Para tomar aquí / Para llevar" solo aparece si se está armando un granizado o hay granizados/neveras en el pedido. El servidor ignora "llevar" si el pedido no tiene ninguno.
+
+## v55 · Presupuesto con tope, pagos mixtos, comprobantes y más
+- **¿De dónde sale la plata?** (`origen` en cada compra, `ORIGENES_COMPRA` en catalog.js):
+  - 💼 Presupuesto: nunca se pasa del monto. `repartirPresupuesto` lo reparte en orden (fecha, registro, línea); si una factura no alcanza, una parte sale de presupuesto y el resto de ventas.
+  - 💰 Plata de ventas: no toca presupuesto ni caja.
+  - 🔒 Caja del día: solo cositas del diario (aviso desde $60.000, `TOPE_CAJA`), siempre en efectivo, se descuenta en el cierre.
+  - Compras viejas: efectivo sin origen = caja; lo demás = presupuesto.
+- Compras: filtro Todo / Presupuesto / Ventas / Caja; cada factura muestra cuánto salió de cada lado; KPIs con efectivo y transferencia.
+- Presupuesto del mes: "Pagado con ventas" junta lo que no alcanzó, las compras con ventas y las cositas de la caja.
+- **Pago mixto** (una persona, parte efectivo y parte transferencia): botón 💵+📲 en Tomar pedido, Pedidos y Cuentas (`pagoMixto` en sesion.js; se guarda como partes).
+- **Comprobante de transferencia**: cada cobro con transferencia pide la foto (`pedirComprobante`). Se guarda en `/api/pedidos?r=comprobante` (hash `comprobantes` pedido→archivo). Se ve con 📎 en Pedidos y Ventas.
+- **Vender sin inventario (solo Stiv)**: casilla en Tomar pedido; `ajustes.sinStock`, ruta `/api/ajustes?r=sinstock`. Solo le aplica a Stiv.
+- **Mezclador bebidas plano**: regla nueva "🛒 Cada vez que se vende" (`vendido`). Se agrega sola para todo producto con "michelada" o "soda saborizada" en el nombre (`asegurarMezclador`).
+- Reportes mensual: tabla 💵 vs 📲 mes a mes (ventas y compras) y **📥 Meses anteriores** para escribir totales viejos (`/api/ventas?r=historico`, por sede).
+- Gastos fijos: foto o PDF de la factura de cada pago (al pagar o después).
+- Los campos de valores aceptan cualquier número (antes pedían múltiplos de 100).

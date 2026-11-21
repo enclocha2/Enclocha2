@@ -346,7 +346,43 @@ export const CATEGORIAS_COMPRA = [
 export const UNIDADES = ['und', 'bolsa', 'paca', 'caja', 'media caja', 'kg', 'lb', 'litro', 'botella', 'paquete'];
 // Una compra en efectivo sale de la caja del día (se descuenta en el cierre) o del presupuesto (plata aparte).
 // Nunca de los dos: lo que sale de la caja no gasta presupuesto y lo del presupuesto no se descuenta en el cierre.
-export const saleDeCaja = (c) => c.pago === 'caja' && c.origen !== 'presupuesto';
+// ¿De dónde sale la plata de una compra?
+//  presupuesto: lo del mes para compras (tiene tope; lo que se pase sale de ventas)
+//  ventas: plata acumulada de las ventas (la que ya se guardó/consignó)
+//  caja: efectivo del cajón del día, solo para cosas pequeñas del diario (limones, hielo…); se descuenta en el cierre
+// Solo Stiv puede activar "vender aunque no haya inventario"
+// Mezclador de bebidas plano: va en cada michelada (cerveza, soda, smirnoff…) y en la soda saborizada
+export const llevaMezclador = (p) => { const n = normalizar(p?.nombre || ''); return /michelad/.test(n) || /soda saborizada/.test(n); };
+export function asegurarMezclador(items, cfg) {
+  const mez = items.find((i) => /mezclador/.test(normalizar(i.nombre)));
+  if (!mez || !cfg?.productos) return null;
+  const faltan = cfg.productos.filter((p) => llevaMezclador(p) && !(mez.reglas || []).some((r) => r.tipo === 'vendido' && r.id === p.id));
+  if (!faltan.length) return null;
+  return items.map((i) => (i.id === mez.id ? { ...i, reglas: [...(i.reglas || []), ...faltan.map((p) => ({ tipo: 'vendido', id: p.id, cantidad: 1 }))] } : i));
+}
+export const esStiv = (u) => normalizar(u || '') === 'stiv';
+export const ORIGENES_COMPRA = [
+  { id: 'presupuesto', nombre: 'Presupuesto', icono: '💼', ayuda: 'Lo del mes para compras. Si no alcanza, lo que falte sale de ventas.' },
+  { id: 'ventas', nombre: 'Plata de ventas', icono: '💰', ayuda: 'Plata de las ventas que ya está guardada o consignada.' },
+  { id: 'caja', nombre: 'Caja del día', icono: '🔒', ayuda: 'Efectivo del cajón, solo cosas pequeñas del diario (limones, hielo…). Se descuenta en el cierre.' },
+];
+export const TOPE_CAJA = 60000; // de ahí para arriba se avisa que no es compra "del diario"
+export const origenDe = (c) => c.origen === 'ventas' ? 'ventas' : c.origen === 'caja' ? 'caja' : c.origen === 'presupuesto' ? 'presupuesto' : c.pago === 'caja' ? 'caja' : 'presupuesto';
+export const saleDeCaja = (c) => origenDe(c) === 'caja';
+// Reparte el presupuesto del mes entre sus compras en orden (fecha, hora de registro, línea).
+// Devuelve { [idCompra]: { pres, ventas, caja } }. El presupuesto nunca se pasa del monto.
+export function repartirPresupuesto(compras, monto) {
+  let queda = Math.max(0, monto || 0); const out = {};
+  const orden = [...compras].sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.creado || 0) - (b.creado || 0) || (a.linea || 0) - (b.linea || 0));
+  for (const c of orden) {
+    const o = origenDe(c);
+    if (o === 'caja') { out[c.id] = { pres: 0, ventas: 0, caja: c.valor }; continue; }
+    if (o === 'ventas') { out[c.id] = { pres: 0, ventas: c.valor, caja: 0 }; continue; }
+    const p = Math.min(queda, c.valor); queda -= p;
+    out[c.id] = { pres: p, ventas: c.valor - p, caja: 0 };
+  }
+  return { reparto: out, queda };
+}
 export const PAGOS_COMPRA = [
   { id: 'caja', nombre: 'Efectivo', icono: '💵', ayuda: 'Sale de la caja: se descuenta en el cierre' },
   { id: 'transferencia', nombre: 'Transferencia', icono: '📲' },
@@ -396,6 +432,8 @@ export function consumoDe(items, inventario, ctx = {}) {
         const q = it.cantidad || 1;
         // "inv" = de qué producto se descuenta (null = no lleva inventario); pedidos viejos: el mismo producto
         if (r.tipo === 'producto' && it.tipo === 'producto' && ('inv' in it ? it.inv : it.productoId) === r.id) sumar(inv.id, q * k);
+        // "vendido": cada vez que se vende ESE producto (ej. mezclador en cada michelada), sin importar de qué se descuente
+        if (r.tipo === 'vendido' && it.tipo === 'producto' && it.productoId === r.id) sumar(inv.id, q * k);
         if (it.tipo !== 'granizado') continue;
         const rc = it.receta; // pedidos viejos no tienen receta: 1 vaso del tamaño y 1 pitillo
         if (r.tipo === 'producto' && it.producto?.inv === r.id) sumar(inv.id, q * k); // Coronita de la pecera, Corona de la nevera

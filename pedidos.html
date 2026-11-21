@@ -67,7 +67,7 @@
 
   <script type="module">
     import { pesos, vistaItem, METODOS_PAGO, agruparCuentas, cuentaDe, partesDe } from '/catalog.js';
-    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario, puede, dividirPago, textoPago, toast } from '/sesion.js';
+    import { requerirSesion, api, traerPedidos, leerQR, htmlQR, enHorarioOperacion, avisoHorario, puede, dividirPago, textoPago, toast, pagoMixto, pedirComprobante, verArchivo, transferenciaDe } from '/sesion.js';
     import { hoy, inicioJornada } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -145,6 +145,7 @@
         conocidos = ids;
 
         render(new Set(nuevos.map((p) => p.id)));
+        revisarComprobantes();
         if (nuevos.length) avisar(nuevos);
       } catch {
         $('#status').className = 'status off';
@@ -179,6 +180,14 @@
     };
 
     let cuentasMap = new Map();
+    // Comprobantes de transferencias: se consultan solo cuando aparecen pedidos pagados nuevos
+    let comprobantes = {}; const yaPregunte = new Set();
+    async function revisarComprobantes() {
+      const nuevos = pedidos.filter((p) => p.pago?.pagado && ['transferencia', 'mixto'].includes(p.pago.metodo) && !yaPregunte.has(p.id)).map((p) => p.id);
+      if (!nuevos.length) return;
+      nuevos.forEach((id) => yaPregunte.add(id));
+      try { const r = await api(`/api/pedidos?r=comprobante&ids=${nuevos.join(',')}`); Object.assign(comprobantes, r.comprobantes); render(); } catch {}
+    }
 
     function bloquePago(p) {
       const pg = p.pago || {};
@@ -188,14 +197,17 @@
         ? `<div class="pago cuenta-linea">🔗 Cuenta de ${esc(p.cliente)}: ${c.pedidos.filter((x) => x.estado !== 'cancelado').map((x) => '#' + x.numero).join(' + ')}${c.pendiente ? ` · por cobrar <b>${pesos(c.pendiente)}</b>` : ' · pagada'}</div>` : '';
       if (pg.pagado) {
         const m = metodo(pg.metodo);
+        const conTr = pg.metodo === 'transferencia' || pg.metodo === 'mixto';
+        const comp = conTr ? (comprobantes[p.id] ? `<button class="mini adj-on" data-id="${p.id}" data-vercomp="1">📎 Comprobante</button>` : puede('cobrar') ? `<button class="mini" data-id="${p.id}" data-subircomp="1">📷 Comprobante</button>` : '') : '';
         return lineaCuenta + `<div class="pago ok"><span>✅ Pagado · ${textoPago(pg, p.total) || `${m?.icono} ${m?.nombre}`} · cobró ${esc(pg.cobradoPor)}</span>
-          ${puede('cobrar') ? `<button class="undo" data-id="${p.id}" data-despagar="1">deshacer</button>` : ''}</div>`;
+          <span class="row" style="gap:6px">${comp}${puede('cobrar') ? `<button class="undo" data-id="${p.id}" data-despagar="1">deshacer</button>` : ''}</span></div>`;
       }
       const botones = !puede('cobrar') ? '' : METODOS_PAGO.map((m) =>
         `<button class="${pg.metodo === m.id ? 'sug' : ''}" data-id="${p.id}" data-cobrar="${m.id}" title="${enCuenta ? 'Cobra toda la cuenta' : ''}">Cobrado${enCuenta ? ' todo' : ''} ${m.icono}</button>`).join('')
-        + (puede('cobrar') ? `<button data-id="${p.id}" data-dividir="1" title="Varias personas pagan, unos en efectivo y otros por transferencia">➗ Dividir</button>` : '');
+        + (puede('cobrar') ? `<button class="${pg.metodo === 'mixto' ? 'sug' : ''}" data-id="${p.id}" data-mixto="1" title="Una parte en efectivo y otra por transferencia">💵+📲</button><button data-id="${p.id}" data-dividir="1" title="Varias personas pagan, unos en efectivo y otros por transferencia">➗ Dividir</button>` : '');
+      const intencion = pg.metodo === 'mixto' ? `💵 ${pesos(pg.efectivo || 0)} + 📲 ${pesos(Math.max(0, p.total - (pg.efectivo || 0)))}` : `${metodo(pg.metodo)?.icono} ${metodo(pg.metodo)?.nombre}`;
       return lineaCuenta + (pg.ahora
-        ? `<div class="pago barra"><span>💰 Paga en barra · ${metodo(pg.metodo)?.icono} ${metodo(pg.metodo)?.nombre}</span><div class="cobrar">${botones}</div></div>`
+        ? `<div class="pago barra"><span>💰 Paga en barra · ${intencion}</span><div class="cobrar">${botones}</div></div>`
         : `<div class="pago despues"><span>${p.agregadoACuenta ? '➕ Agregado a la cuenta' : '⏳ Paga después'}</span><div class="cobrar">${botones}</div></div>`);
     }
 
@@ -311,7 +323,14 @@
       $('#mqQR').innerHTML = htmlQR(await leerQR(), pesos(monto));
     }
     $('#mqNo').addEventListener('click', () => $('#modalQR').classList.remove('show'));
-    $('#mqSi').addEventListener('click', () => { $('#modalQR').classList.remove('show'); if (aCobrarQR) cobrarCuenta(aCobrarQR, 'transferencia'); });
+    $('#mqSi').addEventListener('click', async () => {
+      $('#modalQR').classList.remove('show'); if (!aCobrarQR) return;
+      const c = cuentasMap.get(aCobrarQR);
+      const ids = c ? c.abiertos.map((x) => x.id) : pedidos.filter((x) => cuentaDe(x) === aCobrarQR).map((x) => x.id);
+      const monto = c ? c.pendiente : pedidos.find((x) => cuentaDe(x) === aCobrarQR)?.total || 0, nombre = $('#mqNombre').textContent;
+      await cobrarCuenta(aCobrarQR, 'transferencia');
+      if (await pedirComprobante({ ids, monto, nombre })) { ids.forEach((id) => { comprobantes[id] = 1; }); render(); }
+    });
 
     let aCancelar = null;
     document.querySelector('main').addEventListener('click', async (e) => {
@@ -319,17 +338,30 @@
       if (!b) return;
       const id = b.dataset.id;
       if (b.dataset.e) return actualizar(id, { estado: b.dataset.e });
-      if (b.dataset.dividir) {
+      if (b.dataset.dividir || b.dataset.mixto) {
         const p = pedidos.find((x) => x.id === b.dataset.id); if (!p) return;
         const c = cuentasMap.get(cuentaDe(p));
         const enCuenta = c && c.pedidos.filter((x) => x.estado !== 'cancelado').length > 1;
         const total = enCuenta ? c.pendiente : p.total;
-        const partes = await dividirPago({ total, nombre: p.cliente });
+        const ids = enCuenta ? c.abiertos.map((x) => x.id) : [p.id];
+        const partes = b.dataset.mixto ? await pagoMixto({ total, nombre: p.cliente, efectivo: p.pago?.metodo === 'mixto' ? p.pago.efectivo : 0 }) : await dividirPago({ total, nombre: p.cliente });
         if (!partes) return;
         try {
           await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify(enCuenta ? { cobrarCuenta: cuentaDe(p), partes } : { id: p.id, pago: { pagado: true, partes } }) });
+          const tr = transferenciaDe(null, partes);
+          if (tr) { if (await pedirComprobante({ ids, monto: tr, nombre: p.cliente })) ids.forEach((id) => { comprobantes[id] = 1; }); }
         } catch (err) { toast(err.message, true); }
         estado.rev = null; return cargar();
+      }
+      if (b.dataset.vercomp) {
+        try { verArchivo(await api(`/api/pedidos?r=comprobante&id=${encodeURIComponent(id)}`), '📲 Comprobante de transferencia'); } catch (err) { toast(err.message, true); }
+        return;
+      }
+      if (b.dataset.subircomp) {
+        const p = pedidos.find((x) => x.id === id); if (!p) return;
+        const tr = p.pago?.metodo === 'mixto' ? p.total - (p.pago.efectivo || 0) : p.total;
+        if (await pedirComprobante({ ids: [id], monto: tr, nombre: p.cliente })) { comprobantes[id] = 1; render(); }
+        return;
       }
       if (b.dataset.cobrar) {
         const p = pedidos.find((x) => x.id === id);

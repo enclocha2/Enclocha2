@@ -53,7 +53,7 @@
     </div>
 
     <section class="card">
-      <h2>🧾 Movimientos del mes <span class="hint">(las compras gastan primero el presupuesto y luego las ventas; lo pagado con efectivo de la caja y los gastos fijos no usan el presupuesto)</span></h2>
+      <h2>🧾 Movimientos del mes <span class="hint">(el presupuesto nunca se pasa: cuando se acaba, lo que falta de cada factura sale de la plata de ventas)</span></h2>
       <div class="tabla-wrap"><table class="tabla" id="tabla"></table></div>
     </section>
   </main>
@@ -62,8 +62,8 @@
   <div class="modal" id="modal">
     <div class="box">
       <h3>💼 Presupuesto de <span id="mMes"></span></h3>
-      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras (insumos, hielo, vasos, licor...). Lo que se paga con el efectivo de la caja del día se descuenta en el cierre y no gasta presupuesto. Los gastos fijos (arriendo, servicios, sueldos) no usan el presupuesto: se pagan con las ventas.</p>
-      <label class="campo"><span>Valor</span><div class="precio"><span>$</span><input class="field" id="mMonto" type="number" min="0" step="10000" inputmode="numeric"></div></label>
+      <p class="hint" style="margin:0">Con cuánto arranca el mes para compras (insumos, vasos, licor...). Nunca se pasa: cuando se acaba, lo que falte sale de la plata de ventas. Las cositas del diario (limones, hielo) se pagan con la caja del día. Los gastos fijos (arriendo, servicios, sueldos) no usan el presupuesto: se pagan con las ventas.</p>
+      <label class="campo"><span>Valor</span><div class="precio"><span>$</span><input class="field" id="mMonto" type="number" min="0" step="1" inputmode="numeric"></div></label>
       <label class="campo"><span>Nota (opcional)</span><input class="field" id="mNota" maxlength="160" placeholder="Ej: lo que sobró de octubre"></label>
       <label class="campo row" style="gap:10px;align-items:center"><span class="switch"><input type="checkbox" id="mRepetir"><span></span></span>Usar este mismo presupuesto todos los meses</label>
       <div class="error" id="mError"></div>
@@ -100,53 +100,53 @@
       $('#origen').textContent = p.origen === 'automatico' ? '🔁 Automático (el mismo todos los meses)' : p.origen === 'sin-definir' ? '⚠️ Sin definir' : p.nota ? `📝 ${p.nota}` : `Definido por ${p.por || ''}`;
       $('#editar').textContent = p.origen === 'sin-definir' ? '✏️ Definir presupuesto' : '✏️ Cambiar';
 
-      const pct = p.monto ? Math.min(100, Math.round((s.delPresupuesto / p.monto) * 100)) : (s.gastado ? 100 : 0);
-      const est = s.deVentas > 0 ? 'agotado' : pct >= 80 ? 'alerta' : 'ok';
+      const pct = p.monto ? Math.min(100, Math.round((s.delPresupuesto / p.monto) * 100)) : 0;
+      const est = s.excedente > 0 || (p.monto && s.queda <= 0) ? 'agotado' : pct >= 80 ? 'alerta' : 'ok';
       $('#barra').style.width = pct + '%';
       $('#barra').className = est;
       $('#barraTxt').textContent = p.monto ? `${pct}% usado` : '';
       $('#estado').className = 'pres-estado ' + est;
       $('#estado').innerHTML = !p.monto
-        ? `Define el presupuesto del mes para saber cuándo empiezas a gastar plata de las ventas.${s.gastado ? ` Por ahora van <b>${pesos(s.gastado)}</b> en compras.` : ''}`
-        : s.deVentas > 0
-        ? `🔴 <b>El presupuesto se agotó el ${fechaCorta(s.agotadoEl)}.</b> Desde ahí se han pagado <b>${pesos(s.deVentas)}</b> con plata de las ventas del mes.`
+        ? `Define el presupuesto del mes. Mientras no haya, las compras marcadas "presupuesto" se pagan con ventas.`
+        : s.queda <= 0
+        ? `🔴 <b>Se acabó el presupuesto${s.agotadoEl ? ` el ${fechaCorta(s.agotadoEl)}` : ''}.</b> No se pasa: lo que se compre ahora sale de la plata de ventas${s.excedente ? ` (van ${pesos(s.excedente)})` : ''}.`
         : pct >= 80 ? `🟠 Ojo: quedan solo <b>${pesos(s.queda)}</b> del presupuesto.`
         : `🟢 Quedan <b>${pesos(s.queda)}</b> del presupuesto.`;
 
       $('#kpis').innerHTML = `
-        <div class="kpi"><span>🛒 Compras del mes</span><b>${pesos(s.gastado)}</b><small>${datos.movimientos.filter((m) => !m.fueraPresupuesto).length} movimientos</small></div>
-        <div class="kpi"><span>💼 Del presupuesto</span><b>${pesos(s.delPresupuesto)}</b><small>quedan ${pesos(s.queda)}</small></div>
-        <div class="kpi"><span>💰 Compras pagadas con ventas</span><b>${pesos(s.deVentas)}</b><small>lo que se pasó del presupuesto</small></div>
-        <div class="kpi"><span>🔒 Pagado con la caja</span><b>${pesos(s.caja || 0)}</b><small>efectivo del día, no usa presupuesto</small></div>
-        <div class="kpi"><span>🏦 Gastos fijos</span><b>${pesos(s.fijos || 0)}</b><small>no usan el presupuesto</small></div>`;
+        <div class="kpi"><span>💼 Del presupuesto</span><b>${pesos(s.delPresupuesto)}</b><small>quedan ${pesos(s.queda)} · nunca se pasa</small></div>
+        <div class="kpi"><span>💰 Pagado con ventas</span><b>${pesos(s.deVentas + s.caja)}</b><small>${[s.excedente && `${pesos(s.excedente)} que no alcanzó el presupuesto`, s.comprasVentas && `${pesos(s.comprasVentas)} compras con ventas`, s.caja && `${pesos(s.caja)} cositas de la caja del día`].filter(Boolean).join(' · ') || 'nada todavía'}</small></div>
+        <div class="kpi"><span>🏦 Gastos fijos</span><b>${pesos(s.fijos || 0)}</b><small>salen de ventas, no usan el presupuesto</small></div>`;
 
-      const porTipo = Object.keys(TIPO).map((t) => [t, datos.movimientos.filter((m) => m.tipo === t).reduce((x, m) => x + m.valor, 0)]).filter(([, v]) => v);
+      const porTipo = [['💼 Presupuesto', s.delPresupuesto], ['💰 Ventas (compras)', s.deVentas], ['🔒 Caja del día (diario)', s.caja], ['🏦 Gastos fijos', s.fijos]].filter(([, v]) => v);
       const max = Math.max(1, ...porTipo.map(([, v]) => v));
-      $('#porTipo').innerHTML = porTipo.length ? porTipo.map(([t, v]) => `<div class="barra-h"><span>${TIPO[t][0]} ${TIPO[t][1]}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('')
+      $('#porTipo').innerHTML = porTipo.length ? porTipo.map(([n, v]) => `<div class="barra-h"><span>${n}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('')
         : '<p class="hint">Aún no hay gastos este mes.</p>';
 
       $('#ventas').innerHTML = `
         <div class="fila"><span>Vendido en el mes</span><b>${pesos(s.ventasMes)}</b></div>
-        <div class="fila"><span>− Compras que se pasaron del presupuesto</span><b>${pesos(s.deVentas)}</b></div>
-        <div class="fila"><span>− Compras y gastos pagados con la caja</span><b>${pesos(s.caja || 0)}</b></div>
+        <div class="fila"><span>− Compras pagadas con ventas</span><b>${pesos(s.deVentas)}</b></div>
+        <div class="fila"><span>− Cositas de la caja del día</span><b>${pesos(s.caja || 0)}</b></div>
         <div class="fila"><span>− Gastos fijos pagados</span><b>${pesos(s.fijos || 0)}</b></div>
         <div class="fila total"><span>Te quedan de las ventas</span><b class="${s.quedanVentas < 0 ? 'neg-txt' : 'pos-txt'}">${pesos(s.quedanVentas)}</b></div>
-        ${s.quedanVentas < 0 ? '<p class="hint">⚠️ Los gastos fijos y las compras por encima del presupuesto son más que lo vendido.</p>' : ''}`;
+        ${s.quedanVentas < 0 ? '<p class="hint">⚠️ Lo pagado con ventas y los gastos fijos son más que lo vendido.</p>' : ''}`;
 
+      const TIPOS = { compra: '🛒', fijo: '🏦', caja: '🔒' };
       $('#tabla').innerHTML = datos.movimientos.length ? `
         <thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Valor</th><th>Sale de</th><th class="num">Queda del presupuesto</th></tr></thead>
         <tbody>${datos.movimientos.map((m, i) => {
           const prev = datos.movimientos.slice(0, i).filter((x) => !x.fueraPresupuesto).pop();
           const primero = !m.fueraPresupuesto && m.deVentas > 0 && (!prev || prev.deVentas === 0);
-          const sale = m.deCaja ? '<span class="tag-ventas">🔒 Caja del día</span> <span class="hint">(se descontó en el cierre, no usa presupuesto)</span>'
-            : m.fueraPresupuesto ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(fijo, no usa presupuesto)</span>'
+          const sale = m.tipo === 'fijo' ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(gasto fijo)</span>'
+            : m.origen === 'caja' ? '<span class="tag-ventas">🔒 Caja del día</span>'
+            : m.origen === 'ventas' ? '<span class="tag-ventas">💰 Ventas</span>'
             : m.deVentas === 0 ? '<span class="tag-pres">💼 Presupuesto</span>'
-            : m.delPresupuesto === 0 ? '<span class="tag-ventas">💰 Ventas</span>'
+            : m.delPresupuesto === 0 ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(ya no había presupuesto)</span>'
             : `<span class="tag-pres">💼 ${pesos(m.delPresupuesto)}</span> + <span class="tag-ventas">💰 ${pesos(m.deVentas)}</span>`;
-          return `${primero ? `<tr class="corte"><td colspan="5">🔴 Aquí se agotó el presupuesto · desde aquí se paga con las ventas del mes</td></tr>` : ''}
+          return `${primero ? `<tr class="corte"><td colspan="5">🔴 Aquí se acabó el presupuesto · desde aquí se paga con la plata de ventas</td></tr>` : ''}
           <tr class="${m.deVentas > 0 && !m.fueraPresupuesto ? 'de-ventas' : ''}">
             <td style="white-space:nowrap">${fechaCorta(m.fecha)}</td>
-            <td>${TIPO[m.tipo][0]} <b>${esc(m.concepto)}</b><br><span class="hint">${TIPO[m.tipo][1]}${m.categoria ? ' · ' + esc(CAT[m.categoria]?.nombre || '') : ''} · ${esc(m.por || '')}</span></td>
+            <td>${TIPOS[m.tipo]} <b>${esc(m.concepto)}</b><br><span class="hint">${m.tipo === 'caja' ? 'gasto anotado en el cierre' : m.tipo === 'fijo' ? 'gasto fijo' : esc(CAT[m.categoria]?.nombre || '')}${m.proveedor ? ' · ' + esc(m.proveedor) : ''} · ${esc(m.por || '')}</span></td>
             <td class="num"><b>${pesos(m.valor)}</b></td>
             <td>${sale}</td>
             <td class="num">${datos.presupuesto.monto && !m.fueraPresupuesto ? pesos(m.saldo) : '—'}</td></tr>`;

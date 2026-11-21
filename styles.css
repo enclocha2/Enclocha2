@@ -1215,3 +1215,16 @@ tr.sin-costo td:first-child b { color: #ffd166; }
 }
 .origen-ef { margin-top: 8px; display: grid; gap: 4px; }
 .seg-mini button { padding: 7px 10px; font-size: .85rem; }
+.origen-info { margin: 6px 0; font-size: .85rem; }
+.aviso-mal { color: #ffd166; }
+.sin-stock { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 8px 12px; border-radius: 12px; border: 1px dashed rgba(255, 209, 102, .5); font-weight: 600; cursor: pointer; }
+.sin-stock input { width: 20px; height: 20px; }
+.sin-stock small { color: var(--muted); font-weight: 400; }
+.leyenda-ef { display: flex; gap: 14px; font-size: .85rem; margin-bottom: 8px; }
+.leyenda-ef i, .barra-eftr i { display: inline-block; }
+.leyenda-ef i { width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.c-ef { background: #199e70; } .c-tr { background: #4f8ff0; }
+.barra-eftr { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; background: rgba(255, 255, 255, .06); }
+.barra-eftr i { height: 100%; }
+.hist-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.hist-form .campo { margin: 0; }

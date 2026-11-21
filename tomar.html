@@ -34,6 +34,7 @@
         <input class="field" id="cliente" maxlength="60" placeholder="Nombre de la persona" autocomplete="off" />
         <div id="sugCuentas"></div>
         <div class="cuenta-banner" id="bannerCuenta" hidden></div>
+        <label class="sin-stock" id="sinStockBox" hidden><input type="checkbox" id="sinStockChk"> 📦 Vender aunque no haya inventario <small>(solo tú)</small></label>
         <div class="llevar-sel" id="llevarSel">
           <button type="button" class="on" data-llevar="0">🍹 Para tomar aquí</button>
           <button type="button" data-llevar="1">🥡 Para llevar <small>(granizados y neveras)</small></button>
@@ -130,6 +131,7 @@
       <div class="pago-rapido">
         <button class="opt" data-op="efectivo"><b>💵 Efectivo</b><span>paga ya</span></button>
         <button class="opt" data-op="transferencia"><b>📲 Transferencia</b><span>muestra el QR</span></button>
+        <button class="opt" data-op="mixto"><b>💵+📲 Las dos</b><span>parte y parte</span></button>
         <button class="opt" data-op="despues"><b>⏳ Después</b><span>cuenta abierta</span></button>
       </div>
       <div id="mpMetodo" hidden><div id="mpQR"></div></div>
@@ -153,11 +155,11 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { vaParaLlevar, GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar, consumoDe, faltantes, textoFaltantes, recetaDe, htmlIncluidos, ajustarIncluidos, cambiarIncluido, conteoIncluido, itemBase } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR, puede } from '/sesion.js';
+    import { esStiv, vaParaLlevar, GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar, consumoDe, faltantes, textoFaltantes, recetaDe, htmlIncluidos, ajustarIncluidos, cambiarIncluido, conteoIncluido, itemBase } from '/catalog.js';
+    import { pagoMixto, requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR, puede } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
-    await requerirSesion('tomar');
+    const yo = await requerirSesion('tomar');
 
     let cfg;
     try { ({ config: cfg } = await api('/api/catalogo')); }
@@ -168,7 +170,11 @@
     let inv = { items: [], stock: {} };
     async function cargarInv() { try { inv = await api('/api/inventario?lite=1'); } catch {} }
     await cargarInv();
+    // Stiv puede vender aunque no haya inventario
+    let sinStock = false;
+    if (esStiv(yo.usuario)) { try { sinStock = !!(await api('/api/ajustes')).sinStock; } catch {} }
     function restante() {
+      if (sinStock) return Object.fromEntries(inv.items.map((i) => [i.id, 1e9]));
       const r = { ...inv.stock };
       const cons = consumoDe(carrito.map((d) => armar(d)).filter(Boolean), inv.items, { llevar });
       for (const [id, d] of Object.entries(cons)) r[id] = (r[id] || 0) + d;
@@ -192,6 +198,7 @@
     const agotado = (tipo, id) => { const d = disponible(tipo, id); return !!d && d.n <= 0; };
     // Base del sabor (litros): ¿cuántos granizados de este tamaño alcanzan? (null = no se controla)
     function quedaSabor(id) {
+      if (sinStock) return null;
       const its = inv.items.filter((i) => i.activo !== false && i.reglas?.some((r) => r.tipo === 'sabor' && r.id === id));
       if (!its.length) return null;
       const t = item.tamano && cfg.tamanos.find((x) => x.id === item.tamano);
@@ -464,6 +471,13 @@
     }
 
     // "Para llevar" solo se muestra si hay granizados o neveras (o se está armando uno)
+    if (esStiv(yo.usuario)) {
+      $('#sinStockBox').hidden = false; $('#sinStockChk').checked = sinStock;
+      $('#sinStockChk').addEventListener('change', async (e) => {
+        try { sinStock = (await api('/api/ajustes?r=sinstock', { method: 'PUT', body: JSON.stringify({ activo: e.target.checked }) })).sinStock; toast(sinStock ? '📦 Puedes vender aunque no haya inventario' : '📦 Otra vez se revisa el inventario'); render(); }
+        catch (err) { e.target.checked = sinStock; toast(err.message, true); }
+      });
+    }
     function pintarLlevar() {
       // el botón solo se ve en la pestaña Granizados (y no con pecera); lo escogido se mantiene si hay granizados en el pedido
       const t = item?.tamano && cfg.tamanos.find((x) => x.id === item.tamano);
@@ -559,11 +573,17 @@
       $('#mpConfirmar').disabled = pago.ahora === null || (pago.ahora && !pago.metodo);
     }
 
-    $('#modalPago').addEventListener('click', (e) => {
+    $('#modalPago').addEventListener('click', async (e) => {
       const b = e.target.closest('button');
       if (!b) return;
       if (!b.dataset.op || $('#mpConfirmar').dataset.enviando) return;
       const op = b.dataset.op;
+      if (op === 'mixto') {
+        const partes = await pagoMixto({ total: totalCarrito(), nombre: cliente() });
+        if (!partes) return;
+        pago = { ahora: true, metodo: 'mixto', efectivo: partes[0].valor };
+        renderPago(); return $('#mpConfirmar').click();
+      }
       pago = op === 'despues' ? { ahora: false, metodo: null } : { ahora: true, metodo: op };
       renderPago();
       // efectivo o después: se envía de una; transferencia: primero se muestra el QR

@@ -1,6 +1,6 @@
 // Estadísticas mensuales: ventas vs gastos de los últimos meses + detalle del mes escogido.
 import { sesion } from './auth.js';
-import { leerResumen, comprasEntre, pagosFijosAnio, listarCierres, ventasEntre, migrarVentas, recalcularResumenJornadas, leerPagosFijos, enSede, sedeActual } from './store.js';
+import { leerHistorico, guardarHistorico, leerResumen, comprasEntre, pagosFijosAnio, listarCierres, ventasEntre, migrarVentas, recalcularResumenJornadas, leerPagosFijos, enSede, sedeActual } from './store.js';
 import { sedesCache } from './sede.js';
 
 // Totales del mes en cada sede (para compararlas). Solo para quien no está fijo en una sede.
@@ -28,6 +28,24 @@ export default async function handler(req, res) {
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
   if (!yo.puede('reportes')) return res.status(403).json({ error: 'No tienes permiso para ver reportes' });
   const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+
+  // Meses anteriores escritos a mano
+  if (q.r2 === 'historico') {
+    if (req.method === 'GET') return res.status(200).json({ historico: await leerHistorico() });
+    if (!yo.puede('reportes')) return res.status(403).json({ error: 'No tienes permiso' });
+    const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+    if (!MES.test(b.mes || '')) return res.status(400).json({ error: 'Mes inválido' });
+    if (b.mes >= hoy().slice(0, 7)) return res.status(400).json({ error: 'Solo meses anteriores al actual' });
+    const h = await leerHistorico();
+    if (req.method === 'DELETE') delete h[b.mes];
+    else {
+      const n = (v) => Math.max(0, Math.round(Number(v) || 0));
+      const d = { ventasEf: n(b.ventasEf), ventasTr: n(b.ventasTr), comprasEf: n(b.comprasEf), comprasTr: n(b.comprasTr) };
+      if (!d.ventasEf && !d.ventasTr && !d.comprasEf && !d.comprasTr) return res.status(400).json({ error: 'Escribe al menos un valor' });
+      h[b.mes] = d;
+    }
+    return res.status(200).json({ historico: await guardarHistorico(h) });
+  }
   if (!MES.test(q.mes || '')) return res.status(400).json({ error: 'Mes inválido' });
 
   try {
@@ -37,8 +55,8 @@ export default async function handler(req, res) {
     const desde = `${meses[0]}-01`, hasta = finMes(`${q.mes}-01`);
     const anios = [...new Set(meses.map((m) => m.slice(0, 4)))];
 
-    const [resumen, compras, pagosPorAnio, cierres] = await Promise.all([
-      leerResumen(), comprasEntre(desde, hasta), Promise.all(anios.map(pagosFijosAnio)), listarCierres(800),
+    const [resumen, compras, pagosPorAnio, cierres, historico] = await Promise.all([
+      leerResumen(), comprasEntre(desde, hasta), Promise.all(anios.map(pagosFijosAnio)), listarCierres(800), leerHistorico(),
     ]);
     const pagosPorMes = Object.assign({}, ...pagosPorAnio);
     const hoyJ = hoy();
@@ -68,8 +86,19 @@ export default async function handler(req, res) {
         compras: c.filter((x) => hastaDia(x.fecha)).reduce((s, x) => s + x.valor, 0),
         n: diasC.reduce((s, [, v]) => s + (v.n || 0), 0), jornadas: diasC.filter(([, v]) => (v.total || 0) > 0).length,
       } : null;
+      const comprasEf = c.filter((x) => x.pago === 'caja').reduce((s, x) => s + x.valor, 0);
+      const comprasTr = c.filter((x) => x.pago === 'transferencia').reduce((s, x) => s + x.valor, 0);
+      const h = historico[mes];
+      if (h && !dias.length && !c.length) {
+        // mes de antes de la app: se usan los totales escritos a mano
+        const v = h.ventasEf + h.ventasTr, cm = h.comprasEf + h.comprasTr, g = cm + fijos + caja;
+        return { alDia: null, mes, manual: true, ventas: v, efectivo: h.ventasEf, transferencia: h.ventasTr, n: 0, jornadas: 0,
+          jornadasProgramadas: programadas.length, jornadasTranscurridas: programadas.filter((d) => d <= hoyJ).length,
+          compras: cm, comprasEf: h.comprasEf, comprasTr: h.comprasTr, comprasOtro: 0, comprasPorCat: {}, fijos, caja, gastos: g, utilidad: v - g };
+      }
       return {
         alDia,
+        comprasEf, comprasTr, comprasOtro: comprasT - comprasEf - comprasTr,
         mes, ventas,
         efectivo: dias.reduce((s, [, v]) => s + (v.efectivo || 0), 0),
         transferencia: dias.reduce((s, [, v]) => s + (v.transferencia || 0), 0),

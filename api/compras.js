@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { sesion } from './_lib/auth.js';
 import gastosFijos from './_lib/gastosfijos.js';
-import presupuesto from './_lib/presupuesto.js';
+import presupuesto, { presupuestoDe } from './_lib/presupuesto.js';
 import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock, leerProveedores, guardarProveedores, guardarAdjunto, leerAdjunto, borrarAdjunto, metaAdjuntos, leerCostosManual, guardarCostosManual } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, normalizar, slug, empaquesSugeridos } from '../catalog.js';
+import { repartirPresupuesto } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -23,9 +24,8 @@ function validar(b) {
     cantidad: cantidad || null,
     unidad: UNIDADES.includes(b.unidad) ? b.unidad : 'und',
     valor,
-    pago: PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja',
-    // efectivo: de la caja (cierre) o del presupuesto; transferencia/otro: siempre presupuesto
-    origen: (PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja') === 'caja' && b.origen !== 'presupuesto' ? 'caja' : 'presupuesto',
+    pago: b.origen === 'caja' ? 'caja' : PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja',
+    origen: ['presupuesto', 'ventas', 'caja'].includes(b.origen) ? b.origen : 'presupuesto',
     proveedor: txt(b.proveedor, 60),
     nota: txt(b.nota, 200),
   };
@@ -56,6 +56,31 @@ async function estandarizar(b, datos) {
     // los que llevan stock entran solos al inventario (y sus tapas si el paquete las trae)
     inventario: it.soloCompras ? null : { id: it.id, nombre: it.nombre, unidad: it.unidad, cantidad: unidades, ...(tapa ? { tapa: tapa.id } : {}) },
   };
+}
+
+// ---------- Presupuesto con tope ----------
+// Trae las compras del rango con su reparto (cuánto sale del presupuesto y cuánto de ventas).
+// El reparto se calcula con TODO el mes, en orden, así el presupuesto nunca se pasa.
+const mesesEntre = (d, h) => { const out = []; let m = d.slice(0, 7); while (m <= h.slice(0, 7)) { out.push(m); const [y, mm] = m.split('-').map(Number); m = mm === 12 ? `${y + 1}-01` : `${y}-${String(mm + 1).padStart(2, '0')}`; } return out; };
+async function conReparto(desde, hasta) {
+  const meses = mesesEntre(desde, hasta);
+  const todas = await comprasEntre(`${meses[0]}-01`, `${meses.at(-1)}-31`);
+  const montos = await Promise.all(meses.map((m) => presupuestoDe(m)));
+  const out = [];
+  meses.forEach((m, i) => {
+    const delMes = todas.filter((c) => c.fecha.startsWith(m));
+    const { reparto } = repartirPresupuesto(delMes, montos[i].monto);
+    for (const c of delMes) if (c.fecha >= desde && c.fecha <= hasta) out.push({ ...c, reparto: reparto[c.id] });
+  });
+  return out;
+}
+async function repartoFactura(compras) {
+  if (!compras.length) return null;
+  const f = compras[0].fecha, ids = new Set(compras.map((c) => c.id));
+  const delMes = await conReparto(`${f.slice(0, 7)}-01`, `${f.slice(0, 7)}-31`);
+  const t = { pres: 0, ventas: 0, caja: 0 };
+  for (const c of delMes) if (ids.has(c.id)) { t.pres += c.reparto.pres; t.ventas += c.reparto.ventas; t.caja += c.reparto.caja; }
+  return t;
 }
 
 // ---------- Proveedores ----------
@@ -156,7 +181,7 @@ async function handler(req, res) {
       const factura = String(q.factura || leer(req).factura || '').slice(0, 64);
       if (!factura) return res.status(400).json({ error: 'Falta la factura' });
       if (req.method === 'GET') { const a = await leerAdjunto(factura); return a ? res.status(200).json(a) : res.status(404).json({ error: 'Esta compra no tiene factura adjunta' }); }
-      if (!yo.puede('compras')) return res.status(403).json({ error: 'No tienes permiso' });
+      if (!yo.puede('compras') && !(factura.startsWith('fijo-') && yo.puede('gastos'))) return res.status(403).json({ error: 'No tienes permiso' });
       if (req.method === 'DELETE') { await borrarAdjunto(factura); return res.status(200).json({ ok: true }); }
       if (req.method === 'PUT') {
         const b = leer(req);
@@ -196,7 +221,7 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       if (!FECHA.test(q.desde || '') || !FECHA.test(q.hasta || '')) return res.status(400).json({ error: 'Fechas inválidas' });
-      const compras = (await comprasEntre(q.desde, q.hasta)).sort((a, b) => (b.fecha + b.creado).localeCompare(a.fecha + a.creado));
+      const compras = (await conReparto(q.desde, q.hasta)).sort((a, b) => b.fecha.localeCompare(a.fecha) || (b.creado || 0) - (a.creado || 0) || (a.linea || 0) - (b.linea || 0));
       const facturas = [...new Set(compras.map((c) => c.factura || c.id))];
       const adjuntos = await metaAdjuntos(facturas);
       return res.status(200).json({ compras, adjuntos, admin: yo.puede('compras_editar') });
@@ -216,13 +241,13 @@ async function handler(req, res) {
           catch (e) { return res.status(400).json({ error: `Producto ${k + 1}: ${e.message}` }); }
         }
         const factura = randomUUID(), t = Date.now(), compras = [];
-        for (const d of lista) {
-          const compra = { id: randomUUID(), ...d, factura, registradoPor: usuario, creado: t };
+        for (const [k, d] of lista.entries()) {
+          const compra = { id: randomUUID(), ...d, factura, linea: k, registradoPor: usuario, creado: t };
           await guardarCompra(compra);
           await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
           compras.push(compra);
         }
-        return res.status(201).json({ compras, factura });
+        return res.status(201).json({ compras, factura, reparto: await repartoFactura(compras) });
       }
       let datos;
       try { datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); datos = await conProveedor(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
@@ -230,7 +255,7 @@ async function handler(req, res) {
       const compra = { id: idc, ...datos, factura: idc, registradoPor: usuario, creado: Date.now() };
       await guardarCompra(compra);
       await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
-      return res.status(201).json({ compra });
+      return res.status(201).json({ compra, reparto: await repartoFactura([compra]) });
     }
 
     if (req.method === 'PUT' || req.method === 'DELETE') {
@@ -252,7 +277,7 @@ async function handler(req, res) {
       if (datos.fecha !== actual.fecha) await borrarCompra(actual.id); // reindexar por fecha
       const compra = { ...actual, ...datos, editadoPor: usuario, editado: Date.now() };
       await guardarCompra(compra);
-      return res.status(200).json({ compra });
+      return res.status(200).json({ compra, reparto: await repartoFactura([compra]) });
     }
 
     res.setHeader('Allow', 'GET, POST, PUT, DELETE');

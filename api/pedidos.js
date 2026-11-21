@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados } from './_lib/store.js';
+import { esStiv, vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados, leerAjustes, guardarAdjunto, leerAdjunto, marcarComprobantes, comprobantesDe } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
 
@@ -18,6 +18,29 @@ async function handler(req, res) {
   const prohibido = (msg) => res.status(403).json({ error: msg });
 
   try {
+    // ---------- Comprobantes de transferencia ----------
+    const q = req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams);
+    if (q.r === 'comprobante') {
+      if (req.method === 'GET') {
+        if (q.ids) return res.status(200).json({ comprobantes: await comprobantesDe(String(q.ids).split(',').slice(0, 500)) });
+        const clave = String(q.clave || '').slice(0, 80) || (await comprobantesDe([String(q.id)]))[q.id];
+        const a = clave && (await leerAdjunto(clave));
+        return a ? res.status(200).json(a) : res.status(404).json({ error: 'No tiene comprobante' });
+      }
+      if (req.method === 'PUT') {
+        if (!yo.puede('cobrar') && !yo.puede('tomar')) return prohibido('No tienes permiso');
+        const b = leer(req);
+        const ids = (Array.isArray(b.ids) ? b.ids : []).map(String).filter(Boolean).slice(0, 60);
+        if (!ids.length) throw new ErrorUsuario('Falta el pedido');
+        if (typeof b.data !== 'string' || !/^data:(image\/(jpeg|png|webp)|application\/pdf);base64,/.test(b.data)) throw new ErrorUsuario('Debe ser una foto o un PDF');
+        if (b.data.length > 950 * 1024) throw new ErrorUsuario('El archivo es muy pesado');
+        const clave = `pago-${ids[0]}-${Date.now().toString(36)}`;
+        await guardarAdjunto(clave, { data: b.data, nombre: String(b.nombre || 'comprobante').slice(0, 80), tipo: b.data.slice(5, b.data.indexOf(';')), subidoPor: usuario });
+        await marcarComprobantes(ids, clave);
+        return res.status(200).json({ ok: true, clave });
+      }
+    }
+
     // Listar pedidos
     if (req.method === 'GET') {
       const rev = await leerRev();
@@ -53,8 +76,9 @@ async function handler(req, res) {
       if (items.length > 60) throw new ErrorUsuario('Demasiados productos en un pedido');
 
       const ahora = !cuenta && !!body.pago?.ahora;
-      const metodo = ahora && metodoValido(body.pago?.metodo) ? body.pago.metodo : null;
+      const metodo = ahora && (metodoValido(body.pago?.metodo) || body.pago?.metodo === 'mixto') ? body.pago.metodo : null;
       if (ahora && !metodo) throw new ErrorUsuario('Escoge efectivo o transferencia');
+      const efectivoMixto = metodo === 'mixto' ? Math.round(Number(body.pago.efectivo) || 0) : null;
 
       // Inventario: si algo está agotado o no alcanza, no se deja tomar el pedido
       const inventario = await leerInventario();
@@ -62,7 +86,9 @@ async function handler(req, res) {
       const consumo = consumoDe(items, inventario, { llevar });
       const [stockAct, prestados] = await Promise.all([leerStock(), leerPrestados()]);
       const falta = faltantes(consumo, stockDisponible(stockAct, inventario, prestados), inventario);
-      if (falta.length) throw new ErrorUsuario(`No hay suficiente inventario: ${textoFaltantes(falta)}`);
+      // Stiv puede vender aunque no haya inventario (si tiene la opción prendida)
+      const sinControl = esStiv(usuario) && !!(await leerAjustes()).sinStock;
+      if (falta.length && !sinControl) throw new ErrorUsuario(`No hay suficiente inventario: ${textoFaltantes(falta)}`);
 
       const t = Date.now();
       const id = randomUUID();
@@ -75,7 +101,7 @@ async function handler(req, res) {
         items,
         total: items.reduce((s, i) => s + i.subtotal, 0),
         estado: 'nuevo',
-        pago: { ahora, metodo, pagado: false },
+        pago: { ahora, metodo, pagado: false, ...(metodo === 'mixto' ? { efectivo: efectivoMixto } : {}) },
         tomadoPor: usuario,
         creado: t,
         historial: [{ accion: 'tomado', usuario, en: t }],

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sesion } from './auth.js';
-import { leerGastosFijos, guardarGastosFijos, leerPagosFijos, guardarPagosFijos, pagosFijosAnio } from './store.js';
+import { leerGastosFijos, guardarGastosFijos, leerPagosFijos, guardarPagosFijos, pagosFijosAnio, metaAdjuntos, borrarAdjunto } from './store.js';
 import { CATEGORIAS_FIJO, PERIODOS_FIJO, slug } from '../../catalog.js';
 
 const MES = /^\d{4}-\d{2}$/;
@@ -24,7 +24,8 @@ export default async function handler(req, res) {
       if (q.anio && /^\d{4}$/.test(q.anio)) return res.status(200).json({ porMes: await pagosFijosAnio(q.anio) });
       if (!MES.test(q.mes || '')) return res.status(400).json({ error: 'Mes inválido' });
       const [gastos, pagos] = await Promise.all([leerGastosFijos(), leerPagosFijos(q.mes)]);
-      return res.status(200).json({ gastos, pagos });
+      const adjuntos = await metaAdjuntos(pagos.map((p) => `fijo-${p.id}`)); // factura o recibo de cada pago
+      return res.status(200).json({ gastos, pagos, adjuntos });
     }
 
     // PUT { gastos: [...] } → guarda la lista de gastos fijos
@@ -79,6 +80,7 @@ export default async function handler(req, res) {
       if (!MES.test(q.mes || '')) return res.status(400).json({ error: 'Mes inválido' });
       const pagos = await leerPagosFijos(q.mes);
       await guardarPagosFijos(q.mes, pagos.filter((p) => p.id !== q.id));
+      await borrarAdjunto(`fijo-${q.id}`);
       return res.status(200).json({ ok: true });
     }
 

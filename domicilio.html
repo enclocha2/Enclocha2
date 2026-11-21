@@ -251,7 +251,7 @@
       if (metodo === 'efectivo') {
         const v = $('#pagaCon')?.value || '';
         $('#pagoDet').innerHTML = `<label class="campo" style="margin-top:12px"><span>¿Con cuánto vas a pagar? (para llevarte las vueltas)</span>
-          <div class="precio"><span>$</span><input class="field" id="pagaCon" type="number" min="0" step="1000" inputmode="numeric" value="${v}" placeholder="${total || ''}"></div></label>`;
+          <div class="precio"><span>$</span><input class="field" id="pagaCon" type="number" min="0" step="1" inputmode="numeric" value="${v}" placeholder="${total || ''}"></div></label>`;
       } else if (metodo === 'transferencia') {
         $('#pagoDet').innerHTML = info.qr ? `<div class="qr-box"><img src="${info.qr}" alt="QR para transferir"><div class="qr-monto">${pesos(total)}</div>
           ${info.qrTexto ? `<div class="qr-texto">${esc(info.qrTexto)}</div>` : ''}</div>

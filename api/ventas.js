@@ -13,7 +13,7 @@ const DIA_MS = 86400000;
 const ruta = (req) => req.query?.r ?? new URL(req.url, 'http://x').searchParams.get('r');
 
 async function handler(req, res) {
-  if (ruta(req) === 'estadisticas') return estadisticas(req, res);
+  if (ruta(req) === 'estadisticas' || ruta(req) === 'historico') { if (ruta(req) === 'historico') { req.query = { ...(req.query || Object.fromEntries(new URL(req.url, 'http://x').searchParams)), r2: 'historico' }; } return estadisticas(req, res); }
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });

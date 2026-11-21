@@ -51,7 +51,7 @@
           <input class="field" name="cantidad" type="number" min="0" step="any" inputmode="decimal" placeholder="0">
           <small class="hint" id="cantInfo"></small></div>
         <label class="campo" id="valorBox" hidden><span>4. Valor total pagado</span>
-          <div class="precio" style="flex:1"><span>$</span><input class="field" name="valor" type="number" min="0" step="100" inputmode="numeric" placeholder="0"></div>
+          <div class="precio" style="flex:1"><span>$</span><input class="field" name="valor" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></div>
           <small class="hint" id="valorInfo"></small></label>
         <div class="campo ancho" id="agregarBox" hidden>
           <button type="button" class="btn ghost" id="btnAgregarLinea" style="margin:0">➕ Agregar a la lista y seguir con otro</button>
@@ -61,8 +61,9 @@
           <div class="lineas" id="lineas"></div>
         </div>
         <div class="campo ancho detalles-compra">
-          <div class="campo"><span>¿Con qué se pagó?</span><div class="seg-pago" id="pagos"></div>
-            <div class="origen-ef" id="origenBox"><span class="hint">El efectivo sale de:</span> <div class="seg-pago seg-mini" id="origenes"></div></div></div>
+          <div class="campo"><span>¿De dónde sale la plata?</span><div class="seg-pago" id="origenes"></div>
+            <div class="origen-info" id="origenInfo"></div>
+            <div class="origen-ef" id="pagoBox"><span class="hint">¿Cómo se pagó?</span> <div class="seg-pago seg-mini" id="pagos"></div></div></div>
           <div class="campo"><span>¿A quién se le compró?</span>
             <select class="field" id="provSel"></select>
             <small class="hint" id="provInfo"></small></div>
@@ -98,6 +99,7 @@
         </div>
         <div class="chips" id="filtroCat" style="margin-top:8px"></div>
       </div>
+      <div class="chips" id="filtroOrigen" style="margin-top:10px"></div>
       <input class="field" id="buscar" placeholder="🔍 Buscar insumo, proveedor o NIT..." style="margin-top:10px">
     </section>
 
@@ -195,7 +197,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { saleDeCaja, pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, GRUPOS, recetaDe, itemBase, armarItem, consumoDe, sinReutilizables } from '/catalog.js';
+    import { saleDeCaja, origenDe, ORIGENES_COMPRA, TOPE_CAJA, pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, GRUPOS, recetaDe, itemBase, armarItem, consumoDe, sinReutilizables } from '/catalog.js';
     import { requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
 
@@ -214,6 +216,8 @@
       ['mespasado', 'Mes pasado', sumarMeses(H, -1), finMes(sumarMeses(H, -1))],
       ['3m', 'Últimos 3 meses', sumarMeses(H, -2), H],
     ];
+    let presu = null, filtroOrigen = '';
+    const pintarFiltroOrigen = () => { $('#filtroOrigen').innerHTML = [['', 'Todo'], ...ORIGENES_COMPRA.map((o) => [o.id, `${o.icono} ${o.id === 'ventas' ? 'Ventas' : o.nombre}`])].map(([id, n]) => `<button class="chip ${filtroOrigen === id ? 'on' : ''}" data-forigen="${id}">${n}</button>`).join(''); };
     let periodo = 'mes', filtroCat = 'todas', filtroProv = '', compras = [], adjuntos = {}, editando = null, pagoSel = 'caja', recientes = [];
 
     // ---------- Proveedores ----------
@@ -320,18 +324,37 @@
       $('#filtroProv').innerHTML = '<option value="">Todos los proveedores</option>' + [...usados.entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]))).map(([k, n]) => `<option value="${esc(k)}">${esc(n)}</option>`).join('');
       $('#filtroProv').value = filtroProv;
     }
+    $('#filtroOrigen').addEventListener('click', (e) => { const b = e.target.closest('[data-forigen]'); if (b) { filtroOrigen = b.dataset.forigen; render(); } });
     $('#filtroProv').addEventListener('change', (e) => { filtroProv = e.target.value; render(); });
 
     // ---------- Formulario (compras estandarizadas) ----------
     const form = $('#fCompra');
     const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.corto || p.nombre}</button>`).join(''); pintarOrigen(); };
     $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
-    // Efectivo: o sale de la caja del día (se descuenta en el cierre) o del presupuesto. Nunca de los dos.
-    let origenSel = 'caja';
+    // ¿De dónde sale la plata? presupuesto (con tope), ventas o caja del día (solo cositas del diario)
+    let origenSel = 'presupuesto';
+    const totalActual = () => lineas.reduce((t, l) => t + l.valor, 0) + (insumo ? Number(form.valor.value) || 0 : 0);
     const pintarOrigen = () => {
-      $('#origenBox').hidden = pagoSel !== 'caja';
-      $('#origenes').innerHTML = [['caja', '🔒 La caja del día'], ['presupuesto', '💼 El presupuesto']].map(([id, n]) => `<button type="button" class="${origenSel === id ? 'on' : ''}" data-origen="${id}">${n}</button>`).join('');
+      $('#origenes').innerHTML = ORIGENES_COMPRA.map((o) => `<button type="button" class="${origenSel === o.id ? 'on' : ''}" data-origen="${o.id}" title="${esc(o.ayuda)}">${o.icono} ${o.nombre}</button>`).join('');
+      $('#pagoBox').hidden = origenSel === 'caja';
+      const tot = totalActual(), info = $('#origenInfo');
+      if (origenSel === 'caja') {
+        info.innerHTML = tot > TOPE_CAJA
+          ? `<span class="aviso-mal">⚠️ ${pesos(tot)} es mucho para la caja del día. La caja es para cositas del diario (limones, hielo…). Mejor usa <b>presupuesto</b> o <b>plata de ventas</b>.</span>`
+          : '<span class="hint">Efectivo del cajón · se descuenta en el cierre de caja. Solo cositas del diario.</span>';
+      } else if (origenSel === 'ventas') info.innerHTML = '<span class="hint">Plata de las ventas que ya está guardada. No toca el presupuesto ni la caja del día.</span>';
+      else {
+        const r = presu?.resumen, monto = presu?.presupuesto?.monto || 0;
+        const queda = editando ? null : r ? Math.max(0, r.queda) : null;
+        if (queda === null) info.innerHTML = '<span class="hint">Lo que no alcance del presupuesto sale de la plata de ventas.</span>';
+        else if (!monto) info.innerHTML = '<span class="aviso-mal">⚠️ No hay presupuesto definido este mes: esto se pagaría con plata de ventas.</span>';
+        else if (tot && queda <= 0) info.innerHTML = `<span class="aviso-mal">⚠️ Ya se acabó el presupuesto del mes: esta compra sale toda de la <b>plata de ventas</b>.</span>`;
+        else if (tot > queda) info.innerHTML = `<span class="aviso-mal">⚠️ Del presupuesto quedan ${pesos(queda)}. De esta compra: <b>💼 ${pesos(queda)}</b> con presupuesto y <b>💰 ${pesos(tot - queda)}</b> con plata de ventas.</span>`;
+        else info.innerHTML = `<span class="hint">Quedan <b>${pesos(queda)}</b> del presupuesto${tot ? ` · después de esta compra: ${pesos(queda - tot)}` : ''}.</span>`;
+      }
     };
+    form.addEventListener('input', () => pintarOrigen());
+    new MutationObserver(() => pintarOrigen()).observe($('#lineas'), { childList: true, subtree: true });
     $('#origenes').addEventListener('click', (e) => { const b = e.target.closest('[data-origen]'); if (b) { origenSel = b.dataset.origen; pintarOrigen(); } });
 
     // La lista de insumos = ítems del inventario (+ los "solo compras")
@@ -443,7 +466,7 @@
 
     function limpiarForm() {
       lineas = [];
-      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; origenSel = 'caja'; editando = null; insumo = null; presSel = '';
+      form.reset(); form.fecha.value = hoy(); pagoSel = 'caja'; origenSel = 'presupuesto'; editando = null; insumo = null; presSel = '';
       $('#insumoSel').hidden = true; ['#presBox', '#cantBox', '#valorBox'].forEach((x) => { $(x).hidden = true; });
       $('#cantInfo').textContent = ''; $('#valorInfo').textContent = '';
       $('#formTitulo').textContent = '➕ Registrar compra';
@@ -457,13 +480,19 @@
       if (it) escogerInsumo(it, c.presentacion ?? '');
       else { limpiarForm(); $('#buscaInsumo').value = c.insumo; pintarInsumos(); toast('Esta compra es de antes: escoge el insumo de la lista', true); }
       provSel = c.proveedorId && PROV()[c.proveedorId] ? c.proveedorId : ''; pintarProv();
-      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; origenSel = c.origen === 'presupuesto' ? 'presupuesto' : 'caja'; if (c.nota) { form.nota.hidden = false; $('#btnNota').hidden = true; } }
+      if (conFecha) { form.fecha.value = c.fecha; form.cantidad.value = c.cantidad ?? ''; form.valor.value = c.valor; form.nota.value = c.nota || ''; pagoSel = c.pago; origenSel = origenDe(c); if (c.nota) { form.nota.hidden = false; $('#btnNota').hidden = true; } }
       calcular(); pintarPagos();
     }
     $('#btnCancelarEdicion').addEventListener('click', limpiarForm);
 
+    const avisarReparto = (r) => {
+      if (!r) return;
+      if (r.pres && r.ventas) toast(`💼 ${pesos(r.pres)} con presupuesto y 💰 ${pesos(r.ventas)} con plata de ventas (se acabó el presupuesto)`, true);
+      else if (r.ventas && origenSel === 'presupuesto') toast(`💰 Ya no había presupuesto: ${pesos(r.ventas)} salen de la plata de ventas`, true);
+    };
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (origenSel === 'caja' && totalActual() > TOPE_CAJA && !confirm(`¿Seguro que ${pesos(totalActual())} salen de la caja del día? La caja es para cositas del diario.`)) return;
       // Varias líneas: se guarda todo junto (lo que esté a medio llenar entra si está completo)
       if (!editando && lineas.length) {
         const l = lineaActual();
@@ -474,9 +503,9 @@
           const r = await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, origen: origenSel, proveedorId: provSel, nota: form.nota.value,
             lineas: todas.map(({ insumoId, presentacion, cantidad, valor }) => ({ insumoId, presentacion, cantidad, valor })) }) });
           await adjuntarDespues(r.factura);
-          toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`);
+          toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`); avisarReparto(r.reparto);
           limpiarForm(); cargar(); cargarRecientes(); CD = null;
-          if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
+          if (puede('presupuesto')) { presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7)); pintarOrigen(); }
         } catch (err) { toast(err.message, true); }
         finally { btn.disabled = false; }
         return;
@@ -487,7 +516,7 @@
         pago: pagoSel, origen: origenSel, proveedorId: provSel, nota: form.nota.value,
       };
       const btn = $('#btnGuardar'); btn.disabled = true;
-      const antes = presu?.resumen.deVentas ?? null;
+      let rep = null;
       try {
         const editado = editando;
         const conFactura = !!factArchivo;
@@ -495,17 +524,15 @@
           const c0 = compras.find((x) => x.id === editando);
           // si era de barrio con nombre escrito a mano, se conserva
           if (!provSel && c0?.proveedor && !c0.proveedorId) datos.proveedor = c0.proveedor;
-          const { compra } = await api('/api/compras', { method: 'PUT', body: JSON.stringify({ id: editando, ...datos }) });
+          const { compra, reparto } = await api('/api/compras', { method: 'PUT', body: JSON.stringify({ id: editando, ...datos }) }); rep = reparto;
           await adjuntarDespues(compra.factura || compra.id);
-        } else { const { compra } = await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) }); await adjuntarDespues(compra.factura); }
+        } else { const { compra, reparto } = await api('/api/compras', { method: 'POST', body: JSON.stringify(datos) }); rep = reparto; await adjuntarDespues(compra.factura); }
         if (conFactura) toast('📎 Factura adjuntada');
-        toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada${pagoSel === 'caja' && origenSel === 'caja' ? ' · se descuenta en el cierre de caja' : ' · sale del presupuesto'}`);
+        const o = ORIGENES_COMPRA.find((x) => x.id === origenSel);
+        toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada · ${o.icono} ${o.nombre}${origenSel === 'caja' ? ' (se descuenta en el cierre)' : ''}`);
+        avisarReparto(rep);
         limpiarForm(); cargar(); cargarRecientes(); CD = null;
-        if (puede('presupuesto')) {
-          presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
-          const extra = presu && antes !== null ? presu.resumen.deVentas - antes : 0;
-          if (extra > 0) toast(`⚠️ El presupuesto del mes no alcanzó: ${pesos(extra)} de esta compra salen de las ventas`, true);
-        }
+        if (puede('presupuesto')) { presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7)); pintarOrigen(); }
       } catch (err) { toast(err.message, true); }
       finally { btn.disabled = false; }
     });
@@ -571,7 +598,9 @@
     const filtradas = () => {
       const q = normalizar($('#buscar').value);
       const provDe = (c) => c.proveedorId || (c.proveedor ? 'txt:' + c.proveedor : 'barrio');
-      return compras.filter((c) => (filtroCat === 'todas' || c.categoria === filtroCat) && (!filtroProv || provDe(c) === filtroProv) && (!q || normalizar(`${c.insumo} ${c.proveedor} ${c.nit || ''} ${c.nota}`).includes(q)));
+      const rp = (c) => c.reparto || { pres: 0, ventas: 0, caja: 0 };
+      const okOrigen = (c) => !filtroOrigen || (filtroOrigen === 'presupuesto' ? rp(c).pres > 0 : filtroOrigen === 'ventas' ? rp(c).ventas > 0 : rp(c).caja > 0);
+      return compras.filter((c) => okOrigen(c) && (filtroCat === 'todas' || c.categoria === filtroCat) && (!filtroProv || provDe(c) === filtroProv) && (!q || normalizar(`${c.insumo} ${c.proveedor} ${c.nit || ''} ${c.nota}`).includes(q)));
     };
 
     function barras(filas) {
@@ -580,15 +609,23 @@
       return filas.map(([lbl, v]) => `<div class="barra-h"><span>${lbl}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('');
     }
 
+    function tagsReparto(cs) {
+      const t = { pres: 0, ventas: 0, caja: 0 };
+      for (const c of cs) for (const k in t) t[k] += c.reparto?.[k] || 0;
+      return [t.pres && `<span class="tag-pres">💼 ${cs.length > 1 || t.ventas ? pesos(t.pres) : 'presupuesto'}</span>`, t.ventas && `<span class="tag-ventas">💰 ${pesos(t.ventas)} ventas</span>`, t.caja && '<span class="tag-ventas">🔒 caja del día</span>'].filter(Boolean).join(' + ');
+    }
     function render() {
       const lista = filtradas();
       const total = lista.reduce((s, c) => s + c.valor, 0);
       const por = (fn) => { const m = new Map(); for (const c of lista) m.set(fn(c), (m.get(fn(c)) || 0) + c.valor); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
-      const porPago = Object.fromEntries(por((c) => c.pago));
+      const sumR = (k) => lista.reduce((t, c) => t + (c.reparto?.[k] || 0), 0);
+      const sumP = (id) => lista.filter((c) => c.pago === id).reduce((t, c) => t + c.valor, 0);
+      pintarFiltroOrigen();
       $('#kpis').innerHTML = `
-        <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${new Set(lista.map((c) => c.factura || c.id)).size} compras</small></div>
-        <div class="kpi"><span>🔒 Salió de la caja</span><b>${pesos(lista.filter(saleDeCaja).reduce((t, c) => t + c.valor, 0))}</b><small>efectivo del día · en el cierre</small></div>
-        <div class="kpi"><span>💼 Salió del presupuesto</span><b>${pesos(lista.filter((c) => !saleDeCaja(c)).reduce((t, c) => t + c.valor, 0))}</b><small>efectivo aparte, transferencia u otro</small></div>`;
+        <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${new Set(lista.map((c) => c.factura || c.id)).size} compras · 💵 ${pesos(sumP('caja'))} · 📲 ${pesos(sumP('transferencia'))}</small></div>
+        <div class="kpi"><span>💼 Presupuesto</span><b>${pesos(sumR('pres'))}</b><small>nunca se pasa del monto</small></div>
+        <div class="kpi"><span>💰 Plata de ventas</span><b>${pesos(sumR('ventas'))}</b><small>compras con ventas + lo que no alcanzó</small></div>
+        <div class="kpi"><span>🔒 Caja del día</span><b>${pesos(sumR('caja'))}</b><small>cositas del diario · en el cierre</small></div>`;
       $('#porCat').innerHTML = barras(por((c) => c.categoria).map(([k, v]) => [`${CAT[k]?.icono || ''} ${esc(CAT[k]?.nombre || k)}`, v]));
       // Por insumo: unidades compradas y costo por unidad (solo compras de la lista)
       const ins = new Map();
@@ -608,7 +645,7 @@
         const prov = c0.proveedorId ? `🚚 <b>${esc(PROV()[c0.proveedorId]?.nombre || c0.proveedor)}</b> <span class="hint">· NIT ${esc(c0.nit || PROV()[c0.proveedorId]?.nit || '')}</span>` : `🏪 <b>${esc(c0.proveedor || 'Tienda de barrio')}</b>`;
         return `<article class="factura-card">
           <header>
-            <div><div>${prov}</div><span class="hint">${fechaCorta(c0.fecha)} · ${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.nombre || '')} ${saleDeCaja(c0) ? '<span class="tag-ventas">🔒 caja</span>' : '<span class="tag-pres">💼 presupuesto</span>'} · ${esc(c0.registradoPor)}${c0.nota && cs.length > 1 ? ` · 📝 ${esc(c0.nota)}` : ''}</span></div>
+            <div><div>${prov}</div><span class="hint">${fechaCorta(c0.fecha)} · ${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.nombre || '')} ${tagsReparto(cs)} · ${esc(c0.registradoPor)}${c0.nota && cs.length > 1 ? ` · 📝 ${esc(c0.nota)}` : ''}</span></div>
             <div class="factura-der">
               <b class="factura-total">${pesos(tot)}</b>
               ${adj ? `<button class="mini adj-on" data-ver-fact="${esc(fid)}">📎 Ver factura</button>` : subir ? `<button class="mini" data-adj="${esc(fid)}">📎 Adjuntar factura</button>` : '<span class="hint">sin factura</span>'}
@@ -800,8 +837,7 @@
     $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) location.hash = b.dataset.tab; });
     $('#masFiltros').addEventListener('click', () => { $('#filtrosMas').hidden = !$('#filtrosMas').hidden; });
 
-    let presu = null;
-    if (puede('presupuesto')) presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7));
+    if (puede('presupuesto')) { presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7)); pintarOrigen(); }
     await cargarProveedores();
     limpiarForm();
     const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);

@@ -1,4 +1,5 @@
 import { sesion } from './_lib/auth.js';
+import { esStiv } from '../catalog.js';
 import { leerAjustes, guardarAjustes, leerDiasCerrados, guardarDiasCerrados } from './_lib/store.js';
 import { conSede } from './_lib/sede.js';
 
@@ -27,7 +28,16 @@ async function handler(req, res) {
 
     if (req.method === 'GET') {
       const a = await leerAjustes();
-      return res.status(200).json({ qr: a.qr || null, qrTexto: a.qrTexto || '', qrDePrincipal: !!a.qrDePrincipal, domicilio: { ...DOM_DEFECTO, ...(a.domicilio || {}) } });
+      return res.status(200).json({ sinStock: !!a.sinStock && esStiv(usuario), qr: a.qr || null, qrTexto: a.qrTexto || '', qrDePrincipal: !!a.qrDePrincipal, domicilio: { ...DOM_DEFECTO, ...(a.domicilio || {}) } });
+    }
+
+    // Vender sin inventario: solo Stiv lo prende o lo apaga, y solo le aplica a él
+    if (q.r === 'sinstock' && req.method === 'PUT') {
+      if (!esStiv(usuario)) return res.status(403).json({ error: 'Solo Stiv puede cambiar esta opción' });
+      const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      const a = await leerAjustes();
+      await guardarAjustes({ ...a, sinStock: !!b.activo });
+      return res.status(200).json({ sinStock: !!b.activo });
     }
 
     if (req.method === 'PUT') {

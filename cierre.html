@@ -47,7 +47,7 @@
       <h2><span class="n">2</span> Cuenta el efectivo</h2>
       <div class="row base-row">
         <label for="base">💼 Base con la que abrió la caja (sencillo)</label>
-        <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1000" id="base" inputmode="numeric"></div>
+        <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" id="base" inputmode="numeric"></div>
       </div>
       <div class="denoms" id="denoms"></div>
       <div class="total-contado"><span>Total contado en caja</span><b id="contado">$0</b></div>
@@ -59,7 +59,7 @@
       <div id="gastos"></div>
       <form class="add" id="fGasto">
         <input class="field" name="concepto" placeholder="Concepto, ej: hielo, vasos, domicilio" maxlength="80" required>
-        <input class="field" name="valor" type="number" min="0" step="100" placeholder="Valor" inputmode="numeric" required style="max-width:160px">
+        <input class="field" name="valor" type="number" min="0" step="1" placeholder="Valor" inputmode="numeric" required style="max-width:160px">
         <button class="btn alt">+ Agregar gasto</button>
       </form>
     </section>
@@ -70,7 +70,7 @@
       <div class="row base-row">
         <label for="transf">📲 Total que realmente llegó por transferencia</label>
         <div class="row" style="gap:8px">
-          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="100" id="transf" inputmode="numeric"></div>
+          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" id="transf" inputmode="numeric"></div>
           <button class="mini" id="transfIgual" type="button">= sistema</button>
         </div>
       </div>
@@ -82,7 +82,7 @@
       <div id="cuadre"></div>
       <div class="row base-row" style="margin-top:12px">
         <label for="baseSig">💼 Base que se deja para la próxima jornada</label>
-        <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1000" id="baseSig" inputmode="numeric"></div>
+        <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" id="baseSig" inputmode="numeric"></div>
       </div>
       <div class="total-contado retiro"><span>💰 Efectivo para retirar / entregar</span><b id="retiro">$0</b></div>
       <label class="hint" for="notas" style="display:block;margin-top:12px">Observaciones</label>

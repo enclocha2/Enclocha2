@@ -512,3 +512,33 @@ export async function guardarCostosManual(o) {
   if (redis) await redis.set('costos:manual', o); else mem.costosManual = o;
   return o;
 }
+
+// ---------- Comprobantes de transferencias (pedido → archivo) ----------
+export async function marcarComprobantes(ids, clave) {
+  if (!ids.length) return;
+  if (redis) await redis.hset(K('comprobantes'), Object.fromEntries(ids.map((id) => [id, clave])));
+  else Object.assign((M().comprobantes ||= {}), Object.fromEntries(ids.map((id) => [id, clave])));
+}
+export async function comprobantesDe(ids) {
+  if (!ids.length) return {};
+  if (redis) {
+    const out = {};
+    for (let i = 0; i < ids.length; i += 300) {
+      const parte = ids.slice(i, i + 300), vals = await redis.hmget(K('comprobantes'), ...parte);
+      parte.forEach((id, k) => { const v = Array.isArray(vals) ? vals[k] : vals?.[id]; if (v) out[id] = v; });
+    }
+    return out;
+  }
+  const o = {}; for (const id of ids) if (M().comprobantes?.[id]) o[id] = M().comprobantes[id]; return o;
+}
+
+// ---------- Totales de meses anteriores (antes de usar la app), por sede ----------
+// { 'AAAA-MM': { ventasEf, ventasTr, comprasEf, comprasTr } }
+export async function leerHistorico() {
+  const o = redis ? await redis.get(K('historico')) : M().historico;
+  return o && typeof o === 'object' ? o : {};
+}
+export async function guardarHistorico(o) {
+  if (redis) await redis.set(K('historico'), o); else M().historico = o;
+  return o;
+}

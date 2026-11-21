@@ -156,6 +156,7 @@
     // ---------- Nombres de reglas ----------
     function nombreRegla(r) {
       if (r.tipo === 'granizado') return '🍧 Cada granizado';
+      if (r.tipo === 'vendido') return '🛒 Cada vez que se vende ' + (cfg?.productos.find((p) => p.id === r.id)?.nombre || r.id);
       if (r.tipo === 'producto') return '🍺 ' + (cfg?.productos.find((p) => p.id === r.id)?.nombre || r.id);
       if (r.tipo === 'tamano') return '🥤 Granizado ' + (cfg?.tamanos.find((t) => t.id === r.id)?.nombre || r.id);
       if (r.tipo === 'topping') return '🍬 ' + (cfg?.toppings.find((t) => t.id === r.id)?.nombre || r.id);
@@ -619,7 +620,7 @@
 
     // ---------- Reglas ----------
     function opcionesRegla(tipo, sel) {
-      const lista = tipo === 'producto' ? cfg.productos : tipo === 'tamano' ? cfg.tamanos : tipo === 'tapa' ? cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === 'Tamaños') : tipo === 'sabor' ? cfg.sabores : tipo === 'topping' ? cfg.toppings : [];
+      const lista = tipo === 'producto' || tipo === 'vendido' ? cfg.productos : tipo === 'tamano' ? cfg.tamanos : tipo === 'tapa' ? cfg.tamanos.filter((t) => (t.seccion || 'Tamaños') === 'Tamaños') : tipo === 'sabor' ? cfg.sabores : tipo === 'topping' ? cfg.toppings : [];
       return lista.map((x) => `<option value="${x.id}" ${x.id === sel ? 'selected' : ''}>${esc(x.nombre)}</option>`).join('');
     }
     function abrirReglas(id) { enReglas = items.find((i) => i.id === id); enReglas.reglas ||= []; $('#mrNombre').textContent = enReglas.nombre; pintarReglas(); $('#modalReglas').classList.add('show'); }
@@ -628,6 +629,7 @@
         <div class="fila regla">
           <select class="field" data-rk="${k}" data-rc="tipo">
             <option value="producto" ${r.tipo === 'producto' ? 'selected' : ''}>🍺 Producto vendido</option>
+            <option value="vendido" ${r.tipo === 'vendido' ? 'selected' : ''}>🛒 Cada vez que se vende (ej. mezclador en michelada)</option>
             <option value="tamano" ${r.tipo === 'tamano' ? 'selected' : ''}>🥤 Granizado de tamaño</option>
             <option value="topping" ${r.tipo === 'topping' ? 'selected' : ''}>🍬 Topping</option>
             <option value="granizado" ${r.tipo === 'granizado' ? 'selected' : ''}>🍧 Cualquier granizado</option>

@@ -41,6 +41,7 @@
         <button class="opt" data-metodo="efectivo">💵 Efectivo</button>
         <button class="opt" data-metodo="transferencia">📲 Transferencia</button>
       </div>
+      <button class="opt dividir-btn" data-metodo="mixto">💵 + 📲 Una parte en efectivo y otra por transferencia</button>
       <button class="opt dividir-btn" data-metodo="dividir">➗ Dividir: unos en efectivo y otros por transferencia</button>
       <div id="mcQR"></div>
       <button class="btn" id="mcConfirmar" hidden>✅ Ya transfirió · marcar pagado</button>
@@ -52,7 +53,7 @@
 
   <script type="module">
     import { pesos, vistaItem, agruparCuentas, normalizar } from '/catalog.js';
-    import { requerirSesion, puede, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR, dividirPago } from '/sesion.js';
+    import { requerirSesion, puede, avisoHorario, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR, dividirPago, pagoMixto, pedirComprobante, transferenciaDe } from '/sesion.js';
 
     const $ = (s) => document.querySelector(s);
     await requerirSesion('cuentas');
@@ -122,9 +123,12 @@
     $('#mcCancelar').addEventListener('click', () => $('#modalCobro').classList.remove('show'));
     async function cobrar(metodo, partes) {
       $('#modalCobro').classList.remove('show');
+      const c = aCobrar;
       try {
-        const r = await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ cobrarCuenta: aCobrar.id, ...(partes ? { partes } : { metodo }) }) });
-        toast(`✅ Cuenta de ${aCobrar.cliente} cobrada: ${pesos(r.total)}`);
+        const r = await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ cobrarCuenta: c.id, ...(partes ? { partes } : { metodo }) }) });
+        toast(`✅ Cuenta de ${c.cliente} cobrada: ${pesos(r.total)}`);
+        const tr = transferenciaDe(metodo, partes, c.pendiente);
+        if (tr) await pedirComprobante({ ids: c.abiertos.map((x) => x.id), monto: tr, nombre: c.cliente });
       } catch (err) { toast(err.message, true); }
       estado.rev = null; cargar();
     }
@@ -133,9 +137,9 @@
       if (!b || !aCobrar) return;
       document.querySelectorAll('#modalCobro [data-metodo]').forEach((x) => x.classList.toggle('on', x === b));
       if (b.dataset.metodo === 'efectivo') return cobrar('efectivo');
-      if (b.dataset.metodo === 'dividir') {
+      if (b.dataset.metodo === 'dividir' || b.dataset.metodo === 'mixto') {
         $('#modalCobro').classList.remove('show');
-        const partes = await dividirPago({ total: aCobrar.pendiente, nombre: aCobrar.cliente });
+        const partes = b.dataset.metodo === 'mixto' ? await pagoMixto({ total: aCobrar.pendiente, nombre: aCobrar.cliente }) : await dividirPago({ total: aCobrar.pendiente, nombre: aCobrar.cliente });
         return partes ? cobrar(null, partes) : null;
       }
       // Transferencia: primero mostrar el QR, luego confirmar

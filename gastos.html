@@ -51,7 +51,7 @@
       <form class="add" id="fNuevo">
         <input class="field" name="nombre" placeholder="Nuevo gasto, ej: Arriendo local" maxlength="60" required>
         <select class="field" name="categoria" id="selCatNuevo" style="max-width:220px"></select>
-        <input class="field" name="valor" type="number" min="0" step="1000" placeholder="Valor" inputmode="numeric" style="max-width:140px" required>
+        <input class="field" name="valor" type="number" min="0" step="1" placeholder="Valor" inputmode="numeric" style="max-width:140px" required>
         <button class="btn alt">+ Agregar</button>
       </form>
     </section>
@@ -69,10 +69,12 @@
   <div class="modal" id="modalPago">
     <div class="box">
       <h3>💸 Registrar pago: <span id="mpNombre"></span></h3>
-      <label class="campo"><span>Valor pagado</span><div class="precio" style="flex:1"><span>$</span><input class="field" id="mpValor" type="number" min="0" step="100" inputmode="numeric"></div></label>
+      <label class="campo"><span>Valor pagado</span><div class="precio" style="flex:1"><span>$</span><input class="field" id="mpValor" type="number" min="0" step="1" inputmode="numeric"></div></label>
       <label class="campo"><span>Fecha del pago</span><input class="field" id="mpFecha" type="date"></label>
       <div class="campo"><span>¿Con qué se pagó?</span><div class="g3" id="mpMetodos"></div></div>
       <label class="campo"><span>Nota (opcional)</span><input class="field" id="mpNota" maxlength="120" placeholder="Ej: recibo #123, quincena 1"></label>
+      <div class="campo"><span>📎 Factura o recibo (opcional)</span><div class="adj-sel">
+        <label class="mini adj-btn"><input type="file" id="mpFile" accept="image/*,application/pdf" hidden>📷 Foto o PDF</label><span class="hint" id="mpFileInfo"></span></div></div>
       <div class="error" id="mpError"></div>
       <button class="btn" id="mpGuardar">✅ Registrar pago</button>
       <button class="btn ghost" id="mpCancelar">Cancelar</button>
@@ -83,7 +85,7 @@
 
   <script type="module">
     import { pesos, slug, CATEGORIAS_FIJO, PERIODOS_FIJO, PAGOS_COMPRA } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, bannerPresupuesto } from '/sesion.js';
+    import { prepararArchivo, verArchivo, requerirSesion, api, esc, toast, bannerPresupuesto } from '/sesion.js';
     import { hoy, sumarMeses, nombreMes, finMes, fechaCorta } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -93,7 +95,7 @@
     const PER = Object.fromEntries(PERIODOS_FIJO.map((p) => [p.id, p]));
     const METODOS = PAGOS_COMPRA;
     let mes = hoy().slice(0, 7);
-    let gastos = [], original = [], pagos = [], sucio = false, aPagar = null, metodoSel = 'transferencia';
+    let adjuntos = {}, gastos = [], original = [], pagos = [], sucio = false, aPagar = null, metodoSel = 'transferencia';
 
     const marcar = (v = true) => { sucio = v; $('#savebar').classList.toggle('show', v); document.body.classList.toggle('con-barra', v); };
     window.addEventListener('beforeunload', (e) => { if (sucio) { e.preventDefault(); e.returnValue = ''; } });
@@ -102,7 +104,7 @@
       $('#lblMes').textContent = `${nombreMes(mes + '-01')} ${mes.slice(0, 4)}`.replace(/^./, (c) => c.toUpperCase());
       try {
         const r = await api(`/api/compras?r=gastosfijos&mes=${mes}`);
-        pagos = r.pagos;
+        pagos = r.pagos; adjuntos = r.adjuntos || {};
         $('#presBanner').innerHTML = '<p class="hint" style="margin:0">🏦 Los gastos fijos no usan el presupuesto del mes: se pagan con las ventas.</p>';
         if (!sucio) { original = r.gastos; gastos = structuredClone(r.gastos); }
         pintar();
@@ -138,6 +140,7 @@
         <div class="fijo">
           <div><b>${CAT[g.categoria]?.icono || ''} ${esc(g.nombre)}</b><br>
             <span class="hint">${PER[g.periodo]?.nombre} · día ${g.dia} · ${pesos(g.valor)}${g.periodo !== 'mensual' ? ` × ${PER[g.periodo].veces} = ${pesos(e.esperado)}` : ''}</span></div>
+          ${(() => { const ps = pagos.filter((p) => p.gastoId === g.id); const conF = ps.find((p) => adjuntos['fijo-' + p.id]); return conF ? `<button class="mini adj-on" data-verfac2="${conF.id}" title="Ver factura">📎</button>` : ps.length ? `<button class="mini" data-adjfac2="${ps[0].id}" title="Adjuntar factura">📷</button>` : ''; })()}
           <span class="estado-pago ${e.clase}">${e.txt}</span>
           ${e.falta ? `<button class="btn" data-pagar="${g.id}">💸 Pagar</button>` : `<button class="mini" data-pagar="${g.id}">+ pago</button>`}
         </div>`).join('') : '<p class="hint">Todavía no tienes gastos fijos. Agrégalos abajo en "Mis gastos fijos".</p>';
@@ -150,7 +153,7 @@
           <td>${METODOS.find((m) => m.id === p.metodo)?.icono || ''} ${esc(METODOS.find((m) => m.id === p.metodo)?.nombre || '')}</td>
           <td class="hint">${esc(p.nota || '')}</td>
           <td class="num"><b>${pesos(p.valor)}</b></td>
-          <td><button class="del" data-delpago="${p.id}">🗑</button></td></tr>`).join('')}</tbody>
+          <td style="white-space:nowrap">${adjuntos['fijo-' + p.id] ? `<button class="mini adj-on" data-verfac="${p.id}">📎 Ver</button>` : `<button class="mini" data-adjfac="${p.id}">📷 Factura</button>`} <button class="del" data-delpago="${p.id}">🗑</button></td></tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="4"><b>Total pagado</b></td><td class="num"><b>${pesos(pagado)}</b></td><td></td></tr></tfoot>`
         : '<tr><td class="empty">No hay pagos registrados este mes.</td></tr>';
 
@@ -164,7 +167,7 @@
           <select class="field" data-id="${g.id}" data-k="categoria">${opcCat(g.categoria)}</select>
           <select class="field" data-id="${g.id}" data-k="periodo" style="max-width:130px">${opcPer(g.periodo)}</select>
           <span class="hint">día</span><input class="field dia" type="number" min="1" max="31" data-id="${g.id}" data-k="dia" value="${g.dia}">
-          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1000" data-id="${g.id}" data-k="valor" value="${g.valor}"></div>
+          <div class="precio"><span>$</span><input class="field" type="number" min="0" step="1" data-id="${g.id}" data-k="valor" value="${g.valor}"></div>
           <button class="del" data-delg="${g.id}">🗑</button>
         </div>`).join('') || '<p class="hint">Sin gastos fijos.</p>';
     }
@@ -208,10 +211,12 @@
         $('#mpNombre').textContent = aPagar.nombre;
         $('#mpValor').value = Math.min(aPagar.valor, e2.falta) || aPagar.valor;
         const h = hoy(); $('#mpFecha').value = h.startsWith(mes) ? h : `${mes}-01`;
-        $('#mpNota').value = ''; $('#mpError').textContent = '';
+        $('#mpNota').value = ''; $('#mpError').textContent = ''; mpArchivo = null; $('#mpFileInfo').textContent = '';
         metodoSel = 'transferencia'; pintarMetodos();
         $('#modalPago').classList.add('show');
       }
+      if (b.dataset.adjfac2) { adjPara = b.dataset.adjfac2; elegir.click(); return; }
+      if (b.dataset.verfac2) { try { verArchivo(await api(`/api/compras?r=adjunto&factura=fijo-${b.dataset.verfac2}`), '🧾 Factura del gasto fijo'); } catch (err) { toast(err.message, true); } return; }
       if (b.dataset.delpago) {
         if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Borrar?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
         try { await api(`/api/compras?r=gastosfijos&mes=${mes}&id=${b.dataset.delpago}`, { method: 'DELETE' }); toast('Pago borrado'); cargar(); } catch (err) { toast(err.message, true); }
@@ -221,12 +226,32 @@
         gastos = gastos.filter((g) => g.id !== b.dataset.delg); marcar(); pintar();
       }
     });
+    // ---------- Factura o recibo de cada pago ----------
+    let mpArchivo = null, adjPara = null;
+    const subirFac = (id, a) => api('/api/compras?r=adjunto', { method: 'PUT', body: JSON.stringify({ factura: 'fijo-' + id, ...a }) });
+    $('#mpFile').addEventListener('change', async (e) => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      $('#mpFileInfo').textContent = '⏳';
+      try { mpArchivo = await prepararArchivo(f); $('#mpFileInfo').textContent = '✅ ' + f.name.slice(0, 24); } catch (err) { mpArchivo = null; $('#mpFileInfo').textContent = ''; toast(err.message, true); }
+    });
+    const elegir = document.createElement('input'); elegir.type = 'file'; elegir.accept = 'image/*,application/pdf'; elegir.hidden = true; document.body.appendChild(elegir);
+    elegir.addEventListener('change', async () => {
+      const f = elegir.files[0]; elegir.value = ''; if (!f || !adjPara) return;
+      toast('⏳ Subiendo factura…');
+      try { await subirFac(adjPara, await prepararArchivo(f)); toast('✅ Factura adjuntada'); cargar(); } catch (err) { toast(err.message, true); }
+    });
+    $('#pagos').addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.adjfac) { adjPara = b.dataset.adjfac; elegir.click(); }
+      if (b.dataset.verfac) { try { verArchivo(await api(`/api/compras?r=adjunto&factura=fijo-${b.dataset.verfac}`), '🧾 Factura del gasto fijo'); } catch (err) { toast(err.message, true); } }
+    });
     $('#mpCancelar').addEventListener('click', () => $('#modalPago').classList.remove('show'));
     $('#mpGuardar').addEventListener('click', async () => {
       try {
-        await api('/api/compras?r=gastosfijos', { method: 'POST', body: JSON.stringify({ mes, pago: {
+        const { pago } = await api('/api/compras?r=gastosfijos', { method: 'POST', body: JSON.stringify({ mes, pago: {
           gastoId: aPagar.id, valor: $('#mpValor').value, fecha: $('#mpFecha').value, metodo: metodoSel, nota: $('#mpNota').value } }) });
-        $('#modalPago').classList.remove('show'); toast(`✅ Pago de ${aPagar.nombre} registrado`); cargar();
+        if (mpArchivo) { try { await subirFac(pago.id, mpArchivo); } catch (err) { toast('El pago quedó, pero la factura no subió: ' + err.message, true); } }
+        $('#modalPago').classList.remove('show'); toast(`✅ Pago de ${aPagar.nombre} registrado${mpArchivo ? ' con factura' : ''}`); cargar();
       } catch (err) { $('#mpError').textContent = err.message; }
     });
 
