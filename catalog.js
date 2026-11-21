@@ -360,12 +360,13 @@ export function asegurarMezclador(items, cfg) {
   if (!faltan.length) return null;
   return items.map((i) => (i.id === mez.id ? { ...i, reglas: [...(i.reglas || []), ...faltan.map((p) => ({ tipo: 'vendido', id: p.id, cantidad: 1 }))] } : i));
 }
-// Descuento: el precio que se escriba es lo que se cobra por unidad, solo en ese pedido
+// Descuento: el valor que se escriba es lo que se cobra en TOTAL por ese producto (todas sus unidades), solo en ese pedido
 export function conPrecioManual(a, d) {
-  if (!a || d?.precioManual == null || d.precioManual === '') return a;
-  const pm = Math.round(Number(d.precioManual));
-  if (!Number.isFinite(pm) || pm < 0 || pm === a.precioUnit) return a;
-  return { ...a, precioOriginal: a.precioUnit, precioUnit: pm, subtotal: pm * (a.cantidad || 1), descuento: (a.precioUnit - pm) * (a.cantidad || 1) };
+  if (!a || d?.totalManual == null || d.totalManual === '') return a;
+  const tm = Math.round(Number(d.totalManual));
+  if (!Number.isFinite(tm) || tm < 0 || tm === a.subtotal) return a;
+  const n = a.cantidad || 1;
+  return { ...a, precioOriginal: a.precioUnit, subtotalOriginal: a.subtotal, precioUnit: Math.round(tm / n), subtotal: tm, descuento: a.subtotal - tm };
 }
 export const esStiv = (u) => normalizar(u || '') === 'stiv';
 export const ORIGENES_COMPRA = [

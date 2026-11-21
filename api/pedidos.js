@@ -71,7 +71,7 @@ async function handler(req, res) {
 
       const cfg = await configActual();
       let items;
-      if ((body.items || []).some((i) => i?.precioManual != null && i.precioManual !== '') && !yo.puede('configuracion') && !esStiv(usuario)) return prohibido('No tienes permiso para poner descuentos');
+      if ((body.items || []).some((i) => i?.totalManual != null && i.totalManual !== '') && !yo.puede('configuracion') && !esStiv(usuario)) return prohibido('No tienes permiso para poner descuentos');
       try { items = (body.items || []).map((i) => conPrecioManual(armarItem(i, cfg), i)); }
       catch (e) { throw new ErrorUsuario(e.message); }
       if (items.length === 0) throw new ErrorUsuario('El pedido está vacío');

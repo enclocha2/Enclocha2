@@ -227,3 +227,6 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 ## v63 · Descuento por producto
 - En el carrito de Tomar pedido cada producto/granizado tiene "🏷️ Descuento" (Stiv o quien tenga permiso de configuración). Se escribe el precio a cobrar por unidad (o botones rápidos −10 %, −20 %, mitad, gratis); solo aplica en ese pedido.
 - El servidor valida el permiso y guarda `precioOriginal` y `descuento` en el ítem; el total del pedido, la venta y los reportes usan el precio con descuento. En Pedidos sale la etiqueta 🏷️ con lo descontado.
+
+## v64 · Descuento al total del producto
+- El valor del descuento ahora es lo que se cobra en TOTAL por esa línea (todas sus unidades), no por unidad (`totalManual`). Si después se cambia la cantidad, el descuento se quita y hay que ponerlo de nuevo.

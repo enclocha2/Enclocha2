@@ -413,6 +413,7 @@
       const linea = lineaDe(id, usa);
       if (linea) {
         linea.cantidad += d;
+        if (linea.totalManual != null) { delete linea.totalManual; toast('🏷️ Cambió la cantidad: vuelve a poner el descuento si aplica'); }
         if (linea.cantidad <= 0) carrito = carrito.filter((x) => x !== linea);
       } else if (d > 0) {
         carrito.push({ tipo: 'producto', productoId: id, cantidad: 1, ...(usa ? { usa } : {}) });
@@ -442,28 +443,29 @@
       : a.precioOriginal != null ? `<br><span class="tag-desc">🏷️ Descuento −${pesos(a.descuento)}</span> <button class="link-btn" data-desc="${i}">cambiar</button> · <button class="link-btn" data-desc-quitar="${i}">quitar</button>`
       : `<br><button class="link-btn" data-desc="${i}">🏷️ Descuento</button>`;
     function abrirDescuento(i) {
-      const d = carrito[i], base = armarItem(d, cfg);
+      const d = carrito[i], base = armarItem(d, cfg), n = base.cantidad || 1;
+      const nom = base.tipo === 'producto' ? base.nombre : 'Granizado ' + base.tamanoNombre;
       const m = document.createElement('div'); m.className = 'modal show';
-      const rap = [...new Set([0.9, 0.8, 0.5].map((f) => Math.round((base.precioUnit * f) / 100) * 100))].filter((v) => v < base.precioUnit);
+      const rap = [...new Set([0.9, 0.8, 0.5].map((f) => Math.round((base.subtotal * f) / 100) * 100))].filter((v) => v < base.subtotal);
       m.innerHTML = `<div class="box"><h3>🏷️ Descuento</h3>
-        <p style="margin:0"><b>${esc(base.tipo === 'producto' ? base.nombre : 'Granizado ' + base.tamanoNombre)}</b><br><span class="hint">Precio normal: ${pesos(base.precioUnit)} c/u · solo cambia en este pedido</span></p>
-        <label class="campo"><span>¿Cuánto se cobra por unidad?</span><div class="precio"><span>$</span><input class="field" id="dsValor" type="number" min="0" step="1" inputmode="numeric" value="${d.precioManual ?? ''}" placeholder="${base.precioUnit}"></div></label>
+        <p style="margin:0"><b>${n > 1 ? n + '× ' : ''}${esc(nom)}</b><br><span class="hint">Valor normal: ${pesos(base.subtotal)}${n > 1 ? ` (${pesos(base.precioUnit)} c/u)` : ''} · solo cambia en este pedido</span></p>
+        <label class="campo"><span>¿Cuánto se cobra en total${n > 1 ? ` por los ${n}` : ''}?</span><div class="precio"><span>$</span><input class="field" id="dsValor" type="number" min="0" step="1" inputmode="numeric" value="${d.totalManual ?? ''}" placeholder="${base.subtotal}"></div></label>
         <div class="chips">${rap.map((v) => `<button type="button" class="chip" data-v="${v}">${pesos(v)}</button>`).join('')}<button type="button" class="chip" data-v="0">🎁 Gratis</button></div>
         <small class="hint" id="dsTxt"></small>
         <button class="btn" id="dsOk">Aplicar</button><button class="btn ghost" id="dsNo">Cancelar</button></div>`;
       document.body.appendChild(m);
       const inp = m.querySelector('#dsValor');
-      const txt = () => { const v = inp.value === '' ? null : Math.round(Number(inp.value)); m.querySelector('#dsTxt').innerHTML = v == null ? '' : v > base.precioUnit ? '⚠️ Es más que el precio normal' : `Descuento de <b>${pesos((base.precioUnit - v) * (base.cantidad || 1))}</b>${(base.cantidad || 1) > 1 ? ` (${base.cantidad} unidades)` : ''}`; };
+      const txt = () => { const v = inp.value === '' ? null : Math.round(Number(inp.value)); m.querySelector('#dsTxt').innerHTML = v == null ? '' : v > base.subtotal ? '⚠️ Es más que el valor normal' : `Descuento de <b>${pesos(base.subtotal - v)}</b>`; };
       inp.addEventListener('input', txt); txt(); setTimeout(() => inp.focus(), 50);
       m.addEventListener('click', (e) => {
         const b = e.target.closest('button'); if (!b) return;
         if (b.dataset.v !== undefined) { inp.value = b.dataset.v; return txt(); }
         if (b.id === 'dsNo') return m.remove();
         if (b.id === 'dsOk') {
-          if (inp.value === '' || Math.round(Number(inp.value)) === base.precioUnit) delete d.precioManual;
+          if (inp.value === '' || Math.round(Number(inp.value)) === base.subtotal) delete d.totalManual;
           else if (!(Number(inp.value) >= 0)) return toast('Escribe un valor válido', true);
-          else d.precioManual = Math.round(Number(inp.value));
-          m.remove(); render(); toast(d.precioManual != null ? `🏷️ Se cobra ${pesos(d.precioManual)} c/u` : 'Precio normal');
+          else { d.totalManual = Math.round(Number(inp.value)); d.cantManual = n; }
+          m.remove(); render(); toast(d.totalManual != null ? `🏷️ ${esc(nom)}: se cobra ${pesos(d.totalManual)} en total` : 'Valor normal');
         }
       });
     }
@@ -474,12 +476,12 @@
         const a = armar(d);
         if (!a) return `<div class="cart-item"><div class="det">⚠️ Ítem ya no disponible</div><button class="x" data-del="${i}">✕</button></div>`;
         if (a.tipo === 'producto') {
-          return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${a.precioOriginal != null ? `<s class="hint">${pesos(a.precioOriginal)}</s> ` : ''}${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b>${btnDesc(i, a)}</div>
+          return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${a.subtotalOriginal != null ? `${pesos(a.precioOriginal)} c/u · <s class="hint">${pesos(a.subtotalOriginal)}</s> <b>${pesos(a.subtotal)}</b>` : `${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b>`}${btnDesc(i, a)}</div>
             <div class="qty has"><button data-prod="${a.productoId}" data-usa="${a.usa || ''}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-usa="${a.usa || ''}" data-d="1" ${faltaProd(a.productoId, a.usa).length ? 'disabled' : ''}>+</button></div></div>`;
         }
         ng++;
         return `<div class="cart-item"><div class="det">
-            <b>🍧 Granizado #${ng} · ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${a.precioOriginal != null ? `<s class="hint">${pesos(a.precioOriginal * a.cantidad)}</s> ` : ''}${pesos(a.subtotal)}<br>
+            <b>🍧 Granizado #${ng} · ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${a.subtotalOriginal != null ? `<s class="hint">${pesos(a.subtotalOriginal)}</s> ` : ''}${pesos(a.subtotal)}<br>
             ${a.sabores.map((s) => esc(s.nombre)).join(' + ')}<br>
             ${a.incluidos.length || a.producto ? 'Incluye: ' + [...a.incluidos.map((t) => (t.cantidad > 1 ? `${t.cantidad}× ` : '') + esc(t.nombre)), ...(a.producto ? ['🍺 ' + esc(a.producto.nombre)] : [])].join(', ') + '<br>' : 'Sin toppings<br>'}
             ${a.adicionales.length ? '<b>Adicionales:</b> ' + a.adicionales.map((x) => `${x.cantidad}× ${esc(x.nombre)}`).join(', ') + '<br>' : ''}
@@ -552,7 +554,7 @@
       if (ds.prod) { cambiarProducto(ds.prod, Number(ds.d), ds.usa !== undefined ? ds.usa || null : undefined); return render(); }
       if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
       if (ds.desc !== undefined) return abrirDescuento(Number(ds.desc));
-      if (ds.descQuitar !== undefined) { delete carrito[Number(ds.descQuitar)].precioManual; return render(); }
+      if (ds.descQuitar !== undefined) { delete carrito[Number(ds.descQuitar)].totalManual; return render(); }
       if (ds.tam) {
         const primero = !item.tamano;
         item.tamano = ds.tam;
