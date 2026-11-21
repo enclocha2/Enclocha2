@@ -191,3 +191,13 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - Se quitó "Caja del día" como opción aparte. Ahora cada compra sale de 💼 Presupuesto (con tope) o 💰 Ventas.
 - Ventas + Efectivo = salió del cajón → se descuenta en el cierre de caja (`saleDeCaja`). Ventas + transferencia/otro no toca el cierre.
 - Compras viejas marcadas "caja" quedan como Ventas en efectivo (se siguen descontando igual en su cierre).
+
+## v57 · Facturas más limpias
+- Lista de compras agrupada por día (Hoy, Ayer, fecha) con el total del día.
+- Cada factura cerrada muestra proveedor (y NIT), el primer producto "y N más", etiquetas (pago, presupuesto/ventas, 📎) y el total; al tocarla se abren los productos con editar/borrar, la nota y el botón de la factura. Las abiertas se mantienen al refrescar.
+- En celular los filtros quedan en una sola fila deslizable.
+
+## v57 · Visor de facturas
+- `verArchivo` (sesion.js) ahora es un visor grande: título con proveedor, fecha, NIT, total y # de productos; la foto cabe completa y al tocarla se acerca; ✕, Esc o tocar afuera cierra. En celular ocupa toda la pantalla.
+- Acciones en el visor: 🔄 Cambiar, 🗑 Quitar (pide confirmar) y ⬇️ Descargar. Lo usan Compras, Gastos fijos, Pedidos y Ventas.
+- Compras en celular: los filtros ya no se tapan con el botón ⚙️ Filtros y los cuadros de totales quedan ordenados.

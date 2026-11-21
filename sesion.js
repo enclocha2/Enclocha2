@@ -88,7 +88,7 @@ export function cadaTanto(fn, ms) {
 }
 import { enHorarioOperacion, textoPausa, fijarDiasCerrados, cerradoHoy } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '56';
+export const VERSION = '57';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
@@ -421,14 +421,31 @@ export async function prepararArchivo(f) {
   return { data, nombre: f.name.replace(/\.[^.]+$/, '') + '.jpg' };
 }
 
-// Ver un archivo guardado (imagen o PDF) en un modal
-export function verArchivo(a, titulo = '🧾 Archivo') {
+// Ver un archivo guardado (imagen o PDF): ocupa casi toda la pantalla, la foto cabe completa
+// y al tocarla se acerca. opciones: { titulo, sub, acciones: [{ txt, peligro, fn }] }
+export function verArchivo(a, titulo = '🧾 Archivo', { sub = '', acciones = [] } = {}) {
   const m = document.createElement('div');
-  m.className = 'modal show';
-  m.innerHTML = `<div class="box box-factura"><h3>${esc(titulo)}</h3><div class="factura-ver">${a.tipo === 'application/pdf' ? `<iframe src="${a.data}" title="Archivo"></iframe>` : `<img src="${a.data}" alt="">`}</div>
-    <a class="btn ghost" href="${a.data}" download="${esc(a.nombre || 'archivo')}" style="text-align:center">⬇️ Descargar</a><button class="btn" type="button">Cerrar</button></div>`;
+  m.className = 'modal show visor';
+  const pdf = a.tipo === 'application/pdf';
+  m.innerHTML = `<div class="visor-box">
+    <header class="visor-top"><div class="visor-tit"><b>${esc(titulo)}</b>${sub ? `<small>${sub}</small>` : ''}</div><button type="button" class="visor-x" title="Cerrar">✕</button></header>
+    <div class="visor-cuerpo">${pdf ? `<iframe src="${a.data}" title="Archivo"></iframe>` : `<img src="${a.data}" alt="">`}</div>
+    <footer class="visor-pie"><span class="hint">${pdf ? 'PDF · si no se ve, descárgalo' : '🔍 Toca la foto para acercar'}</span>
+      <div class="visor-acc">${acciones.map((x, k) => `<button type="button" class="mini ${x.peligro ? 'del-txt' : ''}" data-k="${k}">${x.txt}</button>`).join('')}<a class="mini" href="${a.data}" download="${esc(a.nombre || 'archivo')}">⬇️ Descargar</a></div></footer>
+  </div>`;
   document.body.appendChild(m);
-  m.querySelector('button').addEventListener('click', () => m.remove());
+  const cerrar = () => { m.remove(); document.removeEventListener('keydown', tecla); };
+  const tecla = (e) => { if (e.key === 'Escape') cerrar(); };
+  document.addEventListener('keydown', tecla);
+  m.addEventListener('click', async (e) => {
+    if (e.target === m || e.target.closest('.visor-x')) return cerrar();
+    if (e.target.tagName === 'IMG') return m.querySelector('.visor-cuerpo').classList.toggle('zoom');
+    const b = e.target.closest('[data-k]'); if (!b) return;
+    const acc = acciones[Number(b.dataset.k)];
+    if (acc.peligro && !b.classList.contains('confirmar')) { b.classList.add('confirmar'); const t = b.textContent; b.textContent = '¿Seguro?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = t; }, 3000); return; }
+    if ((await acc.fn()) !== false) cerrar();
+  });
+  return cerrar;
 }
 
 // ---------- Pago con efectivo + transferencia (una sola persona) ----------

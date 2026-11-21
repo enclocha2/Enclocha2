@@ -165,17 +165,6 @@
     </div>
   </div>
 
-  <div class="modal" id="modalFactura">
-    <div class="box box-factura">
-      <h3 id="mfTitulo">🧾 Factura</h3>
-      <div id="mfCuerpo" class="factura-ver"></div>
-      <div class="row" style="gap:8px">
-        <a class="btn ghost" id="mfDescargar" download style="flex:1;text-align:center">⬇️ Descargar</a>
-        <button class="btn ghost del-txt" id="mfBorrar">🗑 Quitar</button>
-      </div>
-      <button class="btn" id="mfCerrar">Cerrar</button>
-    </div>
-  </div>
   <input type="file" id="adjFile" accept="image/*,application/pdf" hidden>
 
   <div class="modal" id="modalInsumo">
@@ -198,7 +187,7 @@
 
   <script type="module">
     import { saleDeCaja, origenDe, ORIGENES_COMPRA, pesos, normalizar, CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, GRUPOS, recetaDe, itemBase, armarItem, consumoDe, sinReutilizables } from '/catalog.js';
-    import { requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
+    import { verArchivo, requerirSesion, api, esc, toast, bannerPresupuesto, puede } from '/sesion.js';
     import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaLarga, fechaCorta } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
@@ -217,6 +206,7 @@
       ['3m', 'Últimos 3 meses', sumarMeses(H, -2), H],
     ];
     let presu = null, filtroOrigen = '';
+    const abiertas = new Set(); // facturas abiertas (se mantienen al refrescar)
     const pintarFiltroOrigen = () => { $('#filtroOrigen').innerHTML = [['', 'Todo'], ...ORIGENES_COMPRA.map((o) => [o.id, `${o.icono} ${o.nombre}`])].map(([id, n]) => `<button class="chip ${filtroOrigen === id ? 'on' : ''}" data-forigen="${id}">${n}</button>`).join(''); };
     let periodo = 'mes', filtroCat = 'todas', filtroProv = '', compras = [], adjuntos = {}, editando = null, pagoSel = 'caja', recientes = [];
 
@@ -291,23 +281,19 @@
     // Ver / adjuntar desde la lista
     let verFactura = null;
     async function abrirFactura(id) {
-      verFactura = id;
-      $('#mfCuerpo').innerHTML = '<p class="hint">⏳ Cargando…</p>'; $('#mfBorrar').hidden = !puede('compras'); $('#modalFactura').classList.add('show');
+      const cs = compras.filter((c) => (c.factura || c.id) === id), c0 = cs[0];
+      const nombre = c0 ? (c0.proveedorId ? PROV()[c0.proveedorId]?.nombre || c0.proveedor : c0.proveedor || 'Tienda de barrio') : 'Factura';
+      const sub = c0 ? [fechaLarga(c0.fecha), c0.nit ? 'NIT ' + esc(c0.nit) : '', `<b>${pesos(cs.reduce((t, c) => t + c.valor, 0))}</b>`, `${cs.length} producto${cs.length === 1 ? '' : 's'}`].filter(Boolean).join(' · ') : '';
+      toast('⏳ Abriendo factura…');
       try {
         const a = await api(`/api/compras?r=adjunto&factura=${encodeURIComponent(id)}`);
-        $('#mfTitulo').textContent = `🧾 ${a.nombre || 'Factura'}`;
-        $('#mfCuerpo').innerHTML = a.tipo === 'application/pdf'
-          ? `<iframe src="${a.data}" title="Factura"></iframe><p class="hint">Si no se ve, usa ⬇️ Descargar.</p>`
-          : `<img src="${a.data}" alt="Factura">`;
-        $('#mfDescargar').href = a.data; $('#mfDescargar').download = a.nombre || 'factura';
-      } catch (e) { $('#mfCuerpo').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+        $('#toast').className = 'toast';
+        verArchivo(a, `🧾 ${nombre}`, { sub, acciones: puede('compras') ? [
+          { txt: '🔄 Cambiar', fn: () => { adjPara = id; $('#adjFile').click(); } },
+          { txt: '🗑 Quitar', peligro: true, fn: async () => { try { await api(`/api/compras?r=adjunto&factura=${encodeURIComponent(id)}`, { method: 'DELETE' }); delete adjuntos[id]; toast('Factura quitada'); render(); } catch (err) { toast(err.message, true); return false; } } },
+        ] : [] });
+      } catch (e) { toast(e.message, true); }
     }
-    $('#mfCerrar').addEventListener('click', () => $('#modalFactura').classList.remove('show'));
-    $('#mfBorrar').addEventListener('click', async (e) => {
-      const b = e.currentTarget;
-      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿Seguro?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑 Quitar'; }, 3000); return; }
-      try { await api(`/api/compras?r=adjunto&factura=${encodeURIComponent(verFactura)}`, { method: 'DELETE' }); delete adjuntos[verFactura]; $('#modalFactura').classList.remove('show'); toast('Factura quitada'); render(); } catch (err) { toast(err.message, true); }
-    });
     let adjPara = null;
     $('#adjFile').addEventListener('change', async (e) => {
       const f = e.target.files[0]; e.target.value = '';
@@ -631,32 +617,57 @@
         : '<tr><td class="empty">Sin compras en este periodo.</td></tr>';
       $('#porProv').innerHTML = barras(por((c) => c.proveedor || '🏪 Tienda de barrio').slice(0, 8).map(([k, v]) => [esc(k), v]));
 
-      // Cada compra (factura) por separado, con sus productos adentro
+      // Cada compra (factura) por separado, agrupadas por día. Cerradas muestran lo esencial; al tocarlas se ven los productos.
       const grupos = new Map();
       for (const c of lista) { const k = c.factura || c.id; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(c); }
-      const subir = puede('compras');
-      $('#facturas').innerHTML = grupos.size ? [...grupos.entries()].map(([fid, cs]) => {
-        const c0 = cs[0], tot = cs.reduce((t, c) => t + c.valor, 0), adj = adjuntos[fid];
-        const prov = c0.proveedorId ? `🚚 <b>${esc(PROV()[c0.proveedorId]?.nombre || c0.proveedor)}</b> <span class="hint">· NIT ${esc(c0.nit || PROV()[c0.proveedorId]?.nit || '')}</span>` : `🏪 <b>${esc(c0.proveedor || 'Tienda de barrio')}</b>`;
-        return `<article class="factura-card">
-          <header>
-            <div><div>${prov}</div><span class="hint">${fechaCorta(c0.fecha)} · ${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.nombre || '')} ${tagsReparto(cs)} · ${esc(c0.registradoPor)}${c0.nota && cs.length > 1 ? ` · 📝 ${esc(c0.nota)}` : ''}</span></div>
-            <div class="factura-der">
-              <b class="factura-total">${pesos(tot)}</b>
-              ${adj ? `<button class="mini adj-on" data-ver-fact="${esc(fid)}">📎 Ver factura</button>` : subir ? `<button class="mini" data-adj="${esc(fid)}">📎 Adjuntar factura</button>` : '<span class="hint">sin factura</span>'}
+      const subir = puede('compras'), H = hoy(), AYER = sumarDias(H, -1);
+      const dias = new Map();
+      for (const [fid, cs] of grupos) { const f = cs[0].fecha; if (!dias.has(f)) dias.set(f, []); dias.get(f).push([fid, cs]); }
+      const nomDia = (f) => f === H ? 'Hoy' : f === AYER ? 'Ayer' : fechaLarga(f).replace(/^./, (x) => x.toUpperCase());
+      const reparte = (cs) => { const t = { pres: 0, ventas: 0 }; for (const c of cs) { t.pres += c.reparto?.pres || 0; t.ventas += c.reparto?.ventas || 0; } return t; };
+      const tarjeta = (fid, cs) => {
+        const c0 = cs[0], tot = cs.reduce((t, c) => t + c.valor, 0), adj = adjuntos[fid], r = reparte(cs);
+        const fijo = !!c0.proveedorId, nombre = fijo ? PROV()[c0.proveedorId]?.nombre || c0.proveedor : c0.proveedor || 'Tienda de barrio';
+        const nit = fijo ? c0.nit || PROV()[c0.proveedorId]?.nit || '' : '';
+        const prev = cs.length === 1 ? esc(c0.insumo) : `${esc(c0.insumo)} <span class="hint">y ${cs.length - 1} más</span>`;
+        const pills = [
+          `<span class="pill">${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.corto || PAGO[c0.pago]?.nombre || '')}</span>`,
+          r.pres ? `<span class="pill p-pres">💼 ${r.ventas ? pesos(r.pres) : 'Presupuesto'}</span>` : '',
+          r.ventas ? `<span class="pill p-ventas">💰 ${r.pres ? pesos(r.ventas) : 'Ventas'}${cs.some(saleDeCaja) ? ' · cajón' : ''}</span>` : '',
+          adj ? '<span class="pill p-adj">📎 Factura</span>' : '',
+        ].join('');
+        return `<details class="fact" data-fid="${esc(fid)}" ${abiertas.has(fid) ? 'open' : ''}>
+          <summary>
+            <span class="fact-ico">${fijo ? '🚚' : '🏪'}</span>
+            <span class="fact-info">
+              <span class="fact-nom"><b>${esc(nombre)}</b>${nit ? `<small>NIT ${esc(nit)}</small>` : ''}</span>
+              <span class="fact-prev">${prev}</span>
+              <span class="fact-pills">${pills}</span>
+            </span>
+            <span class="fact-total"><b>${pesos(tot)}</b><small>${cs.length} producto${cs.length === 1 ? '' : 's'} <i class="fact-flecha">▾</i></small></span>
+          </summary>
+          <div class="fact-body">
+            ${cs.map((c) => `<div class="fact-linea">
+              <span class="fl-nom"><b>${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}</b>
+                <small>${c.cantidad ? `${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)} · ${pesos(Math.round(c.valor / c.cantidad))} c/u` : ''}${c.inventario ? `${c.cantidad ? ' · ' : ''}📦 +${fmt(c.inventario.cantidad)} ${esc(pl(c.inventario.cantidad, c.inventario.unidad))}${c.inventario.tapa ? ` + ${fmt(c.inventario.cantidad)} tapas` : ''}` : ''}${!c.insumoId ? ' · ⚠️ sin homologar' : ''}${r.pres && r.ventas && c.reparto?.pres && c.reparto?.ventas ? ` · 💼 ${pesos(c.reparto.pres)} + 💰 ${pesos(c.reparto.ventas)}` : ''}</small></span>
+              <b class="fl-val">${pesos(c.valor)}</b>
+              ${admin ? `<span class="fl-acc"><button class="icon-btn" data-edit="${c.id}" title="Editar">✏️</button><button class="icon-btn del" data-del="${c.id}" title="Borrar">🗑</button></span>` : ''}
+            </div>`).join('')}
+            <div class="fact-pie">
+              <span class="hint">${c0.nota ? `📝 ${esc(c0.nota)} · ` : ''}Registró ${esc(c0.registradoPor)}</span>
+              ${adj ? `<button class="mini adj-on" data-ver-fact="${esc(fid)}">📎 Ver factura</button>` : subir ? `<button class="mini" data-adj="${esc(fid)}">📷 Adjuntar factura</button>` : ''}
             </div>
-          </header>
-          <div class="factura-lineas">${cs.map((c) => `<div class="factura-linea">
-            <span><b>${CAT[c.categoria]?.icono || ''} ${esc(c.insumo)}</b>${c.cantidad ? ` <span class="hint">· ${c.cantidad.toLocaleString('es-CO')} ${esc(c.unidad)}${c.cantidad > 0 ? ` (${pesos(Math.round(c.valor / c.cantidad))} c/u)` : ''}</span>` : ''}
-              ${c.inventario ? `<br><span class="hint">📦 +${fmt(c.inventario.cantidad)} ${esc(c.inventario.unidad)} al inventario${c.inventario.tapa ? ` + ${fmt(c.inventario.cantidad)} tapas` : ''}</span>` : ''}${!c.insumoId ? '<br><span class="hint">⚠️ sin homologar</span>' : ''}${c.nota && cs.length === 1 ? `<br><span class="hint">📝 ${esc(c.nota)}</span>` : ''}</span>
-            <b>${pesos(c.valor)}</b>
-            ${admin ? `<span class="factura-acc"><button class="mini" data-edit="${c.id}">✏️</button> <button class="del" data-del="${c.id}">🗑</button></span>` : ''}
-          </div>`).join('')}</div>
-        </article>`;
+          </div>
+        </details>`;
+      };
+      $('#facturas').innerHTML = grupos.size ? [...dias.entries()].map(([f, fs]) => {
+        const totDia = fs.reduce((t, [, cs]) => t + cs.reduce((x, c) => x + c.valor, 0), 0);
+        return `<div class="fact-dia"><span>${nomDia(f)}</span><span>${fs.length} compra${fs.length === 1 ? '' : 's'} · <b>${pesos(totDia)}</b></span></div>` + fs.map(([fid, cs]) => tarjeta(fid, cs)).join('');
       }).join('') + `<div class="factura-pie"><span>${grupos.size} compra${grupos.size === 1 ? '' : 's'} · ${lista.length} producto${lista.length === 1 ? '' : 's'}</span><b>${pesos(total)}</b></div>`
         : '<p class="empty hint">No hay compras en este periodo.</p>';
     }
 
+    $('#facturas').addEventListener('toggle', (e) => { const d = e.target.closest?.('details.fact'); if (d) { if (d.open) abiertas.add(d.dataset.fid); else abiertas.delete(d.dataset.fid); } }, true);
     document.querySelector('main').addEventListener('click', async (e) => {
       const b = e.target.closest('button');
       if (!b) return;
