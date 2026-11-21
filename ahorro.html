@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1a0b2e" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/img/icon-64.png" />
+  <link rel="apple-touch-icon" href="/img/icon-180.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Enclocha 2" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <title>Enclocha 2 · Ahorro</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body style="visibility:hidden">
+  <header class="top">
+    <div class="row"><a href="/" class="marca" title="Menú"><img src="/img/logo.png" alt="Enclocha 2" class="logo-mini" /></a><a href="/" class="back">← Menú</a><h1>🐷 Ahorro</h1></div>
+    <div class="row"><a href="/compras">🛒 Compras</a><a href="/presupuesto">💼 Presupuesto</a></div>
+  </header>
+
+  <main class="admin" style="max-width:1000px">
+    <section class="card ahorro-hero">
+      <div>
+        <span class="hint">Tienes ahorrado</span>
+        <b class="ahorro-saldo" id="saldo">$0</b>
+        <span class="hint" id="metaTxt"></span>
+      </div>
+      <div class="ahorro-botones">
+        <button class="btn" id="btnEntra">➕ Guardar plata</button>
+        <button class="btn ghost" id="btnSale">➖ Sacar plata</button>
+        <a class="btn ghost" href="/compras?origen=ahorro" id="btnCompra">🛒 Comprar con el ahorro</a>
+      </div>
+      <div class="pres-barra grande" id="metaBarraBox" hidden><i id="metaBarra" class="ok"></i><em id="metaPct"></em></div>
+      <button class="mini" id="btnMeta" style="justify-self:start">🎯 Ponerle una meta</button>
+    </section>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="dos-col">
+      <section class="card"><h2>📊 Mes a mes <span class="hint">(últimos 6 meses)</span></h2><div class="leyenda-ef"><span><i class="c-ef"></i>Entró</span><span><i class="c-sale"></i>Salió / compras</span></div><div id="meses"></div></section>
+      <section class="card"><h2>🧾 ¿En qué se ha gastado?</h2><div id="enQue"></div></section>
+    </div>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">📜 Movimientos</h2>
+        <div class="chips" id="filtro"></div>
+      </div>
+      <div id="lista" style="margin-top:10px"></div>
+    </section>
+  </main>
+
+  <div class="modal" id="modalMov">
+    <div class="box">
+      <h3 id="mmTitulo">➕ Guardar plata en el ahorro</h3>
+      <label class="campo"><span>Valor</span><div class="precio"><span>$</span><input class="field" id="mmValor" type="number" min="1" step="1" inputmode="numeric"></div></label>
+      <div class="chips" id="mmRapidos"></div>
+      <div class="campo" id="mmDesdeBox"><span>¿De dónde sale la plata?</span><div class="seg-pago seg-mini" id="mmDesde"></div><small class="hint" id="mmDesdeInfo"></small></div>
+      <label class="campo"><span id="mmConceptoLbl">Nota (opcional)</span><input class="field" id="mmConcepto" maxlength="80"></label>
+      <label class="campo"><span>Fecha</span><input class="field" id="mmFecha" type="date"></label>
+      <div class="error" id="mmError"></div>
+      <button class="btn" id="mmGuardar">Guardar</button>
+      <button class="btn ghost" id="mmCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal" id="modalMeta">
+    <div class="box">
+      <h3>🎯 Meta de ahorro</h3>
+      <label class="campo"><span>¿Para qué?</span><input class="field" id="metaNombre" maxlength="60" placeholder="Ej: máquina granizadora nueva"></label>
+      <label class="campo"><span>¿Cuánto quieres juntar?</span><div class="precio"><span>$</span><input class="field" id="metaMonto" type="number" min="0" step="1" inputmode="numeric"></div></label>
+      <button class="btn" id="metaGuardar">Guardar meta</button>
+      <button class="btn ghost" id="metaQuitar">Quitar meta</button>
+      <button class="btn ghost" id="metaCancelar">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { pesos } from '/catalog.js';
+    import { requerirSesion, api, esc, toast, verArchivo } from '/sesion.js';
+    import { hoy, sumarMeses, nombreMes, fechaCorta } from '/fechas.js';
+
+    const $ = (s) => document.querySelector(s);
+    await requerirSesion('presupuesto');
+    let d = null, filtro = '', tipoMov = 'entra', desdeSel = 'cajon';
+
+    async function cargar() {
+      try { d = await api('/api/compras?r=ahorro'); pintar(); } catch (e) { toast(e.message, true); }
+    }
+    const mesDe = (f) => f.slice(0, 7);
+    function pintar() {
+      const H = hoy(), M = mesDe(H);
+      $('#saldo').textContent = pesos(d.saldo);
+      $('#saldo').classList.toggle('neg-txt', d.saldo < 0);
+      const meta = d.meta;
+      $('#metaBarraBox').hidden = !meta;
+      $('#btnMeta').textContent = meta ? '🎯 Cambiar meta' : '🎯 Ponerle una meta';
+      if (meta) {
+        const pct = Math.max(0, Math.min(100, Math.round((d.saldo / meta.monto) * 100)));
+        $('#metaBarra').style.width = pct + '%'; $('#metaPct').textContent = `${pct}%`;
+        $('#metaTxt').innerHTML = `🎯 ${esc(meta.nombre || 'Meta')}: ${pesos(meta.monto)} · ${d.saldo >= meta.monto ? '<b>¡Meta cumplida!</b>' : `faltan <b>${pesos(meta.monto - d.saldo)}</b>`}`;
+      } else $('#metaTxt').textContent = d.movimientos.length ? '' : 'Todavía no has guardado nada. Empieza con "➕ Guardar plata".';
+
+      const delMes = d.movimientos.filter((m) => mesDe(m.fecha) === M);
+      const sum = (l, f) => l.filter(f).reduce((t, m) => t + m.valor, 0);
+      const entraMes = sum(delMes, (m) => m.tipo === 'entra'), saleMes = sum(delMes, (m) => m.tipo !== 'entra');
+      $('#kpis').innerHTML = `
+        <div class="kpi"><span>➕ Guardado este mes</span><b>${pesos(entraMes)}</b><small>${(() => { const n = delMes.filter((m) => m.tipo === 'entra').length; return n ? `${n} ${n === 1 ? 'vez' : 'veces'}` : 'nada todavía'; })()}</small></div>
+        <div class="kpi"><span>➖ Gastado este mes</span><b>${pesos(saleMes)}</b><small>${pesos(sum(delMes, (m) => m.tipo === 'compra'))} en compras</small></div>
+        <div class="kpi"><span>Total guardado</span><b>${pesos(d.entra)}</b><small>desde que empezaste</small></div>
+        <div class="kpi"><span>Total gastado</span><b>${pesos(d.sale + d.compras)}</b><small>${pesos(d.compras)} en compras · ${pesos(d.sale)} sacado</small></div>`;
+
+      // mes a mes
+      const meses = Array.from({ length: 6 }, (_, i) => sumarMeses(M + '-01', i - 5).slice(0, 7));
+      const filas = meses.map((m) => { const l = d.movimientos.filter((x) => mesDe(x.fecha) === m); return [m, sum(l, (x) => x.tipo === 'entra'), sum(l, (x) => x.tipo !== 'entra')]; });
+      const max = Math.max(1, ...filas.flatMap((f) => [f[1], f[2]]));
+      $('#meses').innerHTML = filas.map(([m, e, s]) => `<div class="ah-mes"><span>${nombreMes(m + '-01').slice(0, 3)}</span>
+        <div class="ah-barras">${e ? `<div class="ah-b c-ef" style="width:${(e / max) * 100}%" title="Entró ${pesos(e)}"></div>` : '<div class="ah-b"></div>'}${s ? `<div class="ah-b c-sale" style="width:${(s / max) * 100}%" title="Salió ${pesos(s)}"></div>` : '<div class="ah-b"></div>'}</div>
+        <span class="ah-val">${e || s ? `<b>+${pesos(e)}</b><br><small>−${pesos(s)}</small>` : '<small>—</small>'}</span></div>`).join('');
+
+      // en qué se gastó
+      const g = {};
+      for (const m of d.movimientos.filter((x) => x.tipo !== 'entra')) { const k = m.tipo === 'compra' ? `🛒 ${m.concepto}` : `➖ ${m.concepto}`; g[k] = (g[k] || 0) + m.valor; }
+      const gl = Object.entries(g).sort((a, b) => b[1] - a[1]).slice(0, 8), gmax = Math.max(1, ...gl.map((x) => x[1]));
+      $('#enQue').innerHTML = gl.length ? gl.map(([k, v]) => `<div class="barra-h"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / gmax) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('') : '<p class="hint">Todavía no se ha gastado nada del ahorro. 💪</p>';
+
+      // movimientos
+      const F = [['', 'Todo'], ['entra', '➕ Entró'], ['sale', '➖ Salió'], ['compra', '🛒 Compras']];
+      $('#filtro').innerHTML = F.map(([id, n]) => `<button class="chip ${filtro === id ? 'on' : ''}" data-f="${id}">${n}</button>`).join('');
+      const l = d.movimientos.filter((m) => !filtro || m.tipo === filtro);
+      $('#lista').innerHTML = l.length ? l.map((m) => `<div class="ah-mov ${m.tipo}">
+        <span class="ah-ico">${m.tipo === 'entra' ? '➕' : m.tipo === 'compra' ? '🛒' : '➖'}</span>
+        <span class="ah-info"><b>${esc(m.tipo === 'entra' ? (m.concepto !== 'Ahorro' ? m.concepto : 'Guardado') : m.concepto)}</b>
+          <small>${fechaCorta(m.fecha)}${m.tipo === 'entra' && m.desde ? ' · ' + esc(d.desde[m.desde] || '') : ''}${m.tipo === 'compra' ? ` · compra${m.proveedor ? ' a ' + esc(m.proveedor) : ''}` : ''}${m.por ? ' · ' + esc(m.por) : ''}</small></span>
+        <b class="ah-val ${m.tipo === 'entra' ? 'pos-txt' : ''}">${m.tipo === 'entra' ? '+' : '−'}${pesos(m.valor)}</b>
+        ${m.tipo === 'compra' ? `<a class="icon-btn" href="/compras#lista" title="Ver en Compras">↗️</a>` : `<button class="icon-btn del" data-del="${m.id}" title="Borrar">🗑</button>`}
+      </div>`).join('') : '<p class="hint">No hay movimientos.</p>';
+    }
+
+    // ---------- Meter / sacar plata ----------
+    const DESDE_ENTRA = () => Object.entries(d.desde);
+    const DESDE_SALE = [['efectivo', '💵 Efectivo'], ['transferencia', '📲 Transferencia']];
+    function pintarDesde() {
+      const ops = tipoMov === 'entra' ? DESDE_ENTRA() : DESDE_SALE;
+      $('#mmDesde').innerHTML = ops.map(([id, n]) => `<button type="button" class="${desdeSel === id ? 'on' : ''}" data-desde="${id}">${n}</button>`).join('');
+      $('#mmDesdeInfo').textContent = tipoMov === 'entra' && desdeSel === 'cajon' ? 'Se descuenta solo en el cierre de caja de ese día.' : '';
+    }
+    function abrir(tipo) {
+      tipoMov = tipo; desdeSel = tipo === 'entra' ? 'cajon' : 'efectivo';
+      $('#mmTitulo').textContent = tipo === 'entra' ? '➕ Guardar plata en el ahorro' : '➖ Sacar plata del ahorro';
+      $('#mmConceptoLbl').textContent = tipo === 'entra' ? 'Nota (opcional)' : '¿En qué se gastó?';
+      $('#mmConcepto').placeholder = tipo === 'entra' ? 'Ej: lo del fin de semana' : 'Ej: arreglo de la nevera';
+      $('#mmValor').value = ''; $('#mmConcepto').value = ''; $('#mmFecha').value = hoy(); $('#mmError').textContent = '';
+      $('#mmRapidos').innerHTML = (tipo === 'entra' ? [50000, 100000, 200000, 500000] : [20000, 50000, 100000]).map((v) => `<button type="button" class="chip" data-v="${v}">${pesos(v)}</button>`).join('')
+        + (tipo === 'sale' && d.saldo > 0 ? `<button type="button" class="chip" data-v="${d.saldo}">Todo (${pesos(d.saldo)})</button>` : '');
+      pintarDesde();
+      $('#modalMov').classList.add('show'); setTimeout(() => $('#mmValor').focus(), 50);
+    }
+    $('#btnEntra').addEventListener('click', () => abrir('entra'));
+    $('#btnSale').addEventListener('click', () => abrir('sale'));
+    $('#mmCancelar').addEventListener('click', () => $('#modalMov').classList.remove('show'));
+    $('#mmRapidos').addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) $('#mmValor').value = b.dataset.v; });
+    $('#mmDesde').addEventListener('click', (e) => { const b = e.target.closest('[data-desde]'); if (b) { desdeSel = b.dataset.desde; pintarDesde(); } });
+    $('#mmGuardar').addEventListener('click', async () => {
+      try {
+        await api('/api/compras?r=ahorro', { method: 'POST', body: JSON.stringify({ tipo: tipoMov, valor: $('#mmValor').value, concepto: $('#mmConcepto').value, fecha: $('#mmFecha').value, desde: desdeSel }) });
+        $('#modalMov').classList.remove('show'); toast(tipoMov === 'entra' ? `🐷 ${pesos(Number($('#mmValor').value))} guardados` : '✅ Salida registrada'); cargar();
+      } catch (err) { $('#mmError').textContent = err.message; }
+    });
+    $('#lista').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-del]'); if (!b) return;
+      if (!b.classList.contains('confirmar')) { b.classList.add('confirmar'); b.textContent = '¿?'; setTimeout(() => { b.classList.remove('confirmar'); b.textContent = '🗑'; }, 3000); return; }
+      try { await api(`/api/compras?r=ahorro&id=${b.dataset.del}`, { method: 'DELETE' }); toast('Movimiento borrado'); cargar(); } catch (err) { toast(err.message, true); }
+    });
+    $('#filtro').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (b) { filtro = b.dataset.f; pintar(); } });
+
+    // ---------- Meta ----------
+    $('#btnMeta').addEventListener('click', () => { $('#metaNombre').value = d.meta?.nombre || ''; $('#metaMonto').value = d.meta?.monto || ''; $('#metaQuitar').hidden = !d.meta; $('#modalMeta').classList.add('show'); });
+    $('#metaCancelar').addEventListener('click', () => $('#modalMeta').classList.remove('show'));
+    const guardarMeta = async (monto) => { try { await api('/api/compras?r=ahorro&meta=1', { method: 'PUT', body: JSON.stringify({ monto, nombre: $('#metaNombre').value }) }); $('#modalMeta').classList.remove('show'); cargar(); } catch (err) { toast(err.message, true); } };
+    $('#metaGuardar').addEventListener('click', () => guardarMeta($('#metaMonto').value));
+    $('#metaQuitar').addEventListener('click', () => guardarMeta(0));
+
+    cargar();
+  </script>
+</body>
+</html>

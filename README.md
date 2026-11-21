@@ -209,3 +209,9 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 
 ## v59 · Papas con opciones
 - Una sola vez, el producto "Papas" queda descontando de los ítems de inventario "Papas …" (limón, pimienta, naturales) y de "Platanos John" si no hay un producto de platanitos aparte. Al venderlo pregunta cuál. Se puede cambiar después en Productos → chip de inventario.
+
+## v60 · Ahorro
+- Página **🐷 Ahorro** (menú → Caja y dinero, permiso "presupuesto"): saldo, meta opcional con barra, guardado/gastado del mes y total, gráfica de 6 meses, en qué se ha gastado y movimientos (filtro entró/salió/compras).
+- ➕ Guardar plata: desde el efectivo del cajón (se descuenta solo en el cierre de ese día), plata de ventas guardada, transferencia u otro. ➖ Sacar plata: con concepto; no deja sacar más de lo que hay.
+- En Compras, tercera opción **🐷 Ahorro**: muestra cuánto hay, no deja comprar si no alcanza, y la compra se descuenta del ahorro (si se borra o se cambia, se devuelve). No toca presupuesto ni cierre.
+- Rutas: `/api/compras?r=ahorro` (GET, POST, DELETE `?id=`, PUT `&meta=1`). Datos por sede: `ahorro:movs`, `ahorro:compras` (hash), `ahorro:meta`.

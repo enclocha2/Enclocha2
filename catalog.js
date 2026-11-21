@@ -364,9 +364,10 @@ export const esStiv = (u) => normalizar(u || '') === 'stiv';
 export const ORIGENES_COMPRA = [
   { id: 'presupuesto', nombre: 'Presupuesto', icono: '💼', ayuda: 'Lo del mes para compras. Si no alcanza, lo que falte sale de ventas.' },
   { id: 'ventas', nombre: 'Ventas', icono: '💰', ayuda: 'Plata de lo vendido. Si se paga en efectivo, sale del cajón y se descuenta en el cierre de caja.' },
+  { id: 'ahorro', nombre: 'Ahorro', icono: '🐷', ayuda: 'Plata que tienes guardada en el ahorro. Se descuenta del saldo del ahorro.' },
 ];
 // Solo hay dos lados: presupuesto o ventas. (Compras viejas marcadas "caja" = ventas en efectivo.)
-export const origenDe = (c) => c.origen === 'presupuesto' ? 'presupuesto' : c.origen === 'ventas' || c.origen === 'caja' ? 'ventas' : c.pago === 'caja' ? 'ventas' : 'presupuesto';
+export const origenDe = (c) => c.origen === 'ahorro' ? 'ahorro' : c.origen === 'presupuesto' ? 'presupuesto' : c.origen === 'ventas' || c.origen === 'caja' ? 'ventas' : c.pago === 'caja' ? 'ventas' : 'presupuesto';
 // Ventas + efectivo = la plata salió del cajón → se descuenta en el cierre de caja de ese día
 export const saleDeCaja = (c) => origenDe(c) === 'ventas' && c.pago === 'caja';
 // Reparte el presupuesto del mes entre sus compras en orden (fecha, hora de registro, línea).
@@ -377,6 +378,7 @@ export function repartirPresupuesto(compras, monto) {
   for (const c of orden) {
     const o = origenDe(c);
     if (o === 'ventas') { out[c.id] = { pres: 0, ventas: c.valor, caja: 0 }; continue; }
+    if (o === 'ahorro') { out[c.id] = { pres: 0, ventas: 0, caja: 0, ahorro: c.valor }; continue; }
     const p = Math.min(queda, c.valor); queda -= p;
     out[c.id] = { pres: p, ventas: c.valor - p, caja: 0 };
   }

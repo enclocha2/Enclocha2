@@ -1319,3 +1319,23 @@ tr.sin-costo td:first-child b { color: #ffd166; }
 .visor-pdf-cel { height: 100%; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 20px; text-align: center; }
 .visor-pdf-cel b { word-break: break-all; max-width: 90%; }
 .visor-pdf-cel .btn { width: auto; padding: 12px 24px; text-decoration: none; }
+
+/* ---------- Ahorro ---------- */
+.ahorro-hero { display: grid; gap: 14px; }
+.ahorro-saldo { display: block; font-size: 2.6rem; font-weight: 900; line-height: 1.1; margin: 4px 0; background: linear-gradient(90deg, #33e1ff, #ff3fd1); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ahorro-botones { display: flex; gap: 10px; flex-wrap: wrap; }
+.ahorro-botones .btn { width: auto; flex: 1 1 160px; text-align: center; text-decoration: none; }
+.c-sale { background: #9085e9; }
+.ah-mes { display: grid; grid-template-columns: 40px 1fr 110px; gap: 10px; align-items: center; padding: 6px 0; }
+.ah-mes > span:first-child { text-transform: capitalize; color: var(--muted); font-size: .85rem; }
+.ah-barras { display: grid; gap: 3px; }
+.ah-b { height: 9px; border-radius: 0 5px 5px 0; }
+.ah-val { text-align: right; font-size: .9rem; }
+.ah-val small { color: var(--muted); }
+.ah-mov { display: grid; grid-template-columns: 36px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 4px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.ah-ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(255, 255, 255, .06); }
+.ah-mov.entra .ah-ico { background: rgba(25, 158, 112, .2); }
+.ah-info { display: grid; gap: 2px; min-width: 0; }
+.ah-info small { color: var(--muted); }
+.ah-mov .icon-btn { text-decoration: none; }
+@media (max-width: 600px) { .ahorro-saldo { font-size: 2.1rem; } .ah-mes { grid-template-columns: 34px 1fr 92px; } }

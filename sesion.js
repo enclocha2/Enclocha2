@@ -88,7 +88,7 @@ export function cadaTanto(fn, ms) {
 }
 import { enHorarioOperacion, textoPausa, fijarDiasCerrados, cerradoHoy } from '/fechas.js';
 // Versión de la app (para saber si ya quedó desplegada la última)
-export const VERSION = '59';
+export const VERSION = '60';
 export { enHorarioOperacion };
 
 // Aviso "🌙 Fuera de horario" con botón para revisar a mano. Se pone/quita solo.
@@ -166,6 +166,7 @@ export const SECCIONES_NAV = [
     { href: '/ventas', ico: '💰', txt: 'Ventas', perm: ['ventas'] },
     { href: '/reportes', ico: '📊', txt: 'Reportes', perm: ['reportes'] },
     { href: '/presupuesto', ico: '💼', txt: 'Presupuesto del mes', perm: ['presupuesto'] },
+    { href: '/ahorro', ico: '🐷', txt: 'Ahorro', perm: ['presupuesto'] },
     { href: '/compras', ico: '🛒', txt: 'Compras', perm: ['compras', 'compras_editar'] },
     { href: '/proveedores', ico: '🚚', txt: 'Proveedores', perm: ['compras', 'compras_editar'] },
     { href: '/compras#costos', ico: '💲', txt: 'Costos', perm: ['compras', 'compras_editar'] },

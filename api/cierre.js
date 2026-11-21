@@ -1,6 +1,7 @@
 import { partesDe } from '../catalog.js';
 import { sesion } from './_lib/auth.js';
 import { saleDeCaja } from '../catalog.js';
+import { ahorroDelCajon } from './_lib/ahorro.js';
 import { ventasEntre, listar, leerCierre, guardarCierre, listarCierres, migrarVentas, comprasEntre } from './_lib/store.js';
 import { inicioJornada, finJornada } from '../fechas.js';
 import { conSede } from './_lib/sede.js';
@@ -24,7 +25,10 @@ async function sistema(jornada) {
   }
   const pendientes = (await listar(300)).filter((p) => p.creado >= ini && p.creado <= fin && p.estado !== 'cancelado' && !p.pago?.pagado);
   const compras = (await comprasEntre(jornada, jornada)).filter(saleDeCaja);
-  r.comprasCaja = { n: compras.length, total: compras.reduce((s, c) => s + c.valor, 0), lista: compras.map((c) => ({ insumo: c.insumo, valor: c.valor, por: c.registradoPor })) };
+  // también la plata que se pasó del cajón al ahorro ese día
+  const alAhorro = (await ahorroDelCajon(jornada)).map((m) => ({ insumo: `🐷 Al ahorro${m.concepto && m.concepto !== 'Ahorro' ? ': ' + m.concepto : ''}`, valor: m.valor, por: m.por }));
+  const salidas = [...compras.map((c) => ({ insumo: c.insumo, valor: c.valor, por: c.registradoPor })), ...alAhorro];
+  r.comprasCaja = { n: salidas.length, total: salidas.reduce((s, c) => s + c.valor, 0), lista: salidas };
   r.pendientes = { n: pendientes.length, total: pendientes.reduce((s, p) => s + p.total, 0), clientes: [...new Set(pendientes.map((p) => p.cliente))].slice(0, 20) };
   return r;
 }

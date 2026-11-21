@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { sesion } from './_lib/auth.js';
 import gastosFijos from './_lib/gastosfijos.js';
 import presupuesto, { presupuestoDe } from './_lib/presupuesto.js';
-import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock, leerProveedores, guardarProveedores, guardarAdjunto, leerAdjunto, borrarAdjunto, metaAdjuntos, leerCostosManual, guardarCostosManual } from './_lib/store.js';
+import ahorro, { saldoAhorro } from './_lib/ahorro.js';
+import { guardarCompra, leerCompra, borrarCompra, comprasEntre, leerInventario, guardarInventario, moverStock, leerProveedores, guardarProveedores, guardarAdjunto, leerAdjunto, borrarAdjunto, metaAdjuntos, marcarCompraAhorro, quitarCompraAhorro, leerCostosManual, guardarCostosManual } from './_lib/store.js';
 import { CATEGORIAS_COMPRA, UNIDADES, UNIDADES_INV, PAGOS_COMPRA, normalizar, slug, empaquesSugeridos } from '../catalog.js';
 import { repartirPresupuesto } from '../catalog.js';
 import { conSede } from './_lib/sede.js';
@@ -25,7 +26,7 @@ function validar(b) {
     unidad: UNIDADES.includes(b.unidad) ? b.unidad : 'und',
     valor,
     pago: PAGOS_COMPRA.some((p) => p.id === b.pago) ? b.pago : 'caja',
-    origen: b.origen === 'ventas' || b.origen === 'caja' ? 'ventas' : 'presupuesto',
+    origen: b.origen === 'ahorro' ? 'ahorro' : b.origen === 'ventas' || b.origen === 'caja' ? 'ventas' : 'presupuesto',
     proveedor: txt(b.proveedor, 60),
     nota: txt(b.nota, 200),
   };
@@ -78,8 +79,8 @@ async function repartoFactura(compras) {
   if (!compras.length) return null;
   const f = compras[0].fecha, ids = new Set(compras.map((c) => c.id));
   const delMes = await conReparto(`${f.slice(0, 7)}-01`, `${f.slice(0, 7)}-31`);
-  const t = { pres: 0, ventas: 0, caja: 0 };
-  for (const c of delMes) if (ids.has(c.id)) { t.pres += c.reparto.pres; t.ventas += c.reparto.ventas; t.caja += c.reparto.caja; }
+  const t = { pres: 0, ventas: 0, caja: 0, ahorro: 0 };
+  for (const c of delMes) if (ids.has(c.id)) { t.pres += c.reparto.pres; t.ventas += c.reparto.ventas; t.caja += c.reparto.caja; t.ahorro += c.reparto.ahorro || 0; }
   return t;
 }
 
@@ -131,6 +132,7 @@ async function handler(req, res) {
   const r = ruta(req);
   if (r === 'gastosfijos') return gastosFijos(req, res);
   if (r === 'presupuesto') return presupuesto(req, res);
+  if (r === 'ahorro') return ahorro(req, res);
   res.setHeader('Cache-Control', 'no-store');
   const yo = await sesion(req);
   if (!yo) return res.status(401).json({ error: 'Inicia sesión' });
@@ -240,10 +242,12 @@ async function handler(req, res) {
           try { const x = { ...comun, ...l, proveedorId: b.proveedorId }; let d = validar(x); d.inventario = await validarInventario(x); d = await estandarizar(x, d); d = await conProveedor(x, d); lista.push(d); }
           catch (e) { return res.status(400).json({ error: `Producto ${k + 1}: ${e.message}` }); }
         }
+        if (lista[0]?.origen === 'ahorro') { const { saldo } = await saldoAhorro(); const tot = lista.reduce((t, d) => t + d.valor, 0); if (tot > saldo) return res.status(400).json({ error: `En el ahorro solo hay $${saldo.toLocaleString('es-CO')} y la compra es de $${tot.toLocaleString('es-CO')}` }); }
         const factura = randomUUID(), t = Date.now(), compras = [];
         for (const [k, d] of lista.entries()) {
           const compra = { id: randomUUID(), ...d, factura, linea: k, registradoPor: usuario, creado: t };
           await guardarCompra(compra);
+          if (compra.origen === 'ahorro') await marcarCompraAhorro(compra);
           await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
           compras.push(compra);
         }
@@ -251,9 +255,11 @@ async function handler(req, res) {
       }
       let datos;
       try { datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); datos = await conProveedor(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
+      if (datos.origen === 'ahorro') { const { saldo } = await saldoAhorro(); if (datos.valor > saldo) return res.status(400).json({ error: `En el ahorro solo hay $${saldo.toLocaleString('es-CO')}` }); }
       const idc = randomUUID();
       const compra = { id: idc, ...datos, factura: idc, registradoPor: usuario, creado: Date.now() };
       await guardarCompra(compra);
+      if (compra.origen === 'ahorro') await marcarCompraAhorro(compra);
       await entrada(compra.inventario, 1, { tipo: 'compra', nota: compra.insumo, usuario });
       return res.status(201).json({ compra, reparto: await repartoFactura([compra]) });
     }
@@ -265,18 +271,21 @@ async function handler(req, res) {
       if (!actual) return res.status(404).json({ error: 'Compra no encontrada' });
       if (req.method === 'DELETE') {
         await borrarCompra(actual.id);
+        await quitarCompraAhorro(actual.id);
         if (actual.factura === actual.id) await borrarAdjunto(actual.id);
         await entrada(actual.inventario, -1, { tipo: 'compra-borrada', nota: actual.insumo, usuario });
         return res.status(200).json({ ok: true });
       }
       let datos;
       try { const b = leer(req); datos = validar(b); datos.inventario = await validarInventario(b); datos = await estandarizar(b, datos); datos = await conProveedor(b, datos); } catch (e) { return res.status(400).json({ error: e.message }); }
+      if (datos.origen === 'ahorro') { const { saldo } = await saldoAhorro(actual.id); if (datos.valor > saldo) return res.status(400).json({ error: `En el ahorro solo hay $${saldo.toLocaleString('es-CO')}` }); }
       // reversar la entrada anterior y aplicar la nueva
       await entrada(actual.inventario, -1, { tipo: 'compra-editada', nota: actual.insumo + ' (antes)', usuario });
       await entrada(datos.inventario, 1, { tipo: 'compra-editada', nota: datos.insumo, usuario });
       if (datos.fecha !== actual.fecha) await borrarCompra(actual.id); // reindexar por fecha
       const compra = { ...actual, ...datos, editadoPor: usuario, editado: Date.now() };
       await guardarCompra(compra);
+      if (compra.origen === 'ahorro') await marcarCompraAhorro(compra); else await quitarCompraAhorro(compra.id);
       return res.status(200).json({ compra, reparto: await repartoFactura([compra]) });
     }
 

@@ -318,12 +318,18 @@
     const pintarPagos = () => { $('#pagos').innerHTML = PAGOS_COMPRA.map((p) => `<button type="button" class="${pagoSel === p.id ? 'on' : ''}" data-pago="${p.id}">${p.icono} ${p.corto || p.nombre}</button>`).join(''); pintarOrigen(); };
     $('#pagos').addEventListener('click', (e) => { const b = e.target.closest('[data-pago]'); if (b) { pagoSel = b.dataset.pago; pintarPagos(); } });
     // ¿De dónde sale la plata? presupuesto (con tope), ventas o caja del día (solo cositas del diario)
-    let origenSel = 'presupuesto';
+    let origenSel = 'presupuesto', ahorroSaldo = null;
+    const cargarAhorro = async () => { if (!puede('presupuesto')) return; try { ahorroSaldo = (await api('/api/compras?r=ahorro')).saldo; } catch {} pintarOrigen(); };
     const totalActual = () => lineas.reduce((t, l) => t + l.valor, 0) + (insumo ? Number(form.valor.value) || 0 : 0);
     const pintarOrigen = () => {
-      $('#origenes').innerHTML = ORIGENES_COMPRA.map((o) => `<button type="button" class="${origenSel === o.id ? 'on' : ''}" data-origen="${o.id}" title="${esc(o.ayuda)}">${o.icono} ${o.nombre}</button>`).join('');
+      $('#origenes').innerHTML = ORIGENES_COMPRA.filter((o) => o.id !== 'ahorro' || puede('presupuesto')).map((o) => `<button type="button" class="${origenSel === o.id ? 'on' : ''}" data-origen="${o.id}" title="${esc(o.ayuda)}">${o.icono} ${o.nombre}</button>`).join('');
       const tot = totalActual(), info = $('#origenInfo');
-      if (origenSel === 'ventas') info.innerHTML = pagoSel === 'caja'
+      if (origenSel === 'ahorro') {
+        const sal = ahorroSaldo;
+        info.innerHTML = sal === null ? '<span class="hint">Sale de la plata ahorrada.</span>'
+          : tot > sal ? `<span class="aviso-mal">⚠️ En el ahorro hay ${pesos(sal)}: no alcanza para ${pesos(tot)}.</span>`
+          : `<span class="hint">🐷 En el ahorro hay <b>${pesos(sal)}</b>${tot ? ` · después de esta compra quedan ${pesos(sal - tot)}` : ''}.</span>`;
+      } else if (origenSel === 'ventas') info.innerHTML = pagoSel === 'caja'
         ? '<span class="hint">💵 Sale del efectivo del cajón: se descuenta en el cierre de caja de ese día.</span>'
         : '<span class="hint">Sale de la plata de ventas (no del cajón de hoy). No toca el presupuesto.</span>';
       else {
@@ -338,7 +344,7 @@
     };
     form.addEventListener('input', () => pintarOrigen());
     new MutationObserver(() => pintarOrigen()).observe($('#lineas'), { childList: true, subtree: true });
-    $('#origenes').addEventListener('click', (e) => { const b = e.target.closest('[data-origen]'); if (b) { origenSel = b.dataset.origen; pintarOrigen(); } });
+    $('#origenes').addEventListener('click', (e) => { const b = e.target.closest('[data-origen]'); if (b) { origenSel = b.dataset.origen; pintarOrigen(); if (origenSel === 'ahorro') cargarAhorro(); } });
 
     // La lista de insumos = ítems del inventario (+ los "solo compras")
     let inventario = [], insumo = null, presSel = '';
@@ -485,7 +491,7 @@
           const r = await api('/api/compras', { method: 'POST', body: JSON.stringify({ fecha: form.fecha.value, pago: pagoSel, origen: origenSel, proveedorId: provSel, nota: form.nota.value,
             lineas: todas.map(({ insumoId, presentacion, cantidad, valor }) => ({ insumoId, presentacion, cantidad, valor })) }) });
           await adjuntarDespues(r.factura);
-          toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`); avisarReparto(r.reparto);
+          toast(`✅ Compra guardada: ${todas.length} productos · ${pesos(todas.reduce((t, x) => t + x.valor, 0))}`); avisarReparto(r.reparto); if (ahorroSaldo !== null) cargarAhorro();
           limpiarForm(); cargar(); cargarRecientes(); CD = null;
           if (puede('presupuesto')) { presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7)); pintarOrigen(); }
         } catch (err) { toast(err.message, true); }
@@ -512,7 +518,7 @@
         if (conFactura) toast('📎 Factura adjuntada');
         const o = ORIGENES_COMPRA.find((x) => x.id === origenSel);
         toast(editado ? '✅ Compra actualizada' : `✅ Compra guardada · ${o.icono} ${o.nombre}${origenSel === 'ventas' && pagoSel === 'caja' ? ' · efectivo, se descuenta en el cierre' : ''}`);
-        avisarReparto(rep);
+        avisarReparto(rep); if (origenSel === 'ahorro' || ahorroSaldo !== null) cargarAhorro();
         limpiarForm(); cargar(); cargarRecientes(); CD = null;
         if (puede('presupuesto')) { presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7)); pintarOrigen(); }
       } catch (err) { toast(err.message, true); }
@@ -581,7 +587,7 @@
       const q = normalizar($('#buscar').value);
       const provDe = (c) => c.proveedorId || (c.proveedor ? 'txt:' + c.proveedor : 'barrio');
       const rp = (c) => c.reparto || { pres: 0, ventas: 0, caja: 0 };
-      const okOrigen = (c) => !filtroOrigen || (filtroOrigen === 'presupuesto' ? rp(c).pres > 0 : rp(c).ventas > 0);
+      const okOrigen = (c) => !filtroOrigen || (filtroOrigen === 'presupuesto' ? rp(c).pres > 0 : filtroOrigen === 'ahorro' ? (rp(c).ahorro || 0) > 0 : rp(c).ventas > 0);
       return compras.filter((c) => okOrigen(c) && (filtroCat === 'todas' || c.categoria === filtroCat) && (!filtroProv || provDe(c) === filtroProv) && (!q || normalizar(`${c.insumo} ${c.proveedor} ${c.nit || ''} ${c.nota}`).includes(q)));
     };
 
@@ -606,7 +612,8 @@
       $('#kpis').innerHTML = `
         <div class="kpi"><span>Total compras</span><b>${pesos(total)}</b><small>${new Set(lista.map((c) => c.factura || c.id)).size} compras · 💵 ${pesos(sumP('caja'))} · 📲 ${pesos(sumP('transferencia'))}</small></div>
         <div class="kpi"><span>💼 Presupuesto</span><b>${pesos(sumR('pres'))}</b><small>nunca se pasa del monto</small></div>
-        <div class="kpi"><span>💰 Ventas</span><b>${pesos(sumR('ventas'))}</b><small>${pesos(lista.filter(saleDeCaja).reduce((t, c) => t + c.valor, 0))} en efectivo del cajón (cierre)</small></div>`;
+        <div class="kpi"><span>💰 Ventas</span><b>${pesos(sumR('ventas'))}</b><small>${pesos(lista.filter(saleDeCaja).reduce((t, c) => t + c.valor, 0))} en efectivo del cajón (cierre)</small></div>
+        ${sumR('ahorro') ? `<div class="kpi"><span>🐷 Ahorro</span><b>${pesos(sumR('ahorro'))}</b><small>pagado con lo ahorrado</small></div>` : ''}`;
       $('#porCat').innerHTML = barras(por((c) => c.categoria).map(([k, v]) => [`${CAT[k]?.icono || ''} ${esc(CAT[k]?.nombre || k)}`, v]));
       // Por insumo: unidades compradas y costo por unidad (solo compras de la lista)
       const ins = new Map();
@@ -624,7 +631,7 @@
       const dias = new Map();
       for (const [fid, cs] of grupos) { const f = cs[0].fecha; if (!dias.has(f)) dias.set(f, []); dias.get(f).push([fid, cs]); }
       const nomDia = (f) => f === H ? 'Hoy' : f === AYER ? 'Ayer' : fechaLarga(f).replace(/^./, (x) => x.toUpperCase());
-      const reparte = (cs) => { const t = { pres: 0, ventas: 0 }; for (const c of cs) { t.pres += c.reparto?.pres || 0; t.ventas += c.reparto?.ventas || 0; } return t; };
+      const reparte = (cs) => { const t = { pres: 0, ventas: 0, ahorro: 0 }; for (const c of cs) { t.pres += c.reparto?.pres || 0; t.ventas += c.reparto?.ventas || 0; t.ahorro += c.reparto?.ahorro || 0; } return t; };
       const tarjeta = (fid, cs) => {
         const c0 = cs[0], tot = cs.reduce((t, c) => t + c.valor, 0), adj = adjuntos[fid], r = reparte(cs);
         const fijo = !!c0.proveedorId, nombre = fijo ? PROV()[c0.proveedorId]?.nombre || c0.proveedor : c0.proveedor || 'Tienda de barrio';
@@ -634,6 +641,7 @@
           `<span class="pill">${PAGO[c0.pago]?.icono || ''} ${esc(PAGO[c0.pago]?.corto || PAGO[c0.pago]?.nombre || '')}</span>`,
           r.pres ? `<span class="pill p-pres">💼 ${r.ventas ? pesos(r.pres) : 'Presupuesto'}</span>` : '',
           r.ventas ? `<span class="pill p-ventas">💰 ${r.pres ? pesos(r.ventas) : 'Ventas'}${cs.some(saleDeCaja) ? ' · cajón' : ''}</span>` : '',
+          r.ahorro ? '<span class="pill p-pres">🐷 Ahorro</span>' : '',
           adj ? '<span class="pill p-adj">📎 Factura</span>' : '',
         ].join('');
         return `<details class="fact" data-fid="${esc(fid)}" ${abiertas.has(fid) ? 'open' : ''}>
@@ -846,6 +854,7 @@
     if (puede('presupuesto')) { presu = await bannerPresupuesto($('#presBanner'), hoy().slice(0, 7)); pintarOrigen(); }
     await cargarProveedores();
     limpiarForm();
+    if (new URLSearchParams(location.search).get('origen') === 'ahorro' && puede('presupuesto')) { origenSel = 'ahorro'; cargarAhorro(); }
     const [, , d0, h0] = PERIODOS.find((x) => x[0] === periodo);
     $('#desde').value = d0; $('#hasta').value = h0;
     pintarFiltros(); mostrarTab(); cargar(); cargarRecientes(); cargarHomologar();

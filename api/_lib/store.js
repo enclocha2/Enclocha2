@@ -542,3 +542,26 @@ export async function guardarHistorico(o) {
   if (redis) await redis.set(K('historico'), o); else M().historico = o;
   return o;
 }
+
+// ---------- Ahorro (por sede) ----------
+// ahorro:movs  → lista de movimientos manuales { id, fecha, tipo: 'entra'|'sale', valor, concepto, desde, nota, por, creado }
+// ahorro:compras → hash compraId → { valor, fecha, insumo, proveedor, factura } de compras pagadas con el ahorro
+// ahorro:meta → { monto, nombre } meta de ahorro (opcional)
+export async function leerAhorroMovs() {
+  const l = redis ? await redis.get(K('ahorro:movs')) : M().ahorroMovs;
+  return Array.isArray(l) ? l : [];
+}
+export async function guardarAhorroMovs(l) { if (redis) await redis.set(K('ahorro:movs'), l); else M().ahorroMovs = l; return l; }
+export async function leerAhorroCompras() {
+  if (redis) { const h = (await redis.hgetall(K('ahorro:compras'))) || {}; return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, typeof v === 'string' ? JSON.parse(v) : v])); }
+  return { ...(M().ahorroCompras || {}) };
+}
+export async function marcarCompraAhorro(c) {
+  const v = { valor: c.valor, fecha: c.fecha, insumo: c.insumo, proveedor: c.proveedor || '', factura: c.factura || c.id };
+  if (redis) await redis.hset(K('ahorro:compras'), { [c.id]: JSON.stringify(v) }); else (M().ahorroCompras ||= {})[c.id] = v;
+}
+export async function quitarCompraAhorro(id) {
+  if (redis) await redis.hdel(K('ahorro:compras'), id); else if (M().ahorroCompras) delete M().ahorroCompras[id];
+}
+export async function leerAhorroMeta() { const m = redis ? await redis.get(K('ahorro:meta')) : M().ahorroMeta; return m && typeof m === 'object' ? m : null; }
+export async function guardarAhorroMeta(m) { if (redis) { if (m) await redis.set(K('ahorro:meta'), m); else await redis.del(K('ahorro:meta')); } else M().ahorroMeta = m; return m; }

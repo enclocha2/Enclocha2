@@ -59,9 +59,10 @@ export default async function handler(req, res) {
       const fijos = suma((m) => m.tipo === 'fijo', 'valor');
       const gastado = suma((m) => m.tipo !== 'fijo', 'valor');
       const deVentas = excedente + comprasVentas;
+      const ahorro = suma((m) => m.tipo === 'compra' && m.origen === 'ahorro', 'valor');
       return res.status(200).json({
         mes: q.mes, presupuesto, base: base || { monto: 0, repetir: false },
-        resumen: { gastado, delPresupuesto, deVentas, excedente, comprasVentas, caja, fijos, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - caja - fijos },
+        resumen: { gastado, delPresupuesto, deVentas, excedente, comprasVentas, ahorro, caja, fijos, queda, agotadoEl, ventasMes, quedanVentas: ventasMes - deVentas - caja - fijos },
         movimientos,
       });
     }

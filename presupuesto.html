@@ -118,7 +118,7 @@
         <div class="kpi"><span>💰 Pagado con ventas</span><b>${pesos(s.deVentas + s.caja)}</b><small>${[s.excedente && `${pesos(s.excedente)} que no alcanzó el presupuesto`, s.comprasVentas && `${pesos(s.comprasVentas)} compras con ventas`, s.caja && `${pesos(s.caja)} gastos anotados en el cierre`].filter(Boolean).join(' · ') || 'nada todavía'}</small></div>
         <div class="kpi"><span>🏦 Gastos fijos</span><b>${pesos(s.fijos || 0)}</b><small>salen de ventas, no usan el presupuesto</small></div>`;
 
-      const porTipo = [['💼 Presupuesto', s.delPresupuesto], ['💰 Ventas (compras)', s.deVentas], ['💰 Gastos del cierre', s.caja], ['🏦 Gastos fijos', s.fijos]].filter(([, v]) => v);
+      const porTipo = [['💼 Presupuesto', s.delPresupuesto], ['💰 Ventas (compras)', s.deVentas], ['🐷 Ahorro', s.ahorro || 0], ['💰 Gastos del cierre', s.caja], ['🏦 Gastos fijos', s.fijos]].filter(([, v]) => v);
       const max = Math.max(1, ...porTipo.map(([, v]) => v));
       $('#porTipo').innerHTML = porTipo.length ? porTipo.map(([n, v]) => `<div class="barra-h"><span>${n}</span><div class="track"><div class="fill" style="width:${Math.max(2, (v / max) * 100)}%"></div></div><span class="val">${pesos(v)}</span></div>`).join('')
         : '<p class="hint">Aún no hay gastos este mes.</p>';
@@ -138,6 +138,7 @@
           const prev = datos.movimientos.slice(0, i).filter((x) => !x.fueraPresupuesto).pop();
           const primero = !m.fueraPresupuesto && m.deVentas > 0 && (!prev || prev.deVentas === 0);
           const sale = m.tipo === 'fijo' ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(gasto fijo)</span>'
+            : m.origen === 'ahorro' ? '<span class="tag-pres">🐷 Ahorro</span>'
             : m.origen === 'caja' ? '<span class="tag-ventas">💰 Ventas</span> <span class="hint">(gasto del cierre)</span>'
             : m.origen === 'ventas' ? `<span class="tag-ventas">💰 Ventas</span>${m.pago === 'caja' ? ' <span class="hint">(efectivo del cajón)</span>' : ''}`
             : m.deVentas === 0 ? '<span class="tag-pres">💼 Presupuesto</span>'
