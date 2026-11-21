@@ -206,3 +206,6 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - Los PDF se muestran ajustados al ancho (enlace blob), sin desplazamiento de lado. Botón "↗️ Abrir aparte".
 - En celular (que no muestra PDF dentro de páginas) sale un botón grande "📖 Abrir el PDF".
 - Aviso: si el PDF pide contraseña, normalmente es el NIT (sin dígito de verificación) o la cédula.
+
+## v59 · Papas con opciones
+- Una sola vez, el producto "Papas" queda descontando de los ítems de inventario "Papas …" (limón, pimienta, naturales) y de "Platanos John" si no hay un producto de platanitos aparte. Al venderlo pregunta cuál. Se puede cambiar después en Productos → chip de inventario.

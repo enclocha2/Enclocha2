@@ -55,6 +55,21 @@ async function handler(req, res) {
         }
         if (cambio) { cfg.version = (cfg.version || 1) + 1; await guardarConfig(cfg); }
       }
+      // Una sola vez: "Papas" pregunta cuál se lleva (limón, pimienta, naturales… y platanitos si no tienen producto propio)
+      {
+        const cfg = await configActual();
+        const papas = cfg.productos.find((p) => normalizar(p.nombre) === 'papas');
+        if (papas && (papas.invItem?.ops?.length || 0) <= 1 && items.filter((i) => /^papas? /.test(normalizar(i.nombre))).length > 1 && (await marcaUnaVez('cat:papas-v1'))) {
+          const hayPlatanitos = cfg.productos.some((p) => /platan/.test(normalizar(p.nombre)));
+          const ops = items.filter((i) => i.activo !== false && (/^papas? /.test(normalizar(i.nombre)) || (!hayPlatanitos && /platan/.test(normalizar(i.nombre)))))
+            .map((i) => ({ id: i.id, nombre: i.nombre }));
+          if (ops.length > 1) {
+            delete papas.sinInventario; delete papas.usa;
+            papas.invItem = { id: ops[0].id, ops, cantidad: 1 };
+            cfg.version = (cfg.version || 1) + 1; await guardarConfig(cfg);
+          }
+        }
+      }
       // cada sabor con su base (solo al abrir Inventario, no en Tomar pedido)
       const cfgInv = await configActual();
       if (!q.lite || q.bases) { const cb = asegurarBases(items, cfgInv); if (cb) { items = cb; await guardarInventario(items); } }
