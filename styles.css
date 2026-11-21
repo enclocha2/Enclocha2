@@ -1339,3 +1339,8 @@ tr.sin-costo td:first-child b { color: #ffd166; }
 .ah-info small { color: var(--muted); }
 .ah-mov .icon-btn { text-decoration: none; }
 @media (max-width: 600px) { .ahorro-saldo { font-size: 2.1rem; } .ah-mes { grid-template-columns: 34px 1fr 92px; } }
+.venta-fecha { margin: 8px 0; display: grid; gap: 8px; }
+.venta-fecha-campos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.venta-fecha-campos .field { width: auto; flex: 1 1 140px; }
+.venta-fecha-campos small { flex: 1 1 100%; }
+.cliente-card.modo-otro-dia { border-color: #ffd166 !important; box-shadow: 0 0 0 1px rgba(255, 209, 102, .4); }

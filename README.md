@@ -215,3 +215,7 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 - ➕ Guardar plata: desde el efectivo del cajón (se descuenta solo en el cierre de ese día), plata de ventas guardada, transferencia u otro. ➖ Sacar plata: con concepto; no deja sacar más de lo que hay.
 - En Compras, tercera opción **🐷 Ahorro**: muestra cuánto hay, no deja comprar si no alcanza, y la compra se descuenta del ahorro (si se borra o se cambia, se devuelve). No toca presupuesto ni cierre.
 - Rutas: `/api/compras?r=ahorro` (GET, POST, DELETE `?id=`, PUT `&meta=1`). Datos por sede: `ahorro:movs`, `ahorro:compras` (hash), `ahorro:meta`.
+
+## v61 · Ventas de otro día
+- En Tomar pedido (quien tiene permiso de configuración, o Stiv) hay "📅 Es una venta de otro día": fecha (hasta hoy) y hora (20:00 por defecto; antes de las 6 a. m. cuenta para la jornada anterior).
+- Al enviar se escoge efectivo, transferencia o las dos, y el pedido queda pagado y entregado en esa fecha: cuenta en Ventas, Reportes y el cuadre de esa jornada. No deja fechas futuras ni agregarlo a una cuenta abierta. El pedido guarda `otroDia` (quién y cuándo lo registró).

@@ -34,6 +34,13 @@
         <input class="field" id="cliente" maxlength="60" placeholder="Nombre de la persona" autocomplete="off" />
         <div id="sugCuentas"></div>
         <div class="cuenta-banner" id="bannerCuenta" hidden></div>
+        <div class="venta-fecha" id="fechaBox" hidden>
+          <label class="sin-stock" style="margin:0"><input type="checkbox" id="fechaChk"> 📅 Es una venta de otro día</label>
+          <div class="venta-fecha-campos" id="fechaCampos" hidden>
+            <input class="field" type="date" id="fechaVenta"><input class="field" type="time" id="horaVenta" value="20:00">
+            <small class="hint" id="fechaTxt"></small>
+          </div>
+        </div>
         <label class="sin-stock" id="sinStockBox" hidden><input type="checkbox" id="sinStockChk"> 📦 Vender aunque no haya inventario <small>(solo tú)</small></label>
         <div class="llevar-sel" id="llevarSel">
           <button type="button" class="on" data-llevar="0">🍹 Para tomar aquí</button>
@@ -157,6 +164,7 @@
   <script type="module">
     import { esStiv, vaParaLlevar, GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar, consumoDe, faltantes, textoFaltantes, recetaDe, htmlIncluidos, ajustarIncluidos, cambiarIncluido, conteoIncluido, itemBase } from '/catalog.js';
     import { pagoMixto, requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR, puede } from '/sesion.js';
+    import { hoy, hoyCalendario, sumarDias, fechaCorta } from '/fechas.js';
 
     const $ = (s) => document.querySelector(s);
     const yo = await requerirSesion('tomar');
@@ -478,6 +486,20 @@
         catch (err) { e.target.checked = sinStock; toast(err.message, true); }
       });
     }
+    // ---------- Venta de otro día (quien puede configurar, o Stiv) ----------
+    const otroDia = () => !$('#fechaBox').hidden && $('#fechaChk').checked;
+    if (puede('configuracion') || esStiv(yo.usuario)) {
+      $('#fechaBox').hidden = false;
+      const f = $('#fechaVenta'); f.max = hoyCalendario(); f.value = sumarDias(hoyCalendario(), -1);
+      const pintarFecha = () => {
+        $('#fechaCampos').hidden = !$('#fechaChk').checked;
+        const h = $('#horaVenta').value || '20:00';
+        $('#fechaTxt').innerHTML = $('#fechaChk').checked && f.value ? `Queda en la jornada del <b>${fechaCorta(h < '06:00' ? sumarDias(f.value, -1) : f.value)}</b>, pagada y entregada${h < '06:00' ? ' (antes de las 6 a. m. cuenta para el día anterior)' : ''}.` : '';
+        $('.cliente-card').classList.toggle('modo-otro-dia', $('#fechaChk').checked);
+      };
+      ['change', 'input'].forEach((ev) => { $('#fechaChk').addEventListener(ev, pintarFecha); f.addEventListener(ev, pintarFecha); $('#horaVenta').addEventListener(ev, pintarFecha); });
+      pintarFecha();
+    }
     function pintarLlevar() {
       // el botón solo se ve en la pestaña Granizados (y no con pecera); lo escogido se mantiene si hay granizados en el pedido
       const t = item?.tamano && cfg.tamanos.find((x) => x.id === item.tamano);
@@ -553,8 +575,10 @@
         $('#cliente').focus();
         return;
       }
-      if (modoCuenta) return enviarACuenta();
+      if (modoCuenta && !otroDia()) return enviarACuenta();
+      if (otroDia() && !$('#fechaVenta').value) return toast('Escoge la fecha de la venta', true);
       pago = { ahora: null, metodo: null };
+      $('#modalPago [data-op="despues"]').hidden = !!otroDia();
       $('#mpNombre').textContent = cliente();
       $('#mpTotal').textContent = pesos(totalCarrito());
       $('#mpError').textContent = '';
@@ -586,8 +610,8 @@
       }
       pago = op === 'despues' ? { ahora: false, metodo: null } : { ahora: true, metodo: op };
       renderPago();
-      // efectivo o después: se envía de una; transferencia: primero se muestra el QR
-      if (op !== 'transferencia') $('#mpConfirmar').click();
+      // efectivo o después: se envía de una; transferencia: primero se muestra el QR (en ventas de otro día no hace falta)
+      if (op !== 'transferencia' || otroDia()) $('#mpConfirmar').click();
     });
     $('#mpCancelar').addEventListener('click', () => $('#modalPago').classList.remove('show'));
 
@@ -599,10 +623,11 @@
       try {
         const { pedido } = await api('/api/pedidos', {
           method: 'POST',
-          body: JSON.stringify({ cliente: cliente(), items: carrito, pago, llevar }),
+          body: JSON.stringify({ cliente: cliente(), items: carrito, pago, llevar, ...(otroDia() ? { fecha: $('#fechaVenta').value, hora: $('#horaVenta').value } : {}) }),
         });
         $('#modalPago').classList.remove('show');
-        mostrarOk(pedido);
+        if (pedido.otroDia) { toast(`✅ Venta #${pedido.numero} registrada el ${fechaCorta($('#fechaVenta').value)} · ${pesos(pedido.total)} (pagada y entregada)`); }
+        else mostrarOk(pedido);
         carrito = []; item = nuevo(); tab = 'granizados'; ponerLlevar(false);
         $('#cliente').value = ''; $('#nota').value = '';
         await cargarInv(); render(); renderSugerencias(); cargarCuentas();

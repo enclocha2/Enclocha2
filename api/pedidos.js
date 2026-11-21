@@ -3,6 +3,7 @@ import { esStiv, vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas,
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados, leerAjustes, guardarAdjunto, leerAdjunto, marcarComprobantes, comprobantesDe } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
+import { hoyCalendario } from '../fechas.js';
 
 class ErrorUsuario extends Error {}
 const leer = (req) => (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {});
@@ -111,6 +112,24 @@ async function handler(req, res) {
       const prestamo = prestamoDe(consumo, inventario);           // …quedan prestadas hasta que vuelvan
       if (Object.keys(prestamo).length) { pedido.prestamo = prestamo; await moverPrestados(prestamo); }
       if (llevar) pedido.llevar = true;
+      // ---------- Venta de otro día (ya pagada y entregada) ----------
+      if (body.fecha) {
+        if (!yo.puede('configuracion') && !esStiv(usuario)) return prohibido('No tienes permiso para registrar ventas de otros días');
+        if (cuenta) throw new ErrorUsuario('Una venta de otro día no se puede agregar a una cuenta abierta');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(body.fecha) || body.fecha > hoyCalendario() || body.fecha < '2020-01-01') throw new ErrorUsuario('Escoge una fecha válida (hoy o antes)');
+        const hora = /^\d{2}:\d{2}$/.test(body.hora || '') ? body.hora : '20:00';
+        const tv = Date.parse(`${body.fecha}T${hora}:00-05:00`);
+        if (!Number.isFinite(tv) || tv > Date.now()) throw new ErrorUsuario('Esa hora todavía no ha pasado');
+        let partes = null, m = body.pago?.metodo;
+        if (Array.isArray(body.pago?.partes)) partes = partesOk(body.pago.partes, pedido.total);
+        else if (m === 'mixto') { const ef = Math.round(Number(body.pago.efectivo) || 0); if (!(ef > 0 && ef < pedido.total)) throw new ErrorUsuario('El efectivo debe ser menos que el total'); partes = [{ metodo: 'efectivo', valor: ef, quien: cliente }, { metodo: 'transferencia', valor: pedido.total - ef, quien: cliente }]; }
+        else if (!metodoValido(m)) throw new ErrorUsuario('Escoge cómo pagó: efectivo, transferencia o las dos');
+        const r = partes ? repartirPago(partes, [pedido])[0] : { metodo: m };
+        pedido.creado = tv; pedido.estado = 'entregado'; pedido.otroDia = { registrada: t, por: usuario };
+        pedido.pago = { ahora: true, metodo: r.metodo, pagado: true, cobradoPor: usuario, pagadoEn: tv, ...(r.metodo === 'mixto' ? { efectivo: r.efectivo } : {}), ...(partes ? { partes } : {}) };
+        pedido.historial = [{ accion: 'tomado', usuario, en: tv }, { accion: 'pagado', usuario, en: tv, metodo: r.metodo }, { accion: 'entregado', usuario, en: tv }, { accion: 'registrada-otro-dia', usuario, en: t }];
+        await registrarVenta(pedido);
+      }
       await guardar(pedido);
       await moverStock(pedido.inventario, { tipo: 'venta', pedido: pedido.numero, cliente, usuario });
       const resp = { pedido };
