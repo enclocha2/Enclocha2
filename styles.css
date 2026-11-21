@@ -1344,3 +1344,4 @@ tr.sin-costo td:first-child b { color: #ffd166; }
 .venta-fecha-campos .field { width: auto; flex: 1 1 140px; }
 .venta-fecha-campos small { flex: 1 1 100%; }
 .cliente-card.modo-otro-dia { border-color: #ffd166 !important; box-shadow: 0 0 0 1px rgba(255, 209, 102, .4); }
+.cambiar-dia { margin-top: 4px; font-size: .75rem; padding: 3px 8px; }

@@ -49,16 +49,28 @@
     </div>
   </main>
 
+  <div class="modal" id="modalMover">
+    <div class="box">
+      <h3>📅 Cambiar de día la venta</h3>
+      <p id="mvTxt" style="margin:0"></p>
+      <div class="g2"><label class="campo"><span>Nueva fecha</span><input class="field" type="date" id="mvFecha"></label><label class="campo"><span>Hora</span><input class="field" type="time" id="mvHora"></label></div>
+      <p class="hint" style="margin:0">Antes de las 6 a. m. cuenta para la jornada del día anterior. Si esos días ya tienen cierre de caja, vuelve a guardarlos.</p>
+      <div class="error" id="mvError"></div>
+      <button class="btn" id="mvGuardar">Cambiar de día</button>
+      <button class="btn ghost" id="mvCancelar">Cancelar</button>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { pesos, partesDe } from '/catalog.js';
+    import { esStiv, pesos, partesDe } from '/catalog.js';
     import { requerirSesion, api, esc, toast, verArchivo } from '/sesion.js';
-    import { hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaHora, fechaLarga, jornadaDe, diaDe, nombreDia, textoHorario } from '/fechas.js';
+    import { hoyCalendario, hoy, sumarDias, inicioSemana, inicioMes, finMes, sumarMeses, fechaHora, fechaLarga, jornadaDe, diaDe, nombreDia, textoHorario } from '/fechas.js';
     import { normalizar } from '/catalog.js';
 
     const $ = (s) => document.querySelector(s);
-    await requerirSesion('ventas');
+    const yo = await requerirSesion('ventas');
+    const stiv = esStiv(yo.usuario);
 
     const H = hoy();
     const PERIODOS = [
@@ -110,7 +122,7 @@
       $('#tabla').innerHTML = lista.length ? `
         <thead><tr><th>Pagado</th><th>#</th><th>Cliente</th><th>Productos</th><th>Método</th><th>Tomó / Cobró</th><th class="num">Total</th></tr></thead>
         <tbody>${lista.map((v) => `<tr>
-          <td style="white-space:nowrap">${fechaHora(v.pa)}${jornadaDe(v.pa) !== diaDe(v.pa) ? `<br><span class="hint">↩ jornada del ${nombreDia(jornadaDe(v.pa))}</span>` : ''}</td>
+          <td style="white-space:nowrap">${fechaHora(v.pa)}${jornadaDe(v.pa) !== diaDe(v.pa) ? `<br><span class="hint">↩ jornada del ${nombreDia(jornadaDe(v.pa))}</span>` : ''}${stiv ? `<br><button class="mini cambiar-dia" data-mover="${esc(v.id)}" data-pa="${v.pa}" title="Cambiar de día">📅 Cambiar día</button>` : ''}</td>
           <td>#${v.n}</td>
           <td><b>${esc(v.c)}</b></td>
           <td>${v.it.map((i) => `${i[1]}× ${esc(i[0])}`).join('<br>')}</td>
@@ -151,6 +163,24 @@
     $('#buscar').addEventListener('input', render);
 
     $('#desde').value = H; $('#hasta').value = H;
+    // ---------- Cambiar de día una venta (solo Stiv) ----------
+    let aMover = null;
+    $('#tabla').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-mover]'); if (!b) return;
+      const v = ventas.find((x) => x.id === b.dataset.mover && String(x.pa) === b.dataset.pa); if (!v) return;
+      aMover = v;
+      const d = new Date(v.pa), dia = d.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }), hora = d.toLocaleTimeString('en-GB', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' });
+      $('#mvTxt').innerHTML = `#${v.n} · <b>${esc(v.c)}</b> · ${pesos(v.t)}<br><span class="hint">Ahora: ${fechaHora(v.pa)} (jornada del ${nombreDia(jornadaDe(v.pa))})</span>`;
+      $('#mvFecha').value = dia; $('#mvFecha').max = hoyCalendario(); $('#mvHora').value = hora; $('#mvError').textContent = '';
+      $('#modalMover').classList.add('show');
+    });
+    $('#mvCancelar').addEventListener('click', () => $('#modalMover').classList.remove('show'));
+    $('#mvGuardar').addEventListener('click', async () => {
+      try {
+        await api('/api/pedidos', { method: 'PATCH', body: JSON.stringify({ moverVenta: { id: aMover.id, pa: aMover.pa, fecha: $('#mvFecha').value, hora: $('#mvHora').value } }) });
+        $('#modalMover').classList.remove('show'); toast(`✅ Venta #${aMover.n} pasada al ${$('#mvFecha').value.split('-').reverse().join('/')}`); cargar();
+      } catch (err) { $('#mvError').textContent = err.message; }
+    });
     $('#tabla').addEventListener('click', async (e) => { const b = e.target.closest('[data-comp]'); if (!b) return; try { verArchivo(await api(`/api/pedidos?r=comprobante&clave=${encodeURIComponent(b.dataset.comp)}`), '📲 Comprobante'); } catch (err) { toast(err.message, true); } });
     pintarFiltros(); cargar();
   </script>

@@ -219,3 +219,7 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 ## v61 · Ventas de otro día
 - En Tomar pedido (quien tiene permiso de configuración, o Stiv) hay "📅 Es una venta de otro día": fecha (hasta hoy) y hora (20:00 por defecto; antes de las 6 a. m. cuenta para la jornada anterior).
 - Al enviar se escoge efectivo, transferencia o las dos, y el pedido queda pagado y entregado en esa fecha: cuenta en Ventas, Reportes y el cuadre de esa jornada. No deja fechas futuras ni agregarlo a una cuenta abierta. El pedido guarda `otroDia` (quién y cuándo lo registró).
+
+## v62 · Cambiar de día una venta (solo Stiv)
+- En Ventas, cada venta tiene "📅 Cambiar día" (solo lo ve Stiv). Se escoge fecha y hora; la venta se quita del día viejo y se suma en el nuevo (ventas, reportes y resumen). Si el pedido existe, también se actualiza y queda en su historial.
+- Ruta: PATCH `/api/pedidos` `{ moverVenta: { id, pa, fecha, hora } }` (`moverVenta` en store.js).

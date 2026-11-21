@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { esStiv, vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
-import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados, leerAjustes, guardarAdjunto, leerAdjunto, marcarComprobantes, comprobantesDe } from './_lib/store.js';
+import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados, leerAjustes, moverVenta, guardarAdjunto, leerAdjunto, marcarComprobantes, comprobantesDe } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
 import { hoyCalendario } from '../fechas.js';
@@ -144,6 +144,25 @@ async function handler(req, res) {
     // Cambiar estado y/o pago
     if (req.method === 'PATCH') {
       const body = leer(req);
+
+      // Cambiar de día una venta ya pagada (solo Stiv)
+      if (body.moverVenta) {
+        if (!esStiv(usuario)) return prohibido('Solo Stiv puede cambiar las ventas de día');
+        const { id, pa, fecha } = body.moverVenta;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '') || fecha > hoyCalendario() || fecha < '2020-01-01') throw new ErrorUsuario('Escoge una fecha válida (hoy o antes)');
+        const hora = /^\d{2}:\d{2}$/.test(body.moverVenta.hora || '') ? body.moverVenta.hora : '20:00';
+        const tv = Date.parse(`${fecha}T${hora}:00-05:00`);
+        if (!Number.isFinite(tv) || tv > Date.now()) throw new ErrorUsuario('Esa hora todavía no ha pasado');
+        const nuevo = await moverVenta(Number(pa), String(id), tv);
+        if (!nuevo) throw new ErrorUsuario('No se encontró esa venta (recarga la página)');
+        const p = await obtener(String(id));
+        if (p?.pago) {
+          p.pago.pagadoEn = tv; p.pago.registro = nuevo;
+          (p.historial ||= []).push({ accion: 'cambio-de-dia', usuario, en: Date.now(), de: Number(pa), a: tv });
+          await guardar(p);
+        }
+        return res.status(200).json({ ok: true, pa: tv });
+      }
 
       // Cobrar una cuenta completa (todos sus pedidos sin pagar)
       if (body.cobrarCuenta && !yo.puede('cobrar')) return prohibido('No tienes permiso para cobrar');

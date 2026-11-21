@@ -565,3 +565,21 @@ export async function quitarCompraAhorro(id) {
 }
 export async function leerAhorroMeta() { const m = redis ? await redis.get(K('ahorro:meta')) : M().ahorroMeta; return m && typeof m === 'object' ? m : null; }
 export async function guardarAhorroMeta(m) { if (redis) { if (m) await redis.set(K('ahorro:meta'), m); else await redis.del(K('ahorro:meta')); } else M().ahorroMeta = m; return m; }
+
+// Cambia de fecha una venta ya registrada (busca el registro por hora de pago + id y lo vuelve a sumar en el día nuevo)
+export async function moverVenta(pa, id, nuevoPa) {
+  const l = redis ? await redis.zrange(K('ventas'), pa, pa, { byScore: true }) : M().ventas.filter((x) => x.score === pa).map((x) => x.member);
+  const raw = l.find((x) => (typeof x === 'string' ? JSON.parse(x) : x).id === id);
+  if (!raw) return null;
+  const member = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  await anularVenta({ pago: { registro: member } });
+  const v = { ...JSON.parse(member), pa: nuevoPa };
+  const nuevo = JSON.stringify(v), dia = diaBogota(nuevoPa);
+  if (redis) {
+    const pl = redis.pipeline();
+    pl.zadd(K('ventas'), { score: nuevoPa, member: nuevo });
+    for (const [c, x] of camposResumen(v)) pl.hincrby(K('ventas:resumen'), `${dia}|${c}`, x);
+    await pl.exec();
+  } else { M().ventas.push({ score: nuevoPa, member: nuevo }); sumarResumen(dia, v, 1); }
+  return nuevo;
+}
