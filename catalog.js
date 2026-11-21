@@ -293,7 +293,7 @@ export function vistaItem(it) {
   if (it.tipo === 'producto') return { ...it, esGranizado: false };
   if (it.tipo === 'granizado') {
     return {
-      esGranizado: true, cantidad: it.cantidad, nota: it.nota, subtotal: it.subtotal,
+      esGranizado: true, cantidad: it.cantidad, nota: it.nota, subtotal: it.subtotal, descuento: it.descuento || 0,
       tam: it.tamanoNombre, sabores: it.sabores.map((s) => s.nombre),
       incluidos: [...it.incluidos.map((t) => (t.cantidad > 1 ? `${t.cantidad}× ${t.nombre}` : t.nombre)), ...(it.producto ? [`🍺 ${it.producto.nombre}`] : [])],
       adicionales: it.adicionales.map((a) => `${a.cantidad}× ${a.nombre}`),
@@ -359,6 +359,13 @@ export function asegurarMezclador(items, cfg) {
   const faltan = cfg.productos.filter((p) => llevaMezclador(p) && !(mez.reglas || []).some((r) => r.tipo === 'vendido' && r.id === p.id));
   if (!faltan.length) return null;
   return items.map((i) => (i.id === mez.id ? { ...i, reglas: [...(i.reglas || []), ...faltan.map((p) => ({ tipo: 'vendido', id: p.id, cantidad: 1 }))] } : i));
+}
+// Descuento: el precio que se escriba es lo que se cobra por unidad, solo en ese pedido
+export function conPrecioManual(a, d) {
+  if (!a || d?.precioManual == null || d.precioManual === '') return a;
+  const pm = Math.round(Number(d.precioManual));
+  if (!Number.isFinite(pm) || pm < 0 || pm === a.precioUnit) return a;
+  return { ...a, precioOriginal: a.precioUnit, precioUnit: pm, subtotal: pm * (a.cantidad || 1), descuento: (a.precioUnit - pm) * (a.cantidad || 1) };
 }
 export const esStiv = (u) => normalizar(u || '') === 'stiv';
 export const ORIGENES_COMPRA = [

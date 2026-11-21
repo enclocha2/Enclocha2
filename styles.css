@@ -1345,3 +1345,5 @@ tr.sin-costo td:first-child b { color: #ffd166; }
 .venta-fecha-campos small { flex: 1 1 100%; }
 .cliente-card.modo-otro-dia { border-color: #ffd166 !important; box-shadow: 0 0 0 1px rgba(255, 209, 102, .4); }
 .cambiar-dia { margin-top: 4px; font-size: .75rem; padding: 3px 8px; }
+.link-btn { background: none; border: 0; padding: 2px 0; color: #33e1ff; font: inherit; font-size: .82rem; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.tag-desc { display: inline-block; font-size: .76rem; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: rgba(255, 209, 102, .16); color: #ffd166; }

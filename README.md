@@ -223,3 +223,7 @@ Si agregas más endpoints, mételos así para no pasar de 12.
 ## v62 · Cambiar de día una venta (solo Stiv)
 - En Ventas, cada venta tiene "📅 Cambiar día" (solo lo ve Stiv). Se escoge fecha y hora; la venta se quita del día viejo y se suma en el nuevo (ventas, reportes y resumen). Si el pedido existe, también se actualiza y queda en su historial.
 - Ruta: PATCH `/api/pedidos` `{ moverVenta: { id, pa, fecha, hora } }` (`moverVenta` en store.js).
+
+## v63 · Descuento por producto
+- En el carrito de Tomar pedido cada producto/granizado tiene "🏷️ Descuento" (Stiv o quien tenga permiso de configuración). Se escribe el precio a cobrar por unidad (o botones rápidos −10 %, −20 %, mitad, gratis); solo aplica en ese pedido.
+- El servidor valida el permiso y guarda `precioOriginal` y `descuento` en el ítem; el total del pedido, la venta y los reportes usan el precio con descuento. En Pedidos sale la etiqueta 🏷️ con lo descontado.

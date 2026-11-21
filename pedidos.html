@@ -217,10 +217,10 @@
         `<div class="gr"><span class="t">🍧 ${d.cantidad}× ${esc(d.tam)}</span> · ${d.sabores.map(esc).join(' + ')}<br>
           ${d.incluidos.length ? '🍬 ' + d.incluidos.map(esc).join(', ') : '🍬 Sin toppings'}<br>
           ${d.adicionales.length ? '➕ <b>' + d.adicionales.map(esc).join(', ') + '</b><br>' : ''}
-          ${d.nota ? '📝 <i>' + esc(d.nota) + '</i>' : ''}</div>`).join('');
+          ${d.nota ? '📝 <i>' + esc(d.nota) + '</i>' : ''}${d.descuento ? ` <span class="tag-desc">🏷️ −${pesos(d.descuento)}</span>` : ''}</div>`).join('');
       const otros = vistas.filter((d) => !d.esGranizado);
       const bebidas = otros.length ? `<div class="gr">${otros.map((d) =>
-        `<div><span class="t">${esc(d.icono || '🛒')} ${d.cantidad}×</span> ${esc(d.nombre)}${d.nota ? ' · 📝 <i>' + esc(d.nota) + '</i>' : ''}</div>`).join('')}</div>` : '';
+        `<div><span class="t">${esc(d.icono || '🛒')} ${d.cantidad}×</span> ${esc(d.nombre)}${d.nota ? ' · 📝 <i>' + esc(d.nota) + '</i>' : ''}${d.descuento ? ` <span class="tag-desc">🏷️ −${pesos(d.descuento)}</span>` : ''}</div>`).join('')}</div>` : '';
 
       const esDom = p.tipo === 'domicilio';
       const d = p.domicilio || {};

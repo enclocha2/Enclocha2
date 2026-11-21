@@ -162,7 +162,7 @@
   <div class="toast" id="toast"></div>
 
   <script type="module">
-    import { esStiv, vaParaLlevar, GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar, consumoDe, faltantes, textoFaltantes, recetaDe, htmlIncluidos, ajustarIncluidos, cambiarIncluido, conteoIncluido, itemBase } from '/catalog.js';
+    import { conPrecioManual, esStiv, vaParaLlevar, GRUPOS, METODOS_PAGO, SECCIONES, pesos, armarItem, agruparCuentas, normalizar, consumoDe, faltantes, textoFaltantes, recetaDe, htmlIncluidos, ajustarIncluidos, cambiarIncluido, conteoIncluido, itemBase } from '/catalog.js';
     import { pagoMixto, requerirSesion, api, esc, toast, traerPedidos, cadaTanto, leerQR, htmlQR, puede } from '/sesion.js';
     import { hoy, hoyCalendario, sumarDias, fechaCorta } from '/fechas.js';
 
@@ -242,7 +242,7 @@
     let modoCuenta = null;   // cuenta a la que se le está agregando
 
     const cliente = () => $('#cliente').value.trim();
-    const armar = (d) => { try { return armarItem(d, cfg); } catch { return null; } };
+    const armar = (d) => { try { return conPrecioManual(armarItem(d, cfg), d); } catch { return null; } };
     const totalCarrito = () => carrito.reduce((s, d) => s + (armar(d)?.subtotal || 0), 0);
     const unidades = () => carrito.reduce((s, d) => s + d.cantidad, 0);
     const granizadosEnCarrito = () => carrito.filter((d) => d.tipo === 'granizado').length;
@@ -436,6 +436,37 @@
     $('#muCancelar').addEventListener('click', () => $('#modalUsa').classList.remove('show'));
 
     // ---------- Carrito ----------
+    // ---------- Descuento: precio a cobrar por unidad, solo en este pedido ----------
+    const puedeDescuento = puede('configuracion') || esStiv(yo.usuario);
+    const btnDesc = (i, a) => !puedeDescuento ? (a.precioOriginal != null ? ' <span class="tag-desc">🏷️ descuento</span>' : '')
+      : a.precioOriginal != null ? `<br><span class="tag-desc">🏷️ Descuento −${pesos(a.descuento)}</span> <button class="link-btn" data-desc="${i}">cambiar</button> · <button class="link-btn" data-desc-quitar="${i}">quitar</button>`
+      : `<br><button class="link-btn" data-desc="${i}">🏷️ Descuento</button>`;
+    function abrirDescuento(i) {
+      const d = carrito[i], base = armarItem(d, cfg);
+      const m = document.createElement('div'); m.className = 'modal show';
+      const rap = [...new Set([0.9, 0.8, 0.5].map((f) => Math.round((base.precioUnit * f) / 100) * 100))].filter((v) => v < base.precioUnit);
+      m.innerHTML = `<div class="box"><h3>🏷️ Descuento</h3>
+        <p style="margin:0"><b>${esc(base.tipo === 'producto' ? base.nombre : 'Granizado ' + base.tamanoNombre)}</b><br><span class="hint">Precio normal: ${pesos(base.precioUnit)} c/u · solo cambia en este pedido</span></p>
+        <label class="campo"><span>¿Cuánto se cobra por unidad?</span><div class="precio"><span>$</span><input class="field" id="dsValor" type="number" min="0" step="1" inputmode="numeric" value="${d.precioManual ?? ''}" placeholder="${base.precioUnit}"></div></label>
+        <div class="chips">${rap.map((v) => `<button type="button" class="chip" data-v="${v}">${pesos(v)}</button>`).join('')}<button type="button" class="chip" data-v="0">🎁 Gratis</button></div>
+        <small class="hint" id="dsTxt"></small>
+        <button class="btn" id="dsOk">Aplicar</button><button class="btn ghost" id="dsNo">Cancelar</button></div>`;
+      document.body.appendChild(m);
+      const inp = m.querySelector('#dsValor');
+      const txt = () => { const v = inp.value === '' ? null : Math.round(Number(inp.value)); m.querySelector('#dsTxt').innerHTML = v == null ? '' : v > base.precioUnit ? '⚠️ Es más que el precio normal' : `Descuento de <b>${pesos((base.precioUnit - v) * (base.cantidad || 1))}</b>${(base.cantidad || 1) > 1 ? ` (${base.cantidad} unidades)` : ''}`; };
+      inp.addEventListener('input', txt); txt(); setTimeout(() => inp.focus(), 50);
+      m.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.v !== undefined) { inp.value = b.dataset.v; return txt(); }
+        if (b.id === 'dsNo') return m.remove();
+        if (b.id === 'dsOk') {
+          if (inp.value === '' || Math.round(Number(inp.value)) === base.precioUnit) delete d.precioManual;
+          else if (!(Number(inp.value) >= 0)) return toast('Escribe un valor válido', true);
+          else d.precioManual = Math.round(Number(inp.value));
+          m.remove(); render(); toast(d.precioManual != null ? `🏷️ Se cobra ${pesos(d.precioManual)} c/u` : 'Precio normal');
+        }
+      });
+    }
     function renderCarrito() {
       $('#paraNombre').textContent = cliente() || '—';
       let ng = 0;
@@ -443,16 +474,16 @@
         const a = armar(d);
         if (!a) return `<div class="cart-item"><div class="det">⚠️ Ítem ya no disponible</div><button class="x" data-del="${i}">✕</button></div>`;
         if (a.tipo === 'producto') {
-          return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b></div>
+          return `<div class="cart-item"><div class="det"><b>${esc(a.icono)} ${esc(a.nombre)}</b><br>${a.precioOriginal != null ? `<s class="hint">${pesos(a.precioOriginal)}</s> ` : ''}${pesos(a.precioUnit)} c/u · <b>${pesos(a.subtotal)}</b>${btnDesc(i, a)}</div>
             <div class="qty has"><button data-prod="${a.productoId}" data-usa="${a.usa || ''}" data-d="-1">−</button><b>${a.cantidad}</b><button data-prod="${a.productoId}" data-usa="${a.usa || ''}" data-d="1" ${faltaProd(a.productoId, a.usa).length ? 'disabled' : ''}>+</button></div></div>`;
         }
         ng++;
         return `<div class="cart-item"><div class="det">
-            <b>🍧 Granizado #${ng} · ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${pesos(a.subtotal)}<br>
+            <b>🍧 Granizado #${ng} · ${a.cantidad > 1 ? a.cantidad + '× ' : ''}${esc(a.tamanoNombre)}</b> — ${a.precioOriginal != null ? `<s class="hint">${pesos(a.precioOriginal * a.cantidad)}</s> ` : ''}${pesos(a.subtotal)}<br>
             ${a.sabores.map((s) => esc(s.nombre)).join(' + ')}<br>
             ${a.incluidos.length || a.producto ? 'Incluye: ' + [...a.incluidos.map((t) => (t.cantidad > 1 ? `${t.cantidad}× ` : '') + esc(t.nombre)), ...(a.producto ? ['🍺 ' + esc(a.producto.nombre)] : [])].join(', ') + '<br>' : 'Sin toppings<br>'}
             ${a.adicionales.length ? '<b>Adicionales:</b> ' + a.adicionales.map((x) => `${x.cantidad}× ${esc(x.nombre)}`).join(', ') + '<br>' : ''}
-            ${a.nota ? '📝 ' + esc(a.nota) : ''}
+            ${a.nota ? '📝 ' + esc(a.nota) : ''}${btnDesc(i, a)}
           </div><button class="x" data-del="${i}" title="Quitar">✕</button></div>`;
       }).join('') : '<div class="empty">Aún no hay productos</div>';
 
@@ -520,6 +551,8 @@
       if (ds.tab) { tab = ds.tab; render(); return $('#tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
       if (ds.prod) { cambiarProducto(ds.prod, Number(ds.d), ds.usa !== undefined ? ds.usa || null : undefined); return render(); }
       if (ds.del !== undefined) { carrito.splice(Number(ds.del), 1); return render(); }
+      if (ds.desc !== undefined) return abrirDescuento(Number(ds.desc));
+      if (ds.descQuitar !== undefined) { delete carrito[Number(ds.descQuitar)].precioManual; return render(); }
       if (ds.tam) {
         const primero = !item.tamano;
         item.tamano = ds.tam;

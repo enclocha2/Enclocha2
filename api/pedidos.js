@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { esStiv, vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
+import { conPrecioManual, esStiv, vaParaLlevar, armarItem, ESTADOS, METODOS_PAGO, agruparCuentas, cuentaDe, consumoDe, faltantes, textoFaltantes, repartirPago, validarPartes, sinReutilizables, stockDisponible, prestamoDe } from '../catalog.js';
 import { siguienteNumero, guardar, obtener, listar, borrar, usandoRedis, configActual, leerRev, registrarVenta, anularVenta, leerInventario, moverStock, invertir, leerStock, leerPrestados, moverPrestados, leerAjustes, moverVenta, guardarAdjunto, leerAdjunto, marcarComprobantes, comprobantesDe } from './_lib/store.js';
 import { sesion } from './_lib/auth.js';
 import { conSede } from './_lib/sede.js';
@@ -71,7 +71,8 @@ async function handler(req, res) {
 
       const cfg = await configActual();
       let items;
-      try { items = (body.items || []).map((i) => armarItem(i, cfg)); }
+      if ((body.items || []).some((i) => i?.precioManual != null && i.precioManual !== '') && !yo.puede('configuracion') && !esStiv(usuario)) return prohibido('No tienes permiso para poner descuentos');
+      try { items = (body.items || []).map((i) => conPrecioManual(armarItem(i, cfg), i)); }
       catch (e) { throw new ErrorUsuario(e.message); }
       if (items.length === 0) throw new ErrorUsuario('El pedido está vacío');
       if (items.length > 60) throw new ErrorUsuario('Demasiados productos en un pedido');
